@@ -4,8 +4,8 @@ version := "0.1"
 
 scalaVersion := "2.13.3"
 
-libraryDependencies += "fr.acinq.eclair" % "eclair-core_2.13" % "0.4.2-SNAPSHOT" from "file:///home/anton/Desktop/ChainSwap/src/main/jar/eclair-core_2.13-0.4.2-SNAPSHOT.jar"
-libraryDependencies += "fr.acinq.eclair" % "eclair-node_2.13" % "0.4.2-SNAPSHOT" from "file:///home/anton/Desktop/ChainSwap/src/main/jar/eclair-node_2.13-0.4.2-SNAPSHOT.jar"
+libraryDependencies += "fr.acinq.eclair" % "eclair-core_2.13" % "0.4.2-SNAPSHOT" from "file:///home/anton/Desktop/hc/src/main/jar/eclair-core_2.13-0.4.2-SNAPSHOT.jar"
+libraryDependencies += "fr.acinq.eclair" % "eclair-node_2.13" % "0.4.2-SNAPSHOT" from "file:///home/anton/Desktop/hc/src/main/jar/eclair-node_2.13-0.4.2-SNAPSHOT.jar"
 
 libraryDependencies += "org.scalatest" % "scalatest_2.13" % "3.1.1"
 

@@ -17,16 +17,6 @@ object Tools {
   def makeExpireAfterAccessCache(expiryMins: Int): CacheBuilder[AnyRef, AnyRef] = CacheBuilder.newBuilder.expireAfterAccess(expiryMins, TimeUnit.MINUTES)
   def makeExpireAfterWriteCache(expiryMins: Int): CacheBuilder[AnyRef, AnyRef] = CacheBuilder.newBuilder.expireAfterWrite(expiryMins, TimeUnit.MINUTES)
 
-  abstract class DuplicateInsertMatcher[T] {
-    val matcher: PartialFunction[Throwable, T] = {
-      case dup: PSQLException if "23505" == dup.getSQLState => onDuplicateError
-      case otherDatabaseError: Throwable => onOtherError(otherDatabaseError)
-    }
-
-    def onDuplicateError: T
-    def onOtherError(error: Throwable): T
-  }
-
   // HC ids derivation
 
   def hostedNodesCombined(pubkey1: ByteVector, pubkey2: ByteVector): ByteVector = {

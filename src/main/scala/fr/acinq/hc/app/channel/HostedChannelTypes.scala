@@ -1,17 +1,17 @@
 package fr.acinq.hc.app.channel
 
 import fr.acinq.eclair._
+import fr.acinq.eclair.wire._
 import fr.acinq.eclair.channel._
-import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, Satoshi}
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
-import fr.acinq.eclair.MilliSatoshi
-import fr.acinq.eclair.crypto.Sphinx
+import fr.acinq.hc.app.channel.HOSTED_DATA_COMMITMENTS._
 import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc, OutgoingHtlc}
-import fr.acinq.eclair.wire.{ChannelUpdate, FailureMessageCodecs, UpdateAddHtlc, UpdateFailHtlc, UpdateFailMalformedHtlc, UpdateFulfillHtlc, UpdateMessage}
-import fr.acinq.hc.app.channel.HOSTED_DATA_COMMITMENTS.LocalOrRemoteUpdate
+import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, Satoshi}
 import fr.acinq.hc.app.{LastCrossSignedState, StateOverride, Tools}
-
+import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
 import scala.util.{Failure, Success, Try}
+
+import fr.acinq.eclair.payment.OutgoingPacket
+import fr.acinq.eclair.MilliSatoshi
 
 
 sealed trait HostedData
@@ -184,17 +184,7 @@ case class HOSTED_DATA_COMMITMENTS(localNodeId: PublicKey,
 
   def sendFail(cmd: CMD_FAIL_HTLC, nodeSecret: PrivateKey): Try[(HOSTED_DATA_COMMITMENTS, UpdateFailHtlc)] =
     getIncomingHtlcCrossSigned(cmd.id) match {
-      case Some(add) =>
-        Sphinx.PaymentPacket.peel(nodeSecret, add.paymentHash, add.onionRoutingPacket) match {
-          case Right(Sphinx.DecryptedPacket(_, _, sharedSecret)) =>
-            val reason = cmd.reason match {
-              case Left(forwarded) => Sphinx.FailurePacket.wrap(forwarded, sharedSecret)
-              case Right(failure) => Sphinx.FailurePacket.create(sharedSecret, failure)
-            }
-            val result = Success(UpdateFailHtlc(add.channelId, cmd.id, reason))
-            result.map(updateFail => (addProposal(Left(updateFail)), updateFail))
-          case Left(_) => Failure(CannotExtractSharedSecret(add.channelId, add))
-        }
+      case Some(add) => OutgoingPacket.buildHtlcFailure(nodeSecret, cmd, add).map(updateFail => (addProposal(Left(updateFail)), updateFail))
       case None => Failure(UnknownHtlcId(channelId, cmd.id))
     }
 

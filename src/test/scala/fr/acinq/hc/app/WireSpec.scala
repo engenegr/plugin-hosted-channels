@@ -2,7 +2,7 @@ package fr.acinq.hc.app
 
 import java.util.UUID
 import fr.acinq.bitcoin.{ByteVector32, Satoshi}
-import fr.acinq.eclair.{TestConstants, _}
+import fr.acinq.eclair._
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.channel.{Channel, ChannelVersion, Origin}
 import fr.acinq.eclair.router.Announcements
