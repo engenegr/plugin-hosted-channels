@@ -17,7 +17,7 @@ import scodec.bits.ByteVector
 import scala.util.Random
 
 
-object WireSpec {
+object HostedWireSpec {
   def bin(len: Int, fill: Byte): ByteVector = ByteVector.fill(len)(fill)
 
   def bin32(fill: Byte): ByteVector32 = ByteVector32(bin(32, fill))
@@ -74,7 +74,7 @@ object WireSpec {
     announceChannel = false)
 }
 
-class WireSpec extends AnyFunSuite {
+class HostedWireSpec extends AnyFunSuite {
   test("Correctly derive HC id and short id") {
     val pubkey1 = randomKey.publicKey.value
     val pubkey2 = randomKey.publicKey.value
@@ -83,7 +83,7 @@ class WireSpec extends AnyFunSuite {
   }
 
   test("Encode and decode commitments") {
-    import WireSpec._
+    import HostedWireSpec._
 
     {
       val binary = HostedChannelCodecs.HOSTED_DATA_COMMITMENTSCodec.encode(hdc).require

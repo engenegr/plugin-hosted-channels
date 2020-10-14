@@ -12,9 +12,9 @@ import org.scalatest.funsuite.AnyFunSuite
 import scala.util.{Failure, Random}
 
 
-class ChannelsDbSpec extends AnyFunSuite {
+class HostedChannelsDbSpec extends AnyFunSuite {
   test("Insert, then update on second time") {
-    import WireSpec._
+    import HostedWireSpec._
     HCTestUtils.resetEntireDatabase()
     val cdb = new HostedChannelsDb(Config.db)
 
@@ -41,7 +41,7 @@ class ChannelsDbSpec extends AnyFunSuite {
   }
 
   test("Update secret") {
-    import WireSpec._
+    import HostedWireSpec._
     HCTestUtils.resetEntireDatabase()
     val cdb = new HostedChannelsDb(Config.db)
     val secret = ByteVector32.Zeroes.bytes
@@ -55,7 +55,7 @@ class ChannelsDbSpec extends AnyFunSuite {
   }
 
   test("list hot channels (with HTLCs in-flight)") {
-    import WireSpec._
+    import HostedWireSpec._
     HCTestUtils.resetEntireDatabase()
     val cdb = new HostedChannelsDb(Config.db)
 
@@ -73,7 +73,7 @@ class ChannelsDbSpec extends AnyFunSuite {
   }
 
   test("list public channels") {
-    import WireSpec._
+    import HostedWireSpec._
     HCTestUtils.resetEntireDatabase()
     val cdb = new HostedChannelsDb(Config.db)
 
@@ -95,7 +95,7 @@ class ChannelsDbSpec extends AnyFunSuite {
   }
 
   test("Processing 1000 hot channels") {
-    import WireSpec._
+    import HostedWireSpec._
     HCTestUtils.resetEntireDatabase()
     val cdb = new HostedChannelsDb(Config.db)
 
