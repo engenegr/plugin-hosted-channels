@@ -1,10 +1,10 @@
 package fr.acinq.hc.app.wire
 
 import fr.acinq.eclair.wire.ChannelCodecs._
-import scodec.codecs.{bool, either, listOfN, optional, uint16, uint8, variableSizeBytes}
+import fr.acinq.hc.app.wire.Codecs.{stateOverrideCodec, lastCrossSignedStateCodec, refundPendingCodec}
+import scodec.codecs.{bool, either, listOfN, optional, uint16, uint8, utf8, variableSizeBytes}
 import fr.acinq.eclair.wire.CommonCodecs.{bytes32, setCodec, uint64overflow, publicKey}
 import fr.acinq.eclair.wire.LightningMessageCodecs.{channelUpdateCodec, errorCodec}
-import fr.acinq.hc.app.wire.Codecs.{stateOverrideCodec, lastCrossSignedStateCodec}
 import fr.acinq.hc.app.channel.{HOSTED_DATA_COMMITMENTS, HostedState}
 import scodec.Codec
 
@@ -24,7 +24,9 @@ object HostedChannelCodecs {
       (optional(bool, errorCodec) withContext "remoteError") ::
       (setCodec(uint64overflow) withContext "failedToPeerHtlcLeftoverIds") ::
       (setCodec(uint64overflow) withContext "fulfilledByPeerHtlcLeftoverIds") ::
-      (optional(bool, stateOverrideCodec) withContext "overriddenBalanceProposal") ::
+      (optional(bool, stateOverrideCodec) withContext "overrideProposal") ::
+      (optional(bool, refundPendingCodec) withContext "refundPendingInfo") ::
+      (optional(bool, variableSizeBytes(uint16, utf8)) withContext "refundCompleteInfo") ::
       (bool withContext "announceChannel")
   }.as[HOSTED_DATA_COMMITMENTS]
 

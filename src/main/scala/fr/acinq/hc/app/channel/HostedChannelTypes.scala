@@ -4,9 +4,9 @@ import fr.acinq.eclair._
 import fr.acinq.eclair.wire._
 import fr.acinq.eclair.channel._
 import fr.acinq.hc.app.channel.HOSTED_DATA_COMMITMENTS._
+import fr.acinq.hc.app.{LastCrossSignedState, RefundPending, StateOverride, Tools}
 import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc, OutgoingHtlc}
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, Satoshi}
-import fr.acinq.hc.app.{LastCrossSignedState, StateOverride, Tools}
 import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
 import scala.util.{Failure, Success, Try}
 
@@ -37,6 +37,8 @@ case class HOSTED_DATA_COMMITMENTS(localNodeId: PublicKey,
                                    failedToPeerHtlcLeftoverIds: Set[Long], // CLOSED channel may have in-flight HTLCs (network -> we -> client) which can later be failed, collect their IDs here
                                    fulfilledByPeerHtlcLeftoverIds: Set[Long], // CLOSED channel may have in-flight HTLCs (network -> we -> client) which can later be fulfilled, collect their IDs here
                                    overrideProposal: Option[StateOverride], // CLOSED channel override can be initiated by Host, a new proposed balance should be retained once this happens
+                                   refundPendingInfo: Option[RefundPending], // Will be present in case if funds should be refunded, but `liabilityDeadlineBlockdays` has not passed yet
+                                   refundCompleteInfo: Option[String], // Will be present in case if channel balance has been refunded after `liabilityDeadlineBlockdays` has passed
                                    announceChannel: Boolean) extends AbstractCommitments with HostedData {
 
   val (nextLocalUpdates, nextRemoteUpdates, nextTotalLocal, nextTotalRemote) =
@@ -62,27 +64,30 @@ case class HOSTED_DATA_COMMITMENTS(localNodeId: PublicKey,
   def addProposal(update: LocalOrRemoteUpdate): HOSTED_DATA_COMMITMENTS = copy(futureUpdates = futureUpdates :+ update)
 
   // Find a cross-signed (in localSpec) and still not resolved (also in nextLocalSpec)
-  def getOutgoingHtlcCrossSigned(htlcId: Long): Option[UpdateAddHtlc] = for {
-    localSigned <- localSpec.findOutgoingHtlcById(htlcId)
-    remoteSigned <- nextLocalSpec.findOutgoingHtlcById(htlcId)
-  } yield {
-    require(localSigned.add == remoteSigned.add)
-    localSigned.add
-  }
+  def getOutgoingHtlcCrossSigned(htlcId: Long): Option[UpdateAddHtlc] =
+    for {
+      localSigned <- localSpec.findOutgoingHtlcById(htlcId)
+      remoteSigned <- nextLocalSpec.findOutgoingHtlcById(htlcId)
+    } yield {
+      require(localSigned.add == remoteSigned.add)
+      localSigned.add
+    }
 
-  def getIncomingHtlcCrossSigned(htlcId: Long): Option[UpdateAddHtlc] = for {
-    localSigned <- localSpec.findIncomingHtlcById(htlcId)
-    remoteSigned <- nextLocalSpec.findIncomingHtlcById(htlcId)
-  } yield {
-    require(localSigned.add == remoteSigned.add)
-    localSigned.add
-  }
+  def getIncomingHtlcCrossSigned(htlcId: Long): Option[UpdateAddHtlc] =
+    for {
+      localSigned <- localSpec.findIncomingHtlcById(htlcId)
+      remoteSigned <- nextLocalSpec.findIncomingHtlcById(htlcId)
+    } yield {
+      require(localSigned.add == remoteSigned.add)
+      localSigned.add
+    }
 
   // Meaning sent from us to peer
-  def timedOutOutgoingHtlcs(blockHeight: Long): Set[UpdateAddHtlc] = for {
-    OutgoingHtlc(add) <- currentAndNextInFlightHtlcs if blockHeight > add.cltvExpiry.toLong
-    if !failedToPeerHtlcLeftoverIds.contains(add.id) && !fulfilledByPeerHtlcLeftoverIds.contains(add.id)
-  } yield add
+  def timedOutOutgoingHtlcs(blockHeight: Long): Set[UpdateAddHtlc] =
+    for {
+      OutgoingHtlc(add) <- currentAndNextInFlightHtlcs if blockHeight > add.cltvExpiry.toLong
+      if !failedToPeerHtlcLeftoverIds.contains(add.id) && !fulfilledByPeerHtlcLeftoverIds.contains(add.id)
+    } yield add
 
   def nextLocalUnsignedLCSS(blockDay: Long): LastCrossSignedState = {
     val (incomingHtlcs, outgoingHtlcs) = nextLocalSpec.htlcs.toList.partition(DirectedHtlc.incoming.isDefinedAt)
@@ -92,11 +97,12 @@ case class HOSTED_DATA_COMMITMENTS(localNodeId: PublicKey,
 
   // Rebuild all messaging and state history starting from local LCSS,
   // then try to find a future state with same update numbers as remote LCSS
-  def findState(remoteLCSS: LastCrossSignedState): Seq[HOSTED_DATA_COMMITMENTS] = for {
-    previousIndex <- futureUpdates.indices drop 1
-    previousHC = copy(futureUpdates = futureUpdates take previousIndex)
-    if previousHC.nextLocalUnsignedLCSS(remoteLCSS.blockDay).isEven(remoteLCSS)
-  } yield previousHC
+  def findState(remoteLCSS: LastCrossSignedState): Seq[HOSTED_DATA_COMMITMENTS] =
+    for {
+      previousIndex <- futureUpdates.indices drop 1
+      previousHC = copy(futureUpdates = futureUpdates take previousIndex)
+      if previousHC.nextLocalUnsignedLCSS(remoteLCSS.blockDay).isEven(remoteLCSS)
+    } yield previousHC
 
   def sendAdd(cmd: CMD_ADD_HTLC, origin: Origin, blockHeight: Long): Try[(HOSTED_DATA_COMMITMENTS, UpdateAddHtlc)] = {
     val minExpiry = Channel.MIN_CLTV_EXPIRY_DELTA.toCltvExpiry(blockHeight)

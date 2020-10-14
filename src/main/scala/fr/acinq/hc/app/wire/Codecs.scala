@@ -59,6 +59,9 @@ object Codecs {
       (bytes64 withContext "localSigOfRemoteLCSS")
   }.as[StateOverride]
 
+  val refundPendingCodec: Codec[RefundPending] =
+    (uint32 withContext "startedAt").as[RefundPending]
+
   val queryPublicHostedChannelsCodec: Codec[QueryPublicHostedChannels] = (bytes32 withContext "chainHash").as[QueryPublicHostedChannels]
 
   val replyPublicHostedChannelsEndCodec: Codec[ReplyPublicHostedChannelsEnd] = (bytes32 withContext "chainHash").as[ReplyPublicHostedChannelsEnd]
