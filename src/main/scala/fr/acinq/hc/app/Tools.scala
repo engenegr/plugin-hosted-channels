@@ -1,13 +1,15 @@
 package fr.acinq.hc.app
 
-import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol}
+import net.ceedubs.ficus.Ficus._
+import net.ceedubs.ficus.readers.ArbitraryTypeReader._
+import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol, Satoshi}
+import fr.acinq.eclair.{CltvExpiryDelta, MilliSatoshi, ShortChannelId}
 import com.typesafe.config.{Config => Configuration}
 import java.io.{ByteArrayInputStream, File}
 
 import com.google.common.cache.CacheBuilder
 import com.typesafe.config.ConfigFactory
 import org.postgresql.util.PSQLException
-import fr.acinq.eclair.ShortChannelId
 import java.util.concurrent.TimeUnit
 import slick.jdbc.PostgresProfile
 import scodec.bits.ByteVector
@@ -19,7 +21,6 @@ object Tools {
   def makeExpireAfterAccessCache(expiryMins: Int): CacheBuilder[AnyRef, AnyRef] = CacheBuilder.newBuilder.expireAfterAccess(expiryMins, TimeUnit.MINUTES)
   def makeExpireAfterWriteCache(expiryMins: Int): CacheBuilder[AnyRef, AnyRef] = CacheBuilder.newBuilder.expireAfterWrite(expiryMins, TimeUnit.MINUTES)
   case object DuplicateShortId extends Throwable("Duplicate ShortId is not allowed here")
-  case object InsertHasFailed extends Throwable("Insert has failed")
 
   abstract class DuplicateHandler[T] { me =>
     def execute(data: T): Try[Boolean] = Try(me insert data) recover {
@@ -50,5 +51,27 @@ object Tools {
 
 object Config {
   val config: Configuration = ConfigFactory parseFile new File(s"${System getProperty "user.dir"}/src/main/resources", "hc.conf")
+
   val db: PostgresProfile.backend.Database = PostgresProfile.backend.Database.forConfig("config.relationalDb", config)
+
+  val vals: Vals = config.as[Vals]("config.vals")
+}
+
+case class Vals(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDeltaBlocks: Int, onChainRefundThresholdSat: Long,
+                liabilityDeadlineBlockdays: Int, defaultCapacityMsat: Long, defaultClientBalanceMsat: Long,
+                maxHtlcValueInFlightMsat: Long, htlcMinimumMsat: Long, maxAcceptedHtlcs: Int) {
+
+  val feeBase: MilliSatoshi = MilliSatoshi(feeBaseMsat)
+
+  val cltvDelta: CltvExpiryDelta = CltvExpiryDelta(cltvDeltaBlocks)
+
+  val onChainRefundThreshold: Satoshi = Satoshi(onChainRefundThresholdSat)
+
+  val defaultCapacity: MilliSatoshi = MilliSatoshi(defaultCapacityMsat)
+
+  val defaultClientBalance: MilliSatoshi = MilliSatoshi(defaultClientBalanceMsat)
+
+  val maxHtlcValueInFlight: MilliSatoshi = MilliSatoshi(maxHtlcValueInFlightMsat)
+
+  val htlcMinimum: MilliSatoshi = MilliSatoshi(htlcMinimumMsat)
 }
