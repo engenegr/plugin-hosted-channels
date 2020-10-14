@@ -10,17 +10,27 @@ import slick.jdbc.PostgresProfile
 
 
 class HostedChannelsDb(db: PostgresProfile.backend.Database) {
-  private def encode(state: HOSTED_DATA_COMMITMENTS) = HOSTED_DATA_COMMITMENTSCodec.encode(state).require.toByteArray
   private def decode(data: ByteArray) = HOSTED_DATA_COMMITMENTSCodec.decode(BitVector view data).require.value
 
-  def addNewChannel(state: HOSTED_DATA_COMMITMENTS): Boolean = {
-    val tuple = (state.channelId.toArray, state.channelUpdate.shortChannelId.toLong, 0, false, None, None, state.lastCrossSignedState.blockDay, System.currentTimeMillis, encode(state), Array.emptyByteArray)
-    Blocking.txWrite(Channels.insertCompiled += tuple, db) > 0 // Will throw if either `channelId` or `shortChannelId` is already present in database
-  }
+  def addNewChannel(state: HOSTED_DATA_COMMITMENTS): Boolean =
+    Blocking.txWrite(Channels.insertCompiled += (state.channelId.toArray, state.channelUpdate.shortChannelId.toLong, 0, false, None, None,
+      state.lastCrossSignedState.blockDay, System.currentTimeMillis, HOSTED_DATA_COMMITMENTSCodec.encode(state).require.toByteArray,
+      Array.emptyByteArray), db) > 0
 
-  def updateChannel(state: HOSTED_DATA_COMMITMENTS): Boolean = {
-    val tuple = (state.currentAndNextInFlightHtlcs.size, state.announceChannel, state.refundCompleteInfo, state.refundPendingInfo.map(_.startedAt), state.lastCrossSignedState.blockDay, encode(state))
-    Blocking.txWrite(Channels.findByChannelIdUpdatableCompiled(state.channelId.toArray).update(tuple), db) > 0 // Method will return false if no record exists and hence could not be updated
+  def updateOrAddNewChannel(state: HOSTED_DATA_COMMITMENTS): Unit = {
+    val encoded = HOSTED_DATA_COMMITMENTSCodec.encode(state).require.toByteArray
+    val startedAtLong = state.refundPendingInfo.map(_.startedAt)
+    val inFlightHtlcs = state.currentAndNextInFlightHtlcs.size
+    val channelId = state.channelId.toArray
+
+    val updateTuple = (inFlightHtlcs, state.announceChannel, state.refundCompleteInfo, startedAtLong, state.lastCrossSignedState.blockDay, encoded)
+    val updateHasFailed: Boolean = Blocking.txWrite(Channels.findByChannelIdUpdatableCompiled(channelId).update(updateTuple), db) == 0
+
+    if (updateHasFailed) {
+      Blocking.txWrite(Channels.insertCompiled += (channelId, state.channelUpdate.shortChannelId.toLong, inFlightHtlcs,
+        state.announceChannel, state.refundCompleteInfo, startedAtLong, state.lastCrossSignedState.blockDay,
+        System.currentTimeMillis, encoded, Array.emptyByteArray), db)
+    }
   }
 
   def updateSecretById(channelId: ByteVector32, secret: ByteVector): Boolean =

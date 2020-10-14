@@ -18,38 +18,26 @@ class ChannelsDbSpec extends AnyFunSuite {
     HCTestUtils.resetEntireDatabase()
     val cdb = new HostedChannelsDb(Config.db)
 
-    val insertOrUpdate = new DuplicateHandler[HOSTED_DATA_COMMITMENTS] {
-      def firstMove(data: HOSTED_DATA_COMMITMENTS): Boolean = cdb.addNewChannel(data)
-      def secondMove(data: HOSTED_DATA_COMMITMENTS): Boolean = cdb.updateChannel(data)
-    }
-
-    assert(insertOrUpdate.execute(hdc).get) // Insert
-    assert(insertOrUpdate.execute(hdc).get) // Update
+    cdb.updateOrAddNewChannel(hdc) // Insert
+    cdb.updateOrAddNewChannel(hdc) // Update
     assert(!cdb.getChannelById(hdc.channelId).head.announceChannel)
 
     val hdc1 = hdc.copy(announceChannel = true) // Channel becomes public
 
-    assert(insertOrUpdate.execute(hdc1).get) // Update
-    assert(insertOrUpdate.execute(hdc1).get) // Update
-    assert(cdb.getChannelById(hdc.channelId).head.announceChannel)
+    cdb.updateOrAddNewChannel(hdc1) // Update
+    assert(cdb.getChannelById(hdc.channelId).head.announceChannel) // channelId is the same, but announce updated
 
     val hdc2 = hdc.copy(remoteNodeId = randomKey.publicKey) // Different remote NodeId, but shortId is the same (which is theoretically possible)
 
     val insertOrFail = new DuplicateHandler[HOSTED_DATA_COMMITMENTS] {
-      def firstMove(data: HOSTED_DATA_COMMITMENTS): Boolean = cdb.addNewChannel(data)
-      def secondMove(data: HOSTED_DATA_COMMITMENTS): Boolean = throw DuplicateShortId
+      def insert(data: HOSTED_DATA_COMMITMENTS): Boolean = cdb.addNewChannel(data)
     }
 
     assert(cdb.getChannelById(hdc2.channelId).isEmpty) // Such a channel could not be found
     assert(Failure(DuplicateShortId) === insertOrFail.execute(hdc2)) // New channel could not be created because of existing shortId
 
-    val updateOrInsert = new DuplicateHandler[HOSTED_DATA_COMMITMENTS] {
-      def firstMove(data: HOSTED_DATA_COMMITMENTS): Boolean = cdb.updateChannel(data)
-      def secondMove(data: HOSTED_DATA_COMMITMENTS): Boolean = throw DuplicateShortId
-    }
-
-    for (n <- 0 to 10) updateOrInsert.execute(hdc1.copy(failedToPeerHtlcLeftoverIds = Set(n)))
-    println(cdb.getChannelById(hdc1.channelId).get.failedToPeerHtlcLeftoverIds === Set(10L)) // Ten updates in a row
+    for (n <- 0 to 10) cdb.updateOrAddNewChannel(hdc1.copy(failedToPeerHtlcLeftoverIds = Set(n)))
+    assert(cdb.getChannelById(hdc1.channelId).get.failedToPeerHtlcLeftoverIds === Set(10L)) // Ten updates in a row
   }
 
   test("Update secret") {
@@ -60,12 +48,7 @@ class ChannelsDbSpec extends AnyFunSuite {
 
     val hdc1 = hdc.copy(futureUpdates = Nil, originChannels = Map.empty, remoteError = None, fulfilledByPeerHtlcLeftoverIds = Set.empty, refundPendingInfo = None, refundCompleteInfo = None)
 
-    val insertOrFail = new DuplicateHandler[HOSTED_DATA_COMMITMENTS] {
-      def firstMove(data: HOSTED_DATA_COMMITMENTS): Boolean = cdb.addNewChannel(data)
-      def secondMove(data: HOSTED_DATA_COMMITMENTS): Boolean = throw DuplicateShortId
-    }
-
-    insertOrFail.execute(hdc1)
+    cdb.updateOrAddNewChannel(hdc1)
     assert(cdb.getChannelBySecret(secret).isEmpty)
     assert(cdb.updateSecretById(hdc.channelId, secret))
     assert(cdb.getChannelBySecret(secret).get === hdc1)
@@ -82,13 +65,9 @@ class ChannelsDbSpec extends AnyFunSuite {
       futureUpdates = Nil, localSpec = CommitmentSpec(htlcs = Set.empty, feeratePerKw = FeeratePerKw(Satoshi(0L)), toLocal = MilliSatoshi(Random.nextInt(Int.MaxValue)),
         toRemote = MilliSatoshi(Random.nextInt(Int.MaxValue))))
 
-    cdb.addNewChannel(hdc1)
-    cdb.addNewChannel(hdc2)
-    cdb.addNewChannel(hdc3)
-
-    cdb.updateChannel(hdc1)
-    cdb.updateChannel(hdc2)
-    cdb.updateChannel(hdc3)
+    cdb.updateOrAddNewChannel(hdc1)
+    cdb.updateOrAddNewChannel(hdc2)
+    cdb.updateOrAddNewChannel(hdc3)
 
     assert(cdb.listHotChannels.toSet === Set(hdc1, hdc2))
   }
@@ -106,9 +85,11 @@ class ChannelsDbSpec extends AnyFunSuite {
     cdb.addNewChannel(hdc2)
     cdb.addNewChannel(hdc3)
 
-    cdb.updateChannel(hdc1)
-    cdb.updateChannel(hdc2)
-    cdb.updateChannel(hdc3)
+    assert(cdb.listPublicChannels.isEmpty)
+
+    cdb.updateOrAddNewChannel(hdc1)
+    cdb.updateOrAddNewChannel(hdc2)
+    cdb.updateOrAddNewChannel(hdc3)
 
     assert(cdb.listPublicChannels.toSet === Set(hdc1, hdc2))
   }
@@ -118,14 +99,8 @@ class ChannelsDbSpec extends AnyFunSuite {
     HCTestUtils.resetEntireDatabase()
     val cdb = new HostedChannelsDb(Config.db)
 
-    val insertOrUpdate = new DuplicateHandler[HOSTED_DATA_COMMITMENTS] {
-      def firstMove(data: HOSTED_DATA_COMMITMENTS): Boolean = cdb.addNewChannel(data)
-      def secondMove(data: HOSTED_DATA_COMMITMENTS): Boolean = cdb.updateChannel(data)
-    }
-
     val hdcs = for (n <- 0L to 1000L) yield hdc.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(n)), remoteNodeId = randomKey.publicKey)
-    hdcs.foreach(insertOrUpdate.execute) // inserts
-    hdcs.foreach(insertOrUpdate.execute) // updates
+    hdcs.foreach(cdb.updateOrAddNewChannel)
 
     val a = System.currentTimeMillis()
     assert(cdb.listHotChannels.size === 1001)

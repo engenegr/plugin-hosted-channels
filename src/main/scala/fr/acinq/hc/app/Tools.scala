@@ -19,15 +19,15 @@ object Tools {
   def makeExpireAfterAccessCache(expiryMins: Int): CacheBuilder[AnyRef, AnyRef] = CacheBuilder.newBuilder.expireAfterAccess(expiryMins, TimeUnit.MINUTES)
   def makeExpireAfterWriteCache(expiryMins: Int): CacheBuilder[AnyRef, AnyRef] = CacheBuilder.newBuilder.expireAfterWrite(expiryMins, TimeUnit.MINUTES)
   case object DuplicateShortId extends Throwable("Duplicate ShortId is not allowed here")
+  case object InsertHasFailed extends Throwable("Insert has failed")
 
   abstract class DuplicateHandler[T] { me =>
-    def execute(data: T): Try[Boolean] = Try(me firstMove data) recover {
-      case dup: PSQLException if "23505" == dup.getSQLState => me secondMove data
-      case otherDatabaseError: Throwable => throw otherDatabaseError
+    def execute(data: T): Try[Boolean] = Try(me insert data) recover {
+      case dup: PSQLException if "23505" == dup.getSQLState => throw DuplicateShortId
+      case otherError: Throwable => throw otherError
     }
 
-    def firstMove(data: T): Boolean
-    def secondMove(data: T): Boolean
+    def insert(data: T): Boolean
   }
 
   // HC ids derivation
