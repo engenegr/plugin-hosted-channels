@@ -31,7 +31,7 @@ class HostedUpdatesDb(db: PostgresProfile.backend.Database) {
   def getPHCMap(now: Long): Map[ShortChannelId, HostedUpdates] = {
     val rawUpdates = Blocking.txRead(Updates.findNotStaleCompiled(now - staleThreshold).result, db)
 
-    val updates = for (Tuple8(_, shortChannelId, channelAnnounce, channelUpdate1, channelUpdate2, _, _, localStamp) <- rawUpdates)
+    val updates: Seq[HostedUpdates] = for (Tuple6(_, shortChannelId, channelAnnounce, channelUpdate1, channelUpdate2, localStamp) <- rawUpdates)
       yield HostedUpdates(ShortChannelId(shortChannelId), toAnnounce(channelAnnounce), channelUpdate1.map(toUpdate), channelUpdate2.map(toUpdate), localStamp)
 
     Tools.toMapBy[ShortChannelId, HostedUpdates](updates, _.shortChannelId)
@@ -46,8 +46,8 @@ class HostedUpdatesDb(db: PostgresProfile.backend.Database) {
     if (Announcements isNode1 update.channelFlags) addUpdate1(update) else addUpdate2(update)
 
   private def addUpdate1(update: ChannelUpdate): SqlAction[Int, PostgresProfile.api.NoStream, Effect] =
-    Updates.update1st(update.shortChannelId.toLong, channelUpdateCodec.encode(update).require.toHex, update.timestamp)
+    Updates.update1st(update.shortChannelId.toLong, channelUpdateCodec.encode(update).require.toHex)
 
   private def addUpdate2(update: ChannelUpdate): SqlAction[Int, PostgresProfile.api.NoStream, Effect] =
-    Updates.update2nd(update.shortChannelId.toLong, channelUpdateCodec.encode(update).require.toHex, update.timestamp)
+    Updates.update2nd(update.shortChannelId.toLong, channelUpdateCodec.encode(update).require.toHex)
 }
