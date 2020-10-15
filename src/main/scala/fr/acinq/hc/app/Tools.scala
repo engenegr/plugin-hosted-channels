@@ -6,11 +6,14 @@ import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol
 import fr.acinq.eclair.{CltvExpiryDelta, MilliSatoshi, ShortChannelId}
 import com.typesafe.config.{Config => Configuration}
 import java.io.{ByteArrayInputStream, File}
+import java.nio.file.{Files, Paths}
 
+import net.ceedubs.ficus.readers.ValueReader
 import com.google.common.cache.CacheBuilder
 import com.typesafe.config.ConfigFactory
 import org.postgresql.util.PSQLException
 import java.util.concurrent.TimeUnit
+import fr.acinq.eclair.wire.Color
 import slick.jdbc.PostgresProfile
 import scodec.bits.ByteVector
 import java.nio.ByteOrder
@@ -38,8 +41,10 @@ object Tools {
     if (pubkey1First) pubkey1 ++ pubkey2 else pubkey2 ++ pubkey1
   }
 
-  def hostedChanId(pubkey1: ByteVector, pubkey2: ByteVector): ByteVector32 =
-    Crypto sha256 hostedNodesCombined(pubkey1, pubkey2)
+  def hostedChanId(pubkey1: ByteVector, pubkey2: ByteVector): ByteVector32 = {
+    val nodesCombined = hostedNodesCombined(pubkey1, pubkey2)
+    Crypto.sha256(nodesCombined)
+  }
 
   def hostedShortChanId(pubkey1: ByteVector, pubkey2: ByteVector): ShortChannelId = {
     val stream = new ByteArrayInputStream(hostedNodesCombined(pubkey1, pubkey2).toArray)
@@ -54,12 +59,26 @@ object Config {
 
   val db: PostgresProfile.backend.Database = PostgresProfile.backend.Database.forConfig("config.relationalDb", config)
 
+  implicit val serviceConfigReader: ValueReader[Color] = ValueReader.relative { source =>
+    Color(source.getInt("r").toByte, source.getInt("g").toByte, source.getInt("b").toByte)
+  }
+
   val vals: Vals = config.as[Vals]("config.vals")
 }
 
+case class BrandingData(logo: String, color: Color) {
+  var brandingMessageOpt: Option[HostedChannelBranding] = None
+
+  Try {
+    val pngBytes = ByteVector view Files.readAllBytes(Paths get logo)
+    val message = HostedChannelBranding(color, pngBytes)
+    brandingMessageOpt = Some(message)
+  }
+}
+
 case class Vals(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDeltaBlocks: Int, onChainRefundThresholdSat: Long,
-                liabilityDeadlineBlockdays: Int, defaultCapacityMsat: Long, defaultClientBalanceMsat: Long,
-                maxHtlcValueInFlightMsat: Long, htlcMinimumMsat: Long, maxAcceptedHtlcs: Int) {
+                liabilityDeadlineBlockdays: Int, defaultCapacityMsat: Long, defaultClientBalanceMsat: Long, maxHtlcValueInFlightMsat: Long,
+                htlcMinimumMsat: Long, maxAcceptedHtlcs: Int, branding: BrandingData) {
 
   val feeBase: MilliSatoshi = MilliSatoshi(feeBaseMsat)
 
