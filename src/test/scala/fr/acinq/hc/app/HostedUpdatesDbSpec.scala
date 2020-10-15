@@ -46,8 +46,8 @@ class HostedUpdatesDbSpec extends AnyFunSuite {
     assert(channelAnnouncementCodec.decode(BitVector.fromValidHex(res1._3)).require.value === channel1)
     assert(res1._4.isEmpty)
 
-    Blocking.txWrite(Updates.update1st(channel_update_1.shortChannelId.toLong, channelUpdateCodec.encode(channel_update_1).require.toHex), Config.db)
-    Blocking.txWrite(Updates.update2nd(channel_update_2.shortChannelId.toLong, channelUpdateCodec.encode(channel_update_2).require.toHex), Config.db)
+    Blocking.txWrite(Updates.update1st(channel_update_1.shortChannelId.toLong, channelUpdateCodec.encode(channel_update_1).require.toHex, channel_update_1.timestamp), Config.db)
+    Blocking.txWrite(Updates.update2nd(channel_update_2.shortChannelId.toLong, channelUpdateCodec.encode(channel_update_2).require.toHex, channel_update_1.timestamp), Config.db)
 
     val res2 = Blocking.txRead(Updates.findNotStaleCompiled(0L).result, Config.db).head
     assert(channelUpdateCodec.decode(BitVector.fromValidHex(res2._4.get)).require.value === channel_update_1)
@@ -90,6 +90,16 @@ class HostedUpdatesDbSpec extends AnyFunSuite {
     assert(map3(channel_2.shortChannelId).channelUpdate2.isEmpty)
 
     assert(udb.getPHCMap(System.currentTimeMillis + 15.days.toSeconds).isEmpty)
+
+    udb.pruneOldUpdates1(System.currentTimeMillis + 15.days.toSeconds)
+    val map4 = udb.getPHCMap(System.currentTimeMillis + 12.days.toSeconds)(channel_1.shortChannelId)
+    assert(map4.channelUpdate1.isEmpty)
+    assert(map4.channelUpdate2.get === channel_update_1_2)
+
+    udb.pruneOldUpdates2(System.currentTimeMillis + 15.days.toSeconds)
+    val map5 = udb.getPHCMap(System.currentTimeMillis + 12.days.toSeconds)(channel_1.shortChannelId)
+    assert(map5.channelUpdate1.isEmpty)
+    assert(map5.channelUpdate2.isEmpty)
 
     udb.pruneOldAnnounces(System.currentTimeMillis + 30.days.toSeconds)
     assert(udb.getPHCMap(System.currentTimeMillis + 12.days.toSeconds).isEmpty)
