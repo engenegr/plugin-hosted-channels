@@ -4,10 +4,14 @@ import scala.concurrent.duration._
 import fr.acinq.hc.app.dbo.Blocking._
 import slick.jdbc.PostgresProfile.api._
 import slick.lifted.{Index, Tag}
-
 import slick.jdbc.PostgresProfile.backend.Database
+import System.currentTimeMillis
+
 import scala.concurrent.Await
+import slick.sql.SqlAction
 import akka.util.Timeout
+import fr.acinq.eclair.ShortChannelId
+import fr.acinq.eclair.wire.{ChannelAnnouncement, ChannelUpdate}
 import slick.dbio.Effect
 
 
@@ -15,6 +19,7 @@ object Blocking {
   type ByteArray = Array[Byte]
   type PendingRefund = Option[Long]
   type CompleteRefund = Option[String]
+  type OptionalUpdate = Option[String]
 
   type RepInt = Rep[Int]
   type RepLong = Rep[Long]
@@ -85,4 +90,51 @@ class Channels(tag: Tag) extends Table[Channels.DbType](tag, Channels.tableName)
   def idx3: Index = index("channels__secret__idx", secret, unique = false) // Find these on user request
 
   def * = (id, channelId, shortChannelId, inFlightHtlcs, announceChannel, completeRefund, pendingRefund, lastBlockDay, createdAt, data, secret)
+}
+
+
+object Updates {
+  final val tableName = "updates"
+  val model = TableQuery[Updates]
+
+  type DbType = (Long, Long, String, OptionalUpdate, OptionalUpdate, Long, Long, Long)
+
+  val findNotStaleCompiled = Compiled {
+    (threshold: RepLong) => model.filter(_.localStamp > threshold)
+  }
+
+  val findAnnounceOldUpdatableCompiled = Compiled {
+    (threshold: RepLong) => model.filter(_.localStamp < threshold)
+  }
+
+  def update1st(shortChannelId: Long, update: String, updateStamp: Long): SqlAction[Int, NoStream, Effect] = sqlu"""
+    UPDATE #${Updates.tableName} SET channel_update_1_opt = $update, update_1_stamp = $updateStamp, local_stamp = $currentTimeMillis
+    WHERE short_channel_id = $shortChannelId
+  """
+
+  def update2nd(shortChannelId: Long, update: String, updateStamp: Long): SqlAction[Int, NoStream, Effect] = sqlu"""
+    UPDATE #${Updates.tableName} SET channel_update_2_opt = $update, update_2_stamp = $updateStamp, local_stamp = $currentTimeMillis
+    WHERE short_channel_id = $shortChannelId
+  """
+
+  def insert(shortChannelId: Long, announce: String): SqlAction[Int, NoStream, Effect] = sqlu"""
+    INSERT INTO #${Updates.tableName}(short_channel_id, channel_announce, local_stamp)
+    VALUES ($shortChannelId, $announce, $currentTimeMillis)
+    ON CONFLICT (short_channel_id) DO UPDATE
+    SET channel_announce = $announce
+  """
+}
+
+class Updates(tag: Tag) extends Table[Updates.DbType](tag, Updates.tableName) {
+  def id: Rep[Long] = column[Long]("id", O.PrimaryKey, O.AutoInc)
+  def shortChannelId: Rep[Long] = column[Long]("short_channel_id", O.Unique)
+  def channelAnnounce: Rep[String] = column[String]("channel_announce")
+  def channelUpdate1: Rep[OptionalUpdate] = column[OptionalUpdate]("channel_update_1_opt", O Default None)
+  def channelUpdate2: Rep[OptionalUpdate] = column[OptionalUpdate]("channel_update_2_opt", O Default None)
+  def update1Stamp: Rep[Long] = column[Long]("update_1_stamp", O Default 0L)
+  def update2Stamp: Rep[Long] = column[Long]("update_2_stamp", O Default 0L)
+  def localStamp: Rep[Long] = column[Long]("local_stamp")
+
+  def idx1: Index = index("updates__local_stamp__idx", localStamp, unique = false)
+  def * = (id, shortChannelId, channelAnnounce, channelUpdate1, channelUpdate2, update1Stamp, update2Stamp, localStamp)
 }

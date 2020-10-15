@@ -2,7 +2,7 @@ package fr.acinq.hc.app
 
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
-import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol, Satoshi}
+import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, LexicographicalOrdering, Protocol, Satoshi}
 import fr.acinq.eclair.{CltvExpiryDelta, MilliSatoshi, ShortChannelId}
 import com.typesafe.config.{Config => Configuration}
 import java.io.{ByteArrayInputStream, File}
@@ -13,16 +13,28 @@ import com.google.common.cache.CacheBuilder
 import com.typesafe.config.ConfigFactory
 import org.postgresql.util.PSQLException
 import java.util.concurrent.TimeUnit
-import fr.acinq.eclair.wire.Color
+
+import fr.acinq.eclair.wire.{ChannelAnnouncement, Color}
 import slick.jdbc.PostgresProfile
 import scodec.bits.ByteVector
 import java.nio.ByteOrder
+
+import fr.acinq.bitcoin.Crypto.PublicKey
+
 import scala.util.Try
 
 
 object Tools {
+  lazy val invalidPubKey: PublicKey = PublicKey.fromBin(ByteVector.fromValidHex("02" * 33), checkValid = false)
+
+  def isPHC(ca: ChannelAnnouncement): Boolean = ca.bitcoinKey1 == invalidPubKey && ca.bitcoinKey2 == invalidPubKey && ca.bitcoinSignature1 == ByteVector64.Zeroes && ca.bitcoinSignature2 == ByteVector64.Zeroes
+
   def makeExpireAfterAccessCache(expiryMins: Int): CacheBuilder[AnyRef, AnyRef] = CacheBuilder.newBuilder.expireAfterAccess(expiryMins, TimeUnit.MINUTES)
+
   def makeExpireAfterWriteCache(expiryMins: Int): CacheBuilder[AnyRef, AnyRef] = CacheBuilder.newBuilder.expireAfterWrite(expiryMins, TimeUnit.MINUTES)
+
+  def toMapBy[K, V](items: Iterable[V], mapper: V => K): Map[K, V] = items.map(item => mapper(item) -> item).toMap
+
   case object DuplicateShortId extends Throwable("Duplicate ShortId is not allowed here")
 
   abstract class DuplicateHandler[T] { me =>
@@ -59,7 +71,7 @@ object Config {
 
   val db: PostgresProfile.backend.Database = PostgresProfile.backend.Database.forConfig("config.relationalDb", config)
 
-  implicit val serviceConfigReader: ValueReader[Color] = ValueReader.relative { source =>
+  implicit val colorReader: ValueReader[Color] = ValueReader.relative { source =>
     Color(source.getInt("r").toByte, source.getInt("g").toByte, source.getInt("b").toByte)
   }
 

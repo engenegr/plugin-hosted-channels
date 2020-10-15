@@ -13,7 +13,6 @@ trait HostedChannelMessage
 case class InvokeHostedChannel(chainHash: ByteVector32,
                                refundScriptPubKey: ByteVector,
                                secret: ByteVector = ByteVector.empty) extends HostedChannelMessage {
-  require(secret.size <= 64, s"Hosted channel secret size=${secret.size}, max allowed=64")
   val finalSecret: ByteVector = secret.take(64)
 }
 
