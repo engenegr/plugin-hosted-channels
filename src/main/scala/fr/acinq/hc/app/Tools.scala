@@ -4,6 +4,7 @@ import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, LexicographicalOrdering, Protocol, Satoshi}
 import fr.acinq.eclair.{CltvExpiryDelta, MilliSatoshi, ShortChannelId}
+import fr.acinq.eclair.wire.{ChannelAnnouncement, Color}
 import com.typesafe.config.{Config => Configuration}
 import java.io.{ByteArrayInputStream, File}
 import java.nio.file.{Files, Paths}
@@ -12,15 +13,11 @@ import net.ceedubs.ficus.readers.ValueReader
 import com.google.common.cache.CacheBuilder
 import com.typesafe.config.ConfigFactory
 import org.postgresql.util.PSQLException
+import fr.acinq.bitcoin.Crypto.PublicKey
 import java.util.concurrent.TimeUnit
-
-import fr.acinq.eclair.wire.{ChannelAnnouncement, Color}
 import slick.jdbc.PostgresProfile
 import scodec.bits.ByteVector
 import java.nio.ByteOrder
-
-import fr.acinq.bitcoin.Crypto.PublicKey
-
 import scala.util.Try
 
 

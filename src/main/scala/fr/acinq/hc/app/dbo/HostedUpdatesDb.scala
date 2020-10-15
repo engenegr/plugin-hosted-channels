@@ -30,9 +30,11 @@ class HostedUpdatesDb(db: PostgresProfile.backend.Database) {
 
   def getPHCMap(now: Long): Map[ShortChannelId, HostedUpdates] = {
     val rawUpdates = Blocking.txRead(Updates.findNotStaleCompiled(now - staleThreshold).result, db)
-    Tools.toMapBy[ShortChannelId, HostedUpdates](rawUpdates map { case (_, shortChannelId, channelAnnounce, channelUpdate1, channelUpdate2, _, _, localStamp) =>
-      HostedUpdates(ShortChannelId(shortChannelId), toAnnounce(channelAnnounce), channelUpdate1.map(toUpdate), channelUpdate2.map(toUpdate), localStamp)
-    }, _.shortChannelId)
+
+    val updates = for (Tuple8(_, shortChannelId, channelAnnounce, channelUpdate1, channelUpdate2, _, _, localStamp) <- rawUpdates)
+      yield HostedUpdates(ShortChannelId(shortChannelId), toAnnounce(channelAnnounce), channelUpdate1.map(toUpdate), channelUpdate2.map(toUpdate), localStamp)
+
+    Tools.toMapBy[ShortChannelId, HostedUpdates](updates, _.shortChannelId)
   }
 
   def pruneOldAnnounces(now: Long): Int = Blocking.txWrite(Updates.findAnnounceOldUpdatableCompiled(now - removeThreshold).delete, db)
