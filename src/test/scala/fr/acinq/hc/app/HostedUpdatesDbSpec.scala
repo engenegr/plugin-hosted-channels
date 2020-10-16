@@ -8,7 +8,7 @@ import slick.jdbc.PostgresProfile.api._
 import fr.acinq.eclair.wire.LightningMessageCodecs._
 import fr.acinq.bitcoin.{Block, ByteVector64, Crypto}
 import fr.acinq.eclair.router.Announcements
-import fr.acinq.hc.app.dbo.{Blocking, HostedUpdates, HostedUpdatesDb, Updates}
+import fr.acinq.hc.app.dbo.{Blocking, CollectedGossip, HostedUpdates, HostedUpdatesDb, Updates}
 import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits.BitVector
 
@@ -102,5 +102,28 @@ class HostedUpdatesDbSpec extends AnyFunSuite {
 
     udb.pruneUpdateLessAnnounces
     assert(udb.getMap.isEmpty)
+  }
+
+  test("Collecting gossip") {
+    val channel_1 = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, ShortChannelId(42), a.publicKey, b.publicKey, Tools.invalidPubKey, Tools.invalidPubKey, sig, sig, ByteVector64.Zeroes, ByteVector64.Zeroes)
+    val channel_update_1_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, a, b.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, true)
+    val channel_update_1_2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, b, a.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, true)
+    val channel_update_2_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, c, d.publicKey, ShortChannelId(43), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, true)
+
+    val collected0 = CollectedGossip(Map.empty)
+
+    val collected1 = collected0.add(channel_1, c.publicKey)
+    val collected2 = collected1.add(channel_1, d.publicKey)
+
+    val collected3 = collected2.add(channel_update_1_1, c.publicKey)
+    val collected4 = collected3.add(channel_update_1_1, d.publicKey)
+
+    val collected5 = collected4.add(channel_update_2_1, c.publicKey)
+    val collected6 = collected5.add(channel_update_1_2, c.publicKey)
+
+    assert(collected6.announces(channel_1.shortChannelId).seenFrom === Set(c.publicKey, d.publicKey))
+    assert(collected6.updates1(channel_update_1_1.shortChannelId).seenFrom === Set(c.publicKey, d.publicKey))
+    assert(collected6.updates1.size === 2)
+    assert(collected6.updates2(channel_update_1_2.shortChannelId).seenFrom === Set(c.publicKey))
   }
 }

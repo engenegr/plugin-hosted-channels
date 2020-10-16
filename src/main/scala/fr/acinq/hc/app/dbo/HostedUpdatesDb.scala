@@ -6,6 +6,7 @@ import fr.acinq.hc.app.dbo.HostedUpdates._
 import fr.acinq.eclair.wire.LightningMessageCodecs._
 import fr.acinq.eclair.wire.{ChannelAnnouncement, ChannelUpdate}
 import fr.acinq.eclair.router.Announcements
+import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.ShortChannelId
 import slick.jdbc.PostgresProfile
 import fr.acinq.hc.app.Tools
@@ -13,15 +14,43 @@ import scodec.bits.BitVector
 import slick.sql.SqlAction
 
 
-case class CollectedHostedUpdates(announces: Map[ShortChannelId, ChannelAnnouncement], updates: Set[ChannelUpdate] = Set.empty) {
-  def +(announce: ChannelAnnouncement): CollectedHostedUpdates = CollectedHostedUpdates(announces.updated(announce.shortChannelId, announce), updates)
-  def +(update: ChannelUpdate): CollectedHostedUpdates = CollectedHostedUpdates(announces, updates + update)
+case class AnnouncementSeenFrom(seenFrom: Set[PublicKey], announcement: ChannelAnnouncement) {
+  def tuple: (ShortChannelId, AnnouncementSeenFrom) = (announcement.shortChannelId, this)
+}
+
+case class UpdateSeenFrom(seenFrom: Set[PublicKey], update: ChannelUpdate) {
+  def tuple: (ShortChannelId, UpdateSeenFrom) = (update.shortChannelId, this)
+}
+
+case class CollectedGossip(announces: Map[ShortChannelId, AnnouncementSeenFrom],
+                           updates1: Map[ShortChannelId, UpdateSeenFrom] = Map.empty,
+                           updates2: Map[ShortChannelId, UpdateSeenFrom] = Map.empty) {
+
+  def add(announce: ChannelAnnouncement, from: PublicKey): CollectedGossip = announces.get(announce.shortChannelId) match {
+    case Some(announceSeenFrom) => copy(announces = announces + AnnouncementSeenFrom(announceSeenFrom.seenFrom + from, announce).tuple)
+    case None => copy(announces = announces + AnnouncementSeenFrom(seenFrom = Set(from), announce).tuple)
+  }
+
+  def add(update: ChannelUpdate, from: PublicKey): CollectedGossip =
+    if (Announcements isNode1 update.channelFlags) addUpdate1(update, from)
+    else addUpdate2(update, from)
+
+  private def addUpdate1(update: ChannelUpdate, from: PublicKey): CollectedGossip = updates1.get(update.shortChannelId) match {
+    case Some(updateSeenFrom) => copy(updates1 = updates1 + UpdateSeenFrom(updateSeenFrom.seenFrom + from, update).tuple)
+    case None => copy(updates1 = updates1 + UpdateSeenFrom(seenFrom = Set(from), update).tuple)
+  }
+
+  private def addUpdate2(update: ChannelUpdate, from: PublicKey): CollectedGossip = updates2.get(update.shortChannelId) match {
+    case Some(updateSeenFrom) => copy(updates2 = updates2 + UpdateSeenFrom(updateSeenFrom.seenFrom + from, update).tuple)
+    case None => copy(updates2 = updates2 + UpdateSeenFrom(seenFrom = Set(from), update).tuple)
+  }
 }
 
 object HostedUpdates {
   val staleThreshold: Long = 14.days.toSeconds // Remove remote ChannelUpdate if it has not been refreshed for this much days
   val tickUpdateThreshold: Long = 5.days.toSeconds // Periodically refresh and resend ChannelUpdate gossip for local PHC with a given interval
   val tickRequestFullSyncThreshold: Long = 2.days.toSeconds // Periodically request full PHC gossip sync from one of supporting peers with a given interval
+  val tickStaggeredBroadcastThreshold: Long = 30.minutes.toSeconds // Periodically send collected PHC gossip messages to supporting peers with a given interval
   val reAnnounceThreshold: Long = 10.days.toSeconds // Re-initiate full announce/update procedure for PHC if last ChannelUpdate has been sent this many days ago
 }
 
