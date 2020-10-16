@@ -6,7 +6,7 @@ import slick.jdbc.PostgresProfile.api._
 import fr.acinq.eclair.wire.LightningMessageCodecs._
 import fr.acinq.bitcoin.{Block, ByteVector64, Crypto}
 import fr.acinq.eclair.router.Announcements
-import fr.acinq.hc.app.dbo.{Blocking, PHCGossip, HostedUpdatesDb, Updates}
+import fr.acinq.hc.app.dbo.{Blocking, PHC, HostedUpdatesDb, Updates}
 import fr.acinq.hc.app.network.CollectedGossip
 import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits.BitVector
@@ -57,9 +57,9 @@ class HostedUpdatesDbSpec extends AnyFunSuite {
     Blocking.txWrite(Updates.findAnnounceDeletableCompiled.delete, Config.db)
     assert(Blocking.txRead(Updates.model.result, Config.db).nonEmpty)
 
-    Blocking.txWrite(Updates.findUpdate1stOldUpdatableCompiled(System.currentTimeMillis + PHCGossip.staleThreshold + 1).update(None), Config.db)
+    Blocking.txWrite(Updates.findUpdate1stOldUpdatableCompiled(System.currentTimeMillis + PHC.staleThreshold + 1).update(None), Config.db)
     assert(Blocking.txRead(Updates.model.result, Config.db).nonEmpty)
-    Blocking.txWrite(Updates.findUpdate2ndOldUpdatableCompiled(System.currentTimeMillis + PHCGossip.staleThreshold + 1).update(None), Config.db)
+    Blocking.txWrite(Updates.findUpdate2ndOldUpdatableCompiled(System.currentTimeMillis + PHC.staleThreshold + 1).update(None), Config.db)
     Blocking.txWrite(Updates.findAnnounceDeletableCompiled.delete, Config.db)
     assert(Blocking.txRead(Updates.model.result, Config.db).isEmpty)
   }
@@ -96,8 +96,8 @@ class HostedUpdatesDbSpec extends AnyFunSuite {
     assert(map3(channel_2.shortChannelId).channelUpdate1.get === channel_update_2_1)
     assert(map3(channel_2.shortChannelId).channelUpdate2.isEmpty)
 
-    udb.pruneOldUpdates1(System.currentTimeMillis + PHCGossip.staleThreshold + 1)
-    udb.pruneOldUpdates2(System.currentTimeMillis + PHCGossip.staleThreshold + 1)
+    udb.pruneOldUpdates1(System.currentTimeMillis + PHC.staleThreshold + 1)
+    udb.pruneOldUpdates2(System.currentTimeMillis + PHC.staleThreshold + 1)
     assert(udb.getState.channels.values.flatMap(u => u.channelUpdate1 ++ u.channelUpdate2).isEmpty)
 
     udb.pruneUpdateLessAnnounces
