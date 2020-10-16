@@ -3,14 +3,14 @@ package fr.acinq.hc.app
 import fr.acinq.bitcoin.Crypto.PrivateKey
 import fr.acinq.eclair._
 
-import scala.concurrent.duration._
 import slick.jdbc.PostgresProfile.api._
 import fr.acinq.eclair.wire.LightningMessageCodecs._
 import fr.acinq.bitcoin.{Block, ByteVector64, Crypto}
 import fr.acinq.eclair.router.Announcements
-import fr.acinq.hc.app.dbo.{Blocking, CollectedGossip, HostedUpdates, HostedUpdatesDb, Updates}
+import fr.acinq.hc.app.dbo.{Blocking, HostedUpdates, HostedUpdatesDb, Updates}
 import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits.BitVector
+
 
 class HostedUpdatesDbSpec extends AnyFunSuite {
   def sig: ByteVector64 = Crypto.sign(randomBytes32, randomKey)
