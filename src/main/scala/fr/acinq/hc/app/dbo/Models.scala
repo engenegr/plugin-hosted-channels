@@ -93,14 +93,10 @@ object Updates {
   final val tableName = "updates"
   val model = TableQuery[Updates]
 
-  type DbType = (Long, Long, String, OptionalUpdate, OptionalUpdate, Long, Long, Long)
+  type DbType = (Long, Long, String, OptionalUpdate, OptionalUpdate, Long, Long)
 
-  val findNotStaleCompiled = Compiled {
-    (threshold: RepLong) => model.filter(_.localStamp > threshold)
-  }
-
-  val findAnnounceOldUpdatableCompiled = Compiled {
-    (threshold: RepLong) => model.filter(_.localStamp < threshold)
+  val findAnnounceDeletableCompiled = Compiled {
+    model.filter(x => x.channelUpdate1.isEmpty && x.channelUpdate2.isEmpty)
   }
 
   val findUpdate1stOldUpdatableCompiled = Compiled {
@@ -112,20 +108,18 @@ object Updates {
   }
 
   def update1st(shortChannelId: Long, update: String, updateStamp: Long): SqlAction[Int, NoStream, Effect] = sqlu"""
-    UPDATE #${Updates.tableName} SET channel_update_1_opt = $update, update_1_stamp = $updateStamp, local_stamp = $currentTimeMillis
+    UPDATE #${Updates.tableName} SET channel_update_1_opt = $update, update_1_stamp = $updateStamp
     WHERE short_channel_id = $shortChannelId
   """
 
   def update2nd(shortChannelId: Long, update: String, updateStamp: Long): SqlAction[Int, NoStream, Effect] = sqlu"""
-    UPDATE #${Updates.tableName} SET channel_update_2_opt = $update, update_2_stamp = $updateStamp, local_stamp = $currentTimeMillis
+    UPDATE #${Updates.tableName} SET channel_update_2_opt = $update, update_2_stamp = $updateStamp
     WHERE short_channel_id = $shortChannelId
   """
 
   def insert(shortChannelId: Long, announce: String): SqlAction[Int, NoStream, Effect] = sqlu"""
-    INSERT INTO #${Updates.tableName}(short_channel_id, channel_announce, local_stamp)
-    VALUES ($shortChannelId, $announce, $currentTimeMillis)
-    ON CONFLICT (short_channel_id) DO UPDATE
-    SET channel_announce = $announce
+    INSERT INTO #${Updates.tableName} (short_channel_id, channel_announce) VALUES ($shortChannelId, $announce)
+    ON CONFLICT (short_channel_id) DO UPDATE SET channel_announce = $announce
   """
 }
 
@@ -137,11 +131,10 @@ class Updates(tag: Tag) extends Table[Updates.DbType](tag, Updates.tableName) {
   def channelUpdate2: Rep[OptionalUpdate] = column[OptionalUpdate]("channel_update_2_opt", O Default None)
   def update1Stamp: Rep[Long] = column[Long]("update_1_stamp", O Default 0L)
   def update2Stamp: Rep[Long] = column[Long]("update_2_stamp", O Default 0L)
-  def localStamp: Rep[Long] = column[Long]("local_stamp")
 
-  def idx1: Index = index("updates__local_stamp__idx", localStamp, unique = false)
-  def idx2: Index = index("updates__update_1_stamp__idx", update1Stamp, unique = false)
-  def idx3: Index = index("updates__update_2_stamp__idx", update2Stamp, unique = false)
+  def idx1: Index = index("updates__update_1_stamp__idx", update1Stamp, unique = false)
+  def idx2: Index = index("updates__update_2_stamp__idx", update2Stamp, unique = false)
+  def idx3: Index = index("updates__channel_update_1_opt__channel_update_2_opt__idx", (channelUpdate1, channelUpdate2), unique = false)
 
-  def * = (id, shortChannelId, channelAnnounce, channelUpdate1, channelUpdate2, update1Stamp, update2Stamp, localStamp)
+  def * = (id, shortChannelId, channelAnnounce, channelUpdate1, channelUpdate2, update1Stamp, update2Stamp)
 }
