@@ -1,19 +1,21 @@
 package fr.acinq.hc.app.dbo
 
 import scala.concurrent.duration._
+import fr.acinq.hc.app.dbo.PHCState._
+import fr.acinq.hc.app.dbo.PHCGossip._
 import slick.jdbc.PostgresProfile.api._
-import fr.acinq.hc.app.dbo.HostedUpdates._
 import fr.acinq.eclair.wire.LightningMessageCodecs._
 import fr.acinq.eclair.wire.{ChannelAnnouncement, ChannelUpdate}
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.ShortChannelId
 import slick.jdbc.PostgresProfile
-import fr.acinq.hc.app.Tools
+import fr.acinq.bitcoin.Crypto
 import scodec.bits.BitVector
+import fr.acinq.hc.app.Tools
 import slick.sql.SqlAction
 
 
-object HostedUpdates {
+object PHCGossip {
   val staleThreshold: Long = 14.days.toSeconds // Remove remote ChannelUpdate if it has not been refreshed for this much days
   val tickUpdateThreshold: Long = 5.days.toSeconds // Periodically refresh and resend ChannelUpdate gossip for local PHC with a given interval
   val tickRequestFullSyncThreshold: Long = 2.days.toSeconds // Periodically request full PHC gossip sync from one of supporting peers with a given interval
@@ -21,20 +23,70 @@ object HostedUpdates {
   val reAnnounceThreshold: Long = 10.days.toSeconds // Re-initiate full announce/update procedure for PHC if last ChannelUpdate has been sent this many days ago
 }
 
-case class HostedUpdates(shortChannelId: ShortChannelId, channelAnnounce: ChannelAnnouncement,
-                         channelUpdate1: Option[ChannelUpdate] = None, channelUpdate2: Option[ChannelUpdate] = None)
+case class PHCGossip(shortChannelId: ShortChannelId, channelAnnounce: ChannelAnnouncement, channelUpdate1: Option[ChannelUpdate] = None, channelUpdate2: Option[ChannelUpdate] = None) {
+  def nodeIdToShortId = List(channelAnnounce.nodeId1 -> channelAnnounce.shortChannelId, channelAnnounce.nodeId2 -> channelAnnounce.shortChannelId)
+  def tuple: (ShortChannelId, PHCGossip) = (shortChannelId, this)
+}
+
+object PHCState {
+  type ShortChannelIdSet = Set[ShortChannelId]
+}
+
+case class PHCState(channels: Map[ShortChannelId, PHCGossip],
+                    perNode: Map[Crypto.PublicKey, ShortChannelIdSet] = Map.empty) {
+
+  def isNewAnnounceAcceptable(announce: ChannelAnnouncement): Boolean = {
+    val notTooMuchNode1PHCs = perNode.getOrElse(announce.nodeId1, Set.empty).size < 2
+    val notTooMuchNode2PHCs = perNode.getOrElse(announce.nodeId1, Set.empty).size < 2
+    val computedShortId = Tools.hostedShortChanId(announce.nodeId1.value, announce.nodeId2.value)
+    computedShortId == announce.shortChannelId && Tools.isPHC(announce) && notTooMuchNode1PHCs && notTooMuchNode2PHCs
+  }
+
+  // Add announce without updates
+  def withNewAnnounce(announce: ChannelAnnouncement): PHCState = {
+    val nodeId1ToShortIds = perNode.getOrElse(announce.nodeId1, Set.empty) + announce.shortChannelId
+    val nodeId2ToShortIds = perNode.getOrElse(announce.nodeId2, Set.empty) + announce.shortChannelId
+    val perNode1 = perNode.updated(announce.nodeId1, nodeId1ToShortIds).updated(announce.nodeId2, nodeId2ToShortIds)
+    copy(channels = channels + PHCGossip(announce.shortChannelId, announce).tuple, perNode = perNode1)
+  }
+
+  // Update announce, but keep everything else
+  def withUpdatedAnnounce(announce1: ChannelAnnouncement): PHCState = channels.get(announce1.shortChannelId) match {
+    case Some(gossip) => copy(channels = channels + gossip.copy(channelAnnounce = announce1).tuple)
+    case None => this
+  }
+
+
+  def isUpdateAcceptable(update: ChannelUpdate): Boolean = channels.get(update.shortChannelId) match {
+    case Some(gossip) if Announcements isNode1 update.channelFlags => gossip.channelUpdate1.forall(_.timestamp < update.timestamp)
+    case Some(gossip) => gossip.channelUpdate2.forall(_.timestamp < update.timestamp)
+    case None => false
+  }
+
+  // Refresh an update, but keep everything else
+  def withUpdate(update: ChannelUpdate): PHCState = {
+    val update1Opt: Option[ChannelUpdate] = Some(update)
+
+    channels.get(update.shortChannelId) match {
+      case Some(gossip) if Announcements isNode1 update.channelFlags => copy(channels = channels + gossip.copy(channelUpdate1 = update1Opt).tuple)
+      case Some(gossip) => copy(channels = channels + gossip.copy(channelUpdate2 = update1Opt).tuple)
+      case None => this
+    }
+  }
+}
 
 class HostedUpdatesDb(db: PostgresProfile.backend.Database) {
   def toAnnounce(raw: String): ChannelAnnouncement = channelAnnouncementCodec.decode(BitVector fromValidHex raw).require.value
   def toUpdate(raw: String): ChannelUpdate = channelUpdateCodec.decode(BitVector fromValidHex raw).require.value
 
-  def getMap: Map[ShortChannelId, HostedUpdates] = {
-    // Select all records which has not been deleted yet
-
-    val updates: Seq[HostedUpdates] = for {
+  def getState: PHCState = {
+    val updates: Seq[PHCGossip] = for {
       Tuple7(_, shortChannelId, channelAnnounce, channelUpdate1, channelUpdate2, _, _) <- Blocking.txRead(Updates.model.result, db)
-    } yield HostedUpdates(ShortChannelId(shortChannelId), toAnnounce(channelAnnounce), channelUpdate1 map toUpdate, channelUpdate2 map toUpdate)
-    Tools.toMapBy[ShortChannelId, HostedUpdates](updates, _.shortChannelId)
+    } yield PHCGossip(ShortChannelId(shortChannelId), toAnnounce(channelAnnounce), channelUpdate1 map toUpdate, channelUpdate2 map toUpdate)
+
+    val channelMap = Tools.toMapBy[ShortChannelId, PHCGossip](updates, _.shortChannelId)
+    val perNodeMap = updates.flatMap(_.nodeIdToShortId).groupMap(_._1)(_._2).view.mapValues(_.toSet).toMap
+    PHCState(channelMap, perNodeMap)
   }
 
   def pruneUpdateLessAnnounces: Int = Blocking.txWrite(Updates.findAnnounceDeletableCompiled.delete, db)

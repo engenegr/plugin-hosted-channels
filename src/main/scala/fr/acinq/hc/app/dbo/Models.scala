@@ -6,7 +6,6 @@ import slick.jdbc.PostgresProfile.api._
 import slick.lifted.{Index, Tag}
 
 import slick.jdbc.PostgresProfile.backend.Database
-import System.currentTimeMillis
 import scala.concurrent.Await
 import slick.sql.SqlAction
 import akka.util.Timeout

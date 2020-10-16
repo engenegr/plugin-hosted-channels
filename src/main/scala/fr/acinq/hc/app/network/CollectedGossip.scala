@@ -1,4 +1,4 @@
-package fr.acinq.hc.app
+package fr.acinq.hc.app.network
 
 import fr.acinq.eclair.wire.{ChannelAnnouncement, ChannelUpdate}
 import fr.acinq.eclair.router.Announcements
