@@ -2,7 +2,7 @@ package fr.acinq.hc.app
 
 import java.util.UUID
 
-import fr.acinq.bitcoin.{ByteVector32, Satoshi}
+import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto, Satoshi}
 import fr.acinq.eclair._
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.channel.{Channel, ChannelVersion, Origin}
@@ -10,7 +10,7 @@ import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.transactions.{CommitmentSpec, IncomingHtlc, OutgoingHtlc}
 import fr.acinq.eclair.wire.{ChannelUpdate, Error, UpdateAddHtlc}
 import fr.acinq.hc.app.channel.{HOSTED_DATA_COMMITMENTS, HostedState}
-import fr.acinq.hc.app.wire.HostedChannelCodecs
+import fr.acinq.hc.app.wire._
 import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits.ByteVector
 
@@ -99,5 +99,26 @@ class HostedWireSpec extends AnyFunSuite {
       val check = HostedChannelCodecs.hostedStateCodec.decodeValue(binary).require
       assert(state === check)
     }
+  }
+
+  test("Encode and decode messages") {
+    import HostedWireSpec._
+    assert(Codecs.toUnknownMessage(lcss1).tag === HC.HC_LAST_CROSS_SIGNED_STATE_TAG)
+    assert(Codecs.decode(Codecs.toUnknownMessage(lcss1)) === lcss1)
+  }
+
+  test("Encode and decode routing messages") {
+    def sig: ByteVector64 = Crypto.sign(randomBytes32, randomKey)
+    val a: Crypto.PrivateKey = randomKey
+    val b: Crypto.PrivateKey = randomKey
+
+    val channel = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, ShortChannelId(42), a.publicKey, b.publicKey, randomKey.publicKey, randomKey.publicKey, sig, sig, ByteVector64.Zeroes, ByteVector64.Zeroes)
+    val channel_update_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, a, b.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, true)
+    val channel_update_2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, b, a.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, true)
+
+    assert(Codecs.toUnknownAnnounceMessage(channel, isGossip = true).tag === HC.PHC_ANNOUNCE_GOSSIP_TAG)
+    assert(Codecs.toUnknownAnnounceMessage(channel_update_1, isGossip = false).tag === HC.PHC_UPDATE_SYNC_TAG)
+    assert(Codecs.decodeRoutingMessage(Codecs.toUnknownAnnounceMessage(channel, isGossip = true)) === channel)
+    assert(Codecs.decodeRoutingMessage(Codecs.toUnknownAnnounceMessage(channel_update_2, isGossip = false)) === channel_update_2)
   }
 }

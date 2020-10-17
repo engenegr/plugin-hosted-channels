@@ -2,19 +2,20 @@ package fr.acinq.hc.app
 
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
-import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, LexicographicalOrdering, Protocol, Satoshi}
+import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol, Satoshi}
+import fr.acinq.eclair.wire.{AnnouncementMessage, Color, UnknownMessage}
 import fr.acinq.eclair.{CltvExpiryDelta, MilliSatoshi, ShortChannelId}
-import fr.acinq.eclair.wire.{ChannelAnnouncement, Color}
 import com.typesafe.config.{Config => Configuration}
 import java.io.{ByteArrayInputStream, File}
 import java.nio.file.{Files, Paths}
 
+import fr.acinq.eclair.channel.Channel.OutgoingMessage
 import net.ceedubs.ficus.readers.ValueReader
-import com.google.common.cache.CacheBuilder
 import com.typesafe.config.ConfigFactory
 import org.postgresql.util.PSQLException
 import fr.acinq.bitcoin.Crypto.PublicKey
-import java.util.concurrent.TimeUnit
+import fr.acinq.eclair.io.PeerConnected
+import fr.acinq.hc.app.wire.Codecs
 import slick.jdbc.PostgresProfile
 import scodec.bits.ByteVector
 import java.nio.ByteOrder
@@ -23,15 +24,7 @@ import scala.util.Try
 
 object Tools {
   lazy val invalidPubKey: PublicKey = PublicKey.fromBin(ByteVector.fromValidHex("02" * 33), checkValid = false)
-
-  def isPHC(ca: ChannelAnnouncement): Boolean = ca.bitcoinKey1 == invalidPubKey && ca.bitcoinKey2 == invalidPubKey && ca.bitcoinSignature1 == ByteVector64.Zeroes && ca.bitcoinSignature2 == ByteVector64.Zeroes
-
-  def makeExpireAfterAccessCache(expiryMins: Int): CacheBuilder[AnyRef, AnyRef] = CacheBuilder.newBuilder.expireAfterAccess(expiryMins, TimeUnit.MINUTES)
-
-  def makeExpireAfterWriteCache(expiryMins: Int): CacheBuilder[AnyRef, AnyRef] = CacheBuilder.newBuilder.expireAfterWrite(expiryMins, TimeUnit.MINUTES)
-
   def toMapBy[K, V](items: Iterable[V], mapper: V => K): Map[K, V] = items.map(item => mapper(item) -> item).toMap
-
   case object DuplicateShortId extends Throwable("Duplicate ShortId is not allowed here")
 
   abstract class DuplicateHandler[T] { me =>
@@ -63,6 +56,13 @@ object Tools {
   }
 }
 
+case class PeerConnectedWrap(info: PeerConnected) {
+  def sendMsg(message: HostedChannelMessage): Unit = sendUnknownMsg(Codecs toUnknownMessage message)
+  def sendUnknownMsg(message: UnknownMessage): Unit = info.peer ! OutgoingMessage(message, info.connectionInfo.peerConnection)
+  def sendGossipMsg(message: AnnouncementMessage): Unit = info.peer ! OutgoingMessage(Codecs.toUnknownAnnounceMessage(message, isGossip = true), info.connectionInfo.peerConnection)
+}
+
+
 object Config {
   val config: Configuration = ConfigFactory parseFile new File(s"${System getProperty "user.dir"}/src/main/resources", "hc.conf")
 
@@ -75,6 +75,7 @@ object Config {
   val vals: Vals = config.as[Vals]("config.vals")
 }
 
+
 case class BrandingData(logo: String, color: Color) {
   var brandingMessageOpt: Option[HostedChannelBranding] = None
 
@@ -85,9 +86,13 @@ case class BrandingData(logo: String, color: Color) {
   }
 }
 
+case class PHCConfig(minCapacityMsat: Long, maxPerNode: Long, minNormalChans: Long) {
+  val minCapacity: MilliSatoshi = MilliSatoshi(minCapacityMsat)
+}
+
 case class Vals(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDeltaBlocks: Int, onChainRefundThresholdSat: Long,
                 liabilityDeadlineBlockdays: Int, defaultCapacityMsat: Long, defaultClientBalanceMsat: Long, maxHtlcValueInFlightMsat: Long,
-                htlcMinimumMsat: Long, maxAcceptedHtlcs: Int, branding: BrandingData) {
+                htlcMinimumMsat: Long, maxAcceptedHtlcs: Int, branding: BrandingData, phcConfig: PHCConfig) {
 
   val feeBase: MilliSatoshi = MilliSatoshi(feeBaseMsat)
 

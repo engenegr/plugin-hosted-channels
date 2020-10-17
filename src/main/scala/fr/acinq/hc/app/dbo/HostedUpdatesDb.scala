@@ -5,25 +5,29 @@ import scala.concurrent.duration._
 import fr.acinq.hc.app.dbo.PHCNetwork._
 import slick.jdbc.PostgresProfile.api._
 import fr.acinq.eclair.wire.LightningMessageCodecs._
-import fr.acinq.eclair.wire.{ChannelAnnouncement, ChannelUpdate}
+
+import fr.acinq.eclair.wire.{ChannelAnnouncement, ChannelUpdate, UnknownMessage}
+import fr.acinq.bitcoin.{ByteVector64, Crypto}
+import fr.acinq.hc.app.{PHCConfig, Tools}
+
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.ShortChannelId
+import fr.acinq.hc.app.wire.Codecs
 import slick.jdbc.PostgresProfile
-import fr.acinq.bitcoin.Crypto
 import scodec.bits.BitVector
-import fr.acinq.hc.app.Tools
 import slick.sql.SqlAction
 
 
 object PHC {
-  val staleThreshold: Long = 14.days.toSeconds // Remove remote ChannelUpdate if it has not been refreshed for this much days
+  val staleThreshold: Long = 14.days.toSeconds // Remove ChannelUpdate if it has not been refreshed for this much days
   val tickUpdateThreshold: Long = 5.days.toSeconds // Periodically refresh and resend ChannelUpdate gossip for local PHC with a given interval
-  val tickRequestFullSyncThreshold: Long = 2.days.toSeconds // Periodically request full PHC gossip sync from one of supporting peers with a given interval
+  val tickRequestFullSyncThreshold: FiniteDuration = 2.days // Periodically request full PHC gossip sync from one of supporting peers with a given interval
   val tickStaggeredBroadcastThreshold: Long = 30.minutes.toSeconds // Periodically send collected PHC gossip messages to supporting peers with a given interval
   val reAnnounceThreshold: Long = 10.days.toSeconds // Re-initiate full announce/update procedure for PHC if last ChannelUpdate has been sent this many days ago
 }
 
 case class PHC(shortChannelId: ShortChannelId, channelAnnounce: ChannelAnnouncement, channelUpdate1: Option[ChannelUpdate] = None, channelUpdate2: Option[ChannelUpdate] = None) {
+  lazy val sendList: List[UnknownMessage] = for (message <- channelAnnounce +: channelUpdate1 ++: channelUpdate2 ++: Nil) yield Codecs.toUnknownAnnounceMessage(message, isGossip = false)
   def nodeIdToShortId = List(channelAnnounce.nodeId1 -> channelAnnounce.shortChannelId, channelAnnounce.nodeId2 -> channelAnnounce.shortChannelId)
   def tuple: (ShortChannelId, PHC) = (shortChannelId, this)
 }
@@ -34,11 +38,15 @@ object PHCNetwork {
 
 case class PHCNetwork(channels: Map[ShortChannelId, PHC], perNode: Map[Crypto.PublicKey, ShortChannelIdSet] = Map.empty) {
 
-  def isNewAnnounceAcceptable(announce: ChannelAnnouncement): Boolean = {
-    val notTooMuchNode1PHCs = perNode.getOrElse(announce.nodeId1, Set.empty).size < 2
-    val notTooMuchNode2PHCs = perNode.getOrElse(announce.nodeId1, Set.empty).size < 2
-    val computedShortId = Tools.hostedShortChanId(announce.nodeId1.value, announce.nodeId2.value)
-    computedShortId == announce.shortChannelId && Tools.isPHC(announce) && notTooMuchNode1PHCs && notTooMuchNode2PHCs
+  def isAnnounceAcceptable(announce: ChannelAnnouncement): Boolean =
+      Tools.hostedShortChanId(announce.nodeId1.value, announce.nodeId2.value) == announce.shortChannelId &&
+        announce.bitcoinSignature1 == ByteVector64.Zeroes && announce.bitcoinSignature2 == ByteVector64.Zeroes &&
+        announce.bitcoinKey1 == Tools.invalidPubKey && announce.bitcoinKey2 == Tools.invalidPubKey
+
+  def isNewAnnounceAcceptable(announce: ChannelAnnouncement, phcConfig: PHCConfig): Boolean = {
+    val notTooMuchNode1PHCs = perNode.getOrElse(announce.nodeId1, Set.empty).size < phcConfig.maxPerNode
+    val notTooMuchNode2PHCs = perNode.getOrElse(announce.nodeId1, Set.empty).size < phcConfig.maxPerNode
+    isAnnounceAcceptable(announce) && notTooMuchNode1PHCs && notTooMuchNode2PHCs
   }
 
   // Add announce without updates

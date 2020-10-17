@@ -1,9 +1,10 @@
 package fr.acinq.hc.app.wire
 
 import fr.acinq.hc.app._
+import fr.acinq.hc.app.HC._
+import fr.acinq.eclair.wire._
 import fr.acinq.eclair.wire.CommonCodecs._
 import scodec.codecs.{bool, listOfN, uint16, uint32}
-import fr.acinq.eclair.wire.LightningMessageCodecs
 import scodec.Codec
 
 
@@ -65,4 +66,46 @@ object Codecs {
   val queryPublicHostedChannelsCodec: Codec[QueryPublicHostedChannels] = (bytes32 withContext "chainHash").as[QueryPublicHostedChannels]
 
   val replyPublicHostedChannelsEndCodec: Codec[ReplyPublicHostedChannelsEnd] = (bytes32 withContext "chainHash").as[ReplyPublicHostedChannelsEnd]
+
+
+  def decode(wrap: UnknownMessage): HostedChannelMessage = wrap.tag match {
+    case HC_INVOKE_HOSTED_CHANNEL_TAG => invokeHostedChannelCodec.decode(wrap.data.toBitVector).require.value
+    case HC_INIT_HOSTED_CHANNEL_TAG => initHostedChannelCodec.decode(wrap.data.toBitVector).require.value
+    case HC_LAST_CROSS_SIGNED_STATE_TAG => lastCrossSignedStateCodec.decode(wrap.data.toBitVector).require.value
+    case HC_STATE_UPDATE_TAG => stateUpdateCodec.decode(wrap.data.toBitVector).require.value
+    case HC_STATE_OVERRIDE_TAG => stateOverrideCodec.decode(wrap.data.toBitVector).require.value
+    case HC_HOSTED_CHANNEL_BRANDING_TAG => hostedChannelBrandingCodec.decode(wrap.data.toBitVector).require.value
+    case HC_REFUND_PENDING_TAG => refundPendingCodec.decode(wrap.data.toBitVector).require.value
+    case HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG => queryPublicHostedChannelsCodec.decode(wrap.data.toBitVector).require.value
+    case HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG => replyPublicHostedChannelsEndCodec.decode(wrap.data.toBitVector).require.value
+  }
+
+  def toUnknownMessage(message: HostedChannelMessage): UnknownMessage = message match {
+    case msg: InvokeHostedChannel => UnknownMessage(HC_INVOKE_HOSTED_CHANNEL_TAG, invokeHostedChannelCodec.encode(msg).require.toByteVector)
+    case msg: InitHostedChannel => UnknownMessage(HC_INIT_HOSTED_CHANNEL_TAG, initHostedChannelCodec.encode(msg).require.toByteVector)
+    case msg: LastCrossSignedState => UnknownMessage(HC_LAST_CROSS_SIGNED_STATE_TAG, lastCrossSignedStateCodec.encode(msg).require.toByteVector)
+    case msg: StateUpdate => UnknownMessage(HC_STATE_UPDATE_TAG, stateUpdateCodec.encode(msg).require.toByteVector)
+    case msg: StateOverride => UnknownMessage(HC_STATE_OVERRIDE_TAG, stateOverrideCodec.encode(msg).require.toByteVector)
+    case msg: HostedChannelBranding => UnknownMessage(HC_HOSTED_CHANNEL_BRANDING_TAG, hostedChannelBrandingCodec.encode(msg).require.toByteVector)
+    case msg: RefundPending => UnknownMessage(HC_REFUND_PENDING_TAG, refundPendingCodec.encode(msg).require.toByteVector)
+    case msg: QueryPublicHostedChannels => UnknownMessage(HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG, queryPublicHostedChannelsCodec.encode(msg).require.toByteVector)
+    case msg: ReplyPublicHostedChannelsEnd => UnknownMessage(HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG, replyPublicHostedChannelsEndCodec.encode(msg).require.toByteVector)
+  }
+
+
+  def decodeRoutingMessage(wrap: UnknownMessage): AnnouncementMessage = wrap.tag match {
+    case PHC_ANNOUNCE_GOSSIP_TAG => LightningMessageCodecs.channelAnnouncementCodec.decode(wrap.data.toBitVector).require.value
+    case PHC_ANNOUNCE_SYNC_TAG => LightningMessageCodecs.channelAnnouncementCodec.decode(wrap.data.toBitVector).require.value
+    case PHC_UPDATE_GOSSIP_TAG => LightningMessageCodecs.channelUpdateCodec.decode(wrap.data.toBitVector).require.value
+    case PHC_UPDATE_SYNC_TAG => LightningMessageCodecs.channelUpdateCodec.decode(wrap.data.toBitVector).require.value
+    case tag => throw new RuntimeException(s"PLGN PHC, restricted routing tag=$tag")
+  }
+
+  def toUnknownAnnounceMessage(message: AnnouncementMessage, isGossip: Boolean): UnknownMessage = message match {
+    case msg: ChannelAnnouncement if isGossip => UnknownMessage(PHC_ANNOUNCE_GOSSIP_TAG, LightningMessageCodecs.channelAnnouncementCodec.encode(msg).require.toByteVector)
+    case msg: ChannelAnnouncement => UnknownMessage(PHC_ANNOUNCE_SYNC_TAG, LightningMessageCodecs.channelAnnouncementCodec.encode(msg).require.toByteVector)
+    case msg: ChannelUpdate if isGossip => UnknownMessage(PHC_UPDATE_GOSSIP_TAG, LightningMessageCodecs.channelUpdateCodec.encode(msg).require.toByteVector)
+    case msg: ChannelUpdate => UnknownMessage(PHC_UPDATE_SYNC_TAG, LightningMessageCodecs.channelUpdateCodec.encode(msg).require.toByteVector)
+    case msg => throw new RuntimeException(s"PLGN PHC, restricted routing message=${msg.getClass.toString}")
+  }
 }

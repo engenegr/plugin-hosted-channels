@@ -36,4 +36,6 @@ case class CollectedGossip(announces: Map[ShortChannelId, AnnouncementSeenFrom],
     case Some(updateSeenFrom) => copy(updates2 = updates2 + UpdateSeenFrom(updateSeenFrom.seenFrom + from, update).tuple)
     case None => copy(updates2 = updates2 + UpdateSeenFrom(seenFrom = Set(from), update).tuple)
   }
+
+  def asString = s"announces=${announces.size}, updates1=${updates1.size}, updates2=${updates2.size}"
 }
