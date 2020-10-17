@@ -88,7 +88,7 @@ class HostedSync(kit: Kit, db: HostedUpdatesDb, phcConfig: PHCConfig) extends FS
       Future {
         val currentPublicPeers: Seq[PeerConnectedWrap] = publicPeers(peers, data)
         val allUpdates = data.phcGossip.updates1.values ++ data.phcGossip.updates2.values
-        log.info(s"PLGN HC, TickBroadcast, gossiping to peers num=${currentPublicPeers.size}")
+        log.info(s"PLGN PHC, TickBroadcast, gossiping to peers num=${currentPublicPeers.size}")
 
         for {
           (_, wrap) <- data.phcGossip.announces
@@ -102,8 +102,8 @@ class HostedSync(kit: Kit, db: HostedUpdatesDb, phcConfig: PHCConfig) extends FS
           if !wrap.seenFrom.contains(publicPeerConnectedWrap.info.nodeId)
         } publicPeerConnectedWrap sendGossipMsg wrap.update
       } onComplete {
-        case Failure(err) => log.info(s"PLGN HC, TickBroadcast, fail, error=${err.getMessage}")
-        case _ => log.info(s"PLGN HC, TickBroadcast, success, ${data.phcGossip.asString}")
+        case Failure(err) => log.info(s"PLGN PHC, TickBroadcast, fail, error=${err.getMessage}")
+        case _ => log.info(s"PLGN PHC, TickBroadcast, success, ${data.phcGossip.asString}")
       }
 
       val emptyGossip = CollectedGossip(Map.empty)
@@ -112,8 +112,8 @@ class HostedSync(kit: Kit, db: HostedUpdatesDb, phcConfig: PHCConfig) extends FS
 
     case Event(SendSyncTo(wrap), data: OperationalData) =>
       Future(data.phcNetwork.channels.values.flatMap(_.sendList) foreach wrap.sendUnknownMsg) onComplete {
-        case Failure(err) => log.info(s"PLGN HC, SendSyncTo, fail, peer=${wrap.info.nodeId.toString} error=${err.getMessage}")
-        case _ => log.info(s"PLGN HC, SendSyncTo, success, peer=${wrap.info.nodeId.toString}")
+        case Failure(err) => log.info(s"PLGN PHC, SendSyncTo, fail, peer=${wrap.info.nodeId.toString} error=${err.getMessage}")
+        case _ => log.info(s"PLGN PHC, SendSyncTo, success, peer=${wrap.info.nodeId.toString}")
       }
 
       stay
