@@ -104,7 +104,7 @@ class HostedWireSpec extends AnyFunSuite {
   test("Encode and decode messages") {
     import HostedWireSpec._
     assert(Codecs.toUnknownMessage(lcss1).tag === HC.HC_LAST_CROSS_SIGNED_STATE_TAG)
-    assert(Codecs.decode(Codecs.toUnknownMessage(lcss1)) === lcss1)
+    assert(Codecs.decode(Codecs.toUnknownMessage(lcss1)).require === lcss1)
   }
 
   test("Encode and decode routing messages") {
@@ -118,7 +118,7 @@ class HostedWireSpec extends AnyFunSuite {
 
     assert(Codecs.toUnknownAnnounceMessage(channel, isGossip = true).tag === HC.PHC_ANNOUNCE_GOSSIP_TAG)
     assert(Codecs.toUnknownAnnounceMessage(channel_update_1, isGossip = false).tag === HC.PHC_UPDATE_SYNC_TAG)
-    assert(Codecs.decodeRoutingMessage(Codecs.toUnknownAnnounceMessage(channel, isGossip = true)) === channel)
-    assert(Codecs.decodeRoutingMessage(Codecs.toUnknownAnnounceMessage(channel_update_2, isGossip = false)) === channel_update_2)
+    assert(Codecs.decodeAnnounceMessage(Codecs.toUnknownAnnounceMessage(channel, isGossip = true)).require === channel)
+    assert(Codecs.decodeAnnounceMessage(Codecs.toUnknownAnnounceMessage(channel_update_2, isGossip = false)).require === channel_update_2)
   }
 }
