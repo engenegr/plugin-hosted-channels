@@ -92,7 +92,7 @@ case class PHCConfig(minCapacityMsat: Long, maxPerNode: Long, minNormalChans: Lo
 
 case class Vals(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDeltaBlocks: Int, onChainRefundThresholdSat: Long,
                 liabilityDeadlineBlockdays: Int, defaultCapacityMsat: Long, defaultClientBalanceMsat: Long, maxHtlcValueInFlightMsat: Long,
-                htlcMinimumMsat: Long, maxAcceptedHtlcs: Int, branding: BrandingData, phcConfig: PHCConfig) {
+                htlcMinimumMsat: Long, maxAcceptedHtlcs: Int, acceptNewChans: Boolean, branding: BrandingData, phcConfig: PHCConfig) {
 
   val feeBase: MilliSatoshi = MilliSatoshi(feeBaseMsat)
 
