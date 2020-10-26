@@ -84,8 +84,8 @@ case class BrandingData(logo: String, color: Color) {
   }
 }
 
-case class PHCConfig(minCapacityMsat: Long, maxPerNode: Long, minNormalChans: Long) {
-  val minCapacity: MilliSatoshi = MilliSatoshi(minCapacityMsat)
+case class PHCConfig(capacityMsat: Long, maxPerNode: Long, minNormalChans: Long) {
+  val capacity: MilliSatoshi = MilliSatoshi(capacityMsat)
 }
 
 case class Vals(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDeltaBlocks: Int, onChainRefundThresholdSat: Long,

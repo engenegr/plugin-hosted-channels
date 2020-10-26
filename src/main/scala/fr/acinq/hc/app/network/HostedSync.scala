@@ -221,8 +221,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
   }
 
   def isUpdateAcceptable(update: ChannelUpdate, data: OperationalData): Boolean =
-    update.htlcMaximumMsat.exists(maxHostedCap => phcConfig.minCapacity < maxHostedCap) &&
-      data.phcNetwork.channels.get(update.shortChannelId).exists(_ verifySig update)
+    update.htlcMaximumMsat.contains(phcConfig.capacity) && data.phcNetwork.channels.get(update.shortChannelId).exists(_ verifySig update)
 
   private def tryPersist(phcNetwork: PHCNetwork) = Try {
     Blocking.txWrite(DBIO.sequence(phcNetwork.unsaved.orderedMessages.map {
