@@ -3,7 +3,7 @@ package fr.acinq.hc.app
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol, Satoshi}
-import fr.acinq.eclair.wire.{AnnouncementMessage, ChannelUpdate, Color, UnknownMessage}
+import fr.acinq.eclair.wire.{AnnouncementMessage, Color, UnknownMessage}
 import fr.acinq.eclair.{CltvExpiryDelta, MilliSatoshi, ShortChannelId}
 import com.typesafe.config.{Config => Configuration}
 import java.io.{ByteArrayInputStream, File}
@@ -11,7 +11,6 @@ import java.nio.file.{Files, Paths}
 
 import fr.acinq.eclair.channel.Channel.OutgoingMessage
 import net.ceedubs.ficus.readers.ValueReader
-import fr.acinq.eclair.router.Announcements
 import com.typesafe.config.ConfigFactory
 import org.postgresql.util.PSQLException
 import fr.acinq.eclair.io.PeerConnected
@@ -23,7 +22,6 @@ import scala.util.Try
 
 
 object Tools {
-  def isNode1(channelUpdate: ChannelUpdate): Boolean = Announcements.isNode1(channelUpdate.channelFlags)
   def toMapBy[K, V](items: Iterable[V], mapper: V => K): Map[K, V] = items.map(item => mapper(item) -> item).toMap
   case object DuplicateShortId extends Throwable("Duplicate ShortId is not allowed here")
 

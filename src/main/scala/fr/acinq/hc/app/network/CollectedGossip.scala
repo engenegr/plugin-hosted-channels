@@ -1,6 +1,7 @@
 package fr.acinq.hc.app.network
 
 import fr.acinq.eclair.wire.{ChannelAnnouncement, ChannelUpdate}
+import fr.acinq.eclair.router.Announcements
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.ShortChannelId
 
@@ -22,12 +23,16 @@ case class CollectedGossip(announces: Map[ShortChannelId, AnnouncementSeenFrom],
     case None => copy(announces = announces + AnnouncementSeenFrom(seenFrom = Set(from), announce).tuple)
   }
 
-  def addUpdate1(update: ChannelUpdate, from: PublicKey): CollectedGossip = updates1.get(update.shortChannelId) match {
+  def addUpdate(update: ChannelUpdate, from: PublicKey): CollectedGossip =
+    if (Announcements isNode1 update.channelFlags) addUpdate1(update, from)
+    else addUpdate2(update, from)
+
+  private def addUpdate1(update: ChannelUpdate, from: PublicKey): CollectedGossip = updates1.get(update.shortChannelId) match {
     case Some(updateSeenFrom) => copy(updates1 = updates1 + UpdateSeenFrom(updateSeenFrom.seenFrom + from, update).tuple)
     case None => copy(updates1 = updates1 + UpdateSeenFrom(seenFrom = Set(from), update).tuple)
   }
 
-  def addUpdate2(update: ChannelUpdate, from: PublicKey): CollectedGossip = updates2.get(update.shortChannelId) match {
+  private def addUpdate2(update: ChannelUpdate, from: PublicKey): CollectedGossip = updates2.get(update.shortChannelId) match {
     case Some(updateSeenFrom) => copy(updates2 = updates2 + UpdateSeenFrom(updateSeenFrom.seenFrom + from, update).tuple)
     case None => copy(updates2 = updates2 + UpdateSeenFrom(seenFrom = Set(from), update).tuple)
   }

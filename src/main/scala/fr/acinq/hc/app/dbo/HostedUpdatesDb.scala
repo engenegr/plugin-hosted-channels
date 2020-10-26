@@ -4,6 +4,7 @@ import slick.jdbc.PostgresProfile.api._
 import fr.acinq.eclair.wire.LightningMessageCodecs._
 import fr.acinq.eclair.wire.{ChannelAnnouncement, ChannelUpdate}
 import fr.acinq.hc.app.network.{PHC, PHCNetwork}
+import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.ShortChannelId
 import slick.jdbc.PostgresProfile
 import fr.acinq.hc.app.Tools
@@ -22,7 +23,7 @@ class HostedUpdatesDb(val db: PostgresProfile.backend.Database) {
 
     val channelMap: Map[ShortChannelId, PHC] = Tools.toMapBy[ShortChannelId, PHC](updates, _.shortChannelId)
     val perNodeMap = updates.flatMap(_.nodeIdToShortId).groupMap(_._1)(_._2).view.mapValues(_.toSet).toMap
-    PHCNetwork(channelMap, perNodeMap, messagesReceived = Set.empty)
+    PHCNetwork(channelMap, perNodeMap, PHCNetwork.emptyUnsaved)
   }
 
   def pruneUpdateLessAnnounces: Int = Blocking.txWrite(Updates.findAnnounceDeletableCompiled.delete, db)
@@ -34,9 +35,13 @@ class HostedUpdatesDb(val db: PostgresProfile.backend.Database) {
   def addAnnounce(announce: ChannelAnnouncement): SqlAction[Int, PostgresProfile.api.NoStream, Effect] =
     Updates.insert(announce.shortChannelId.toLong, channelAnnouncementCodec.encode(announce).require.toHex)
 
-  def addUpdate1(update: ChannelUpdate): SqlAction[Int, PostgresProfile.api.NoStream, Effect] =
+  def addUpdate(update: ChannelUpdate): SqlAction[Int, PostgresProfile.api.NoStream, Effect] =
+    if (Announcements isNode1 update.channelFlags) addUpdate1(update)
+    else addUpdate2(update)
+
+  private def addUpdate1(update: ChannelUpdate): SqlAction[Int, PostgresProfile.api.NoStream, Effect] =
     Updates.update1st(update.shortChannelId.toLong, channelUpdateCodec.encode(update).require.toHex, update.timestamp)
 
-  def addUpdate2(update: ChannelUpdate): SqlAction[Int, PostgresProfile.api.NoStream, Effect] =
+  private def addUpdate2(update: ChannelUpdate): SqlAction[Int, PostgresProfile.api.NoStream, Effect] =
     Updates.update2nd(update.shortChannelId.toLong, channelUpdateCodec.encode(update).require.toHex, update.timestamp)
 }

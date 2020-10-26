@@ -29,8 +29,8 @@ class HostedUpdatesDbSpec extends AnyFunSuite {
     HCTestUtils.resetEntireDatabase()
 
     val channel = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, ShortChannelId(42), a.publicKey, b.publicKey, a.publicKey, b.publicKey, sig, sig, sig, sig)
-    val channel_update_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, a, b.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, true)
-    val channel_update_2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, b, a.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, true)
+    val channel_update_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, a, b.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
+    val channel_update_2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, b, a.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
 
     val insertQuery = Updates.insert(channel.shortChannelId.toLong, channelAnnouncementCodec.encode(channel).require.toHex)
     Blocking.txWrite(insertQuery, Config.db) // Insert
@@ -71,25 +71,25 @@ class HostedUpdatesDbSpec extends AnyFunSuite {
     val channel_1 = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, ShortChannelId(42), a.publicKey, b.publicKey, a.publicKey, b.publicKey, sig, sig, sig, sig)
     val channel_2 = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, ShortChannelId(43), c.publicKey, d.publicKey, c.publicKey, d.publicKey, sig, sig, sig, sig)
 
-    val channel_update_1_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, a, b.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, true)
-    val channel_update_1_2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, b, a.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, true)
+    val channel_update_1_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, a, b.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
+    val channel_update_1_2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, b, a.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
 
-    val channel_update_2_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, c, d.publicKey, ShortChannelId(43), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, true)
+    val channel_update_2_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, c, d.publicKey, ShortChannelId(43), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
     assert(udb.getState.channels.isEmpty)
 
     Blocking.txWrite(udb.addAnnounce(channel_1), Config.db)
-    Blocking.txWrite(DBIO.seq(udb.addUpdate1(channel_update_2_1), udb.addUpdate1(channel_update_1_1)), Config.db)
+    Blocking.txWrite(DBIO.seq(udb.addUpdate(channel_update_2_1), udb.addUpdate(channel_update_1_1)), Config.db)
     val map1 = udb.getState.channels(channel_1.shortChannelId)
     assert(map1.channelUpdate1.size === 1)
     assert(map1.channelUpdate1.get === channel_update_1_1)
     assert(map1.channelUpdate2.isEmpty)
 
-    Blocking.txWrite(DBIO.seq(udb.addUpdate2(channel_update_1_2), udb.addUpdate1(channel_update_1_1)), Config.db)
+    Blocking.txWrite(DBIO.seq(udb.addUpdate(channel_update_1_2), udb.addUpdate(channel_update_1_1)), Config.db)
     val map2 = udb.getState.channels(channel_1.shortChannelId)
     assert(map2.channelUpdate1.get === channel_update_1_1)
     assert(map2.channelUpdate2.get === channel_update_1_2)
 
-    Blocking.txWrite(DBIO.seq(udb.addAnnounce(channel_2), udb.addUpdate1(channel_update_2_1), udb.addUpdate1(channel_update_2_1)), Config.db)
+    Blocking.txWrite(DBIO.seq(udb.addAnnounce(channel_2), udb.addAnnounce(channel_2), udb.addUpdate(channel_update_2_1), udb.addUpdate(channel_update_2_1)), Config.db)
     val map3 = udb.getState.channels
     assert(map3(channel_1.shortChannelId).channelUpdate1.get === channel_update_1_1)
     assert(map3(channel_1.shortChannelId).channelUpdate2.get === channel_update_1_2)
@@ -106,20 +106,20 @@ class HostedUpdatesDbSpec extends AnyFunSuite {
 
   test("Collecting gossip") {
     val channel_1 = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, ShortChannelId(42), a.publicKey, b.publicKey, a.publicKey, b.publicKey, sig, sig, sig, sig)
-    val channel_update_1_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, a, b.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, true)
-    val channel_update_1_2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, b, a.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, true)
-    val channel_update_2_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, c, d.publicKey, ShortChannelId(43), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, true)
+    val channel_update_1_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, a, b.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
+    val channel_update_1_2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, b, a.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
+    val channel_update_2_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, c, d.publicKey, ShortChannelId(43), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
 
     val collected0 = CollectedGossip(Map.empty)
 
     val collected1 = collected0.addAnnounce(channel_1, c.publicKey)
     val collected2 = collected1.addAnnounce(channel_1, d.publicKey)
 
-    val collected3 = collected2.addUpdate1(channel_update_1_1, c.publicKey)
-    val collected4 = collected3.addUpdate1(channel_update_1_1, d.publicKey)
+    val collected3 = collected2.addUpdate(channel_update_1_1, c.publicKey)
+    val collected4 = collected3.addUpdate(channel_update_1_1, d.publicKey)
 
-    val collected5 = collected4.addUpdate1(channel_update_2_1, c.publicKey)
-    val collected6 = collected5.addUpdate2(channel_update_1_2, c.publicKey)
+    val collected5 = collected4.addUpdate(channel_update_2_1, c.publicKey)
+    val collected6 = collected5.addUpdate(channel_update_1_2, c.publicKey)
 
     assert(collected6.announces(channel_1.shortChannelId).seenFrom === Set(c.publicKey, d.publicKey))
     assert(collected6.updates1(channel_update_1_1.shortChannelId).seenFrom === Set(c.publicKey, d.publicKey))
