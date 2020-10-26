@@ -1,10 +1,11 @@
 package fr.acinq.hc.app.network
 
+import fr.acinq.hc.app._
 import fr.acinq.hc.app.HC._
 import scala.concurrent.duration._
 import slick.jdbc.PostgresProfile.api._
 import fr.acinq.hc.app.network.HostedSync._
-import fr.acinq.hc.app.{PHCConfig, PeerConnectedWrap, QueryPublicHostedChannels, ReplyPublicHostedChannelsEnd}
+
 import fr.acinq.eclair.wire.{ChannelAnnouncement, ChannelUpdate}
 import fr.acinq.eclair.{FSMDiagnosticActorLogging, Kit}
 import fr.acinq.hc.app.dbo.{Blocking, HostedUpdatesDb}
@@ -15,25 +16,33 @@ import fr.acinq.eclair.io.UnknownMessageReceived
 import fr.acinq.eclair.router.SyncProgress
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.hc.app.wire.Codecs
+import scala.collection.mutable
 import scala.concurrent.Future
 import scodec.Attempt
 
 
 object HostedSync {
+  case object TickClearIpAntiSpam { val label = "TickClearIpAntiSpam" }
+
   case object RefreshRouterData { val label = "RefreshRouterData" }
 
   case object GetPeersForSync { val label = "GetPeersForSync" }
 
-  case class PeersToGetSyncFrom(peers: Seq[PeerConnectedWrap] = Nil)
+  case class PeersToSyncFrom(peers: Seq[PeerConnectedWrap] = Nil)
 
   case class TickSendGossip(peers: Seq[PeerConnectedWrap] = Nil)
 
   case class SendSyncTo(info: PeerConnectedWrap)
+
+  case class GotAllSyncFrom(info: PeerConnectedWrap)
 }
 
 class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) extends FSMDiagnosticActorLogging[HostedSyncState, HostedSyncData] {
   startWith(stateData = WaitForNormalNetworkData(updatesDb.getState), stateName = WAIT_FOR_NORMAL_NETWORK_DATA)
+
   context.system.eventStream.subscribe(channel = classOf[SyncProgress], subscriber = self)
+
+  val ipAntiSpam: mutable.Map[Array[Byte], Int] = mutable.Map.empty withDefaultValue 0
 
   private val syncProcessor = new AnnouncementMessageProcessor {
     override val tags: Set[Int] = Set(PHC_ANNOUNCE_SYNC_TAG, PHC_UPDATE_SYNC_TAG)
@@ -65,7 +74,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
       stay
 
     case Event(routerData: fr.acinq.eclair.router.Router.Data, data: WaitForNormalNetworkData) =>
-      val data1 = OperationalData(data.phcNetwork, CollectedGossip(Map.empty), routerData.channels, routerData.graph)
+      val data1 = OperationalData(data.phcNetwork, CollectedGossip(Map.empty), None, routerData.channels, routerData.graph)
       log.info("PLGN PHC, HostedSync, got normal network data")
       goto(WAIT_FOR_PHC_SYNC) using data1
   }
@@ -84,9 +93,8 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
       if syncProcessor.tags.contains(msg.message.tag) =>
       stay using syncProcessor.process(msg, data)
 
-    case Event(ReplyPublicHostedChannelsEnd, data: OperationalData) =>
-      // Note that in case of db failure announces are retained, this is fine
-      // In case of success we prune database and recreate network from scratch
+    case Event(GotAllSyncFrom(wrap), data: OperationalData)
+      if data.lastSyncNodeId.contains(wrap.info.nodeId) =>
 
       tryPersist(data.phcNetwork).map { adds =>
         val u1 = updatesDb.pruneOldUpdates1(System.currentTimeMillis)
@@ -94,11 +102,13 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
         val ann = updatesDb.pruneUpdateLessAnnounces
         val phcNetwork1 = updatesDb.getState
 
+        // In case of success we prune database and recreate network from scratch
         log.info(s"PLGN PHC, HostedSync, added=${adds.sum}, removed u1=$u1, removed u2=$u2, removed ann=$ann")
         log.info(s"PLGN PHC, HostedSync, chans old=${data.phcNetwork.channels.size}, new=${phcNetwork1.channels.size}")
         goto(OPERATIONAL) using data.copy(phcNetwork = phcNetwork1)
       }.recover { err =>
         log.info(s"PLGN PHC, HostedSync, db fail=${err.getMessage}")
+        // Note that in case of db failure announces are retained, this is fine
         val phcNetwork1 = data.phcNetwork.copy(unsaved = PHCNetwork.emptyUnsaved)
         goto(WAIT_FOR_PHC_SYNC) using WaitForNormalNetworkData(phcNetwork1)
       }.get
@@ -109,6 +119,10 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
    */
 
   whenUnhandled {
+    case Event(TickClearIpAntiSpam, _) =>
+      ipAntiSpam.clear
+      stay
+
     case Event(RefreshRouterData, _: OperationalData) =>
       kit.router ! Symbol("data")
       stay
@@ -154,11 +168,16 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
       stay using data.copy(phcNetwork = phcNetwork1, phcGossip = emptyGossip)
 
     case Event(SendSyncTo(wrap), data: OperationalData) =>
-      Future(data.phcNetwork.channels.values.flatMap(_.orderedMessages) foreach wrap.sendUnknownMsg) onComplete {
+      if (ipAntiSpam(wrap.remoteIp) > phcConfig.maxSyncSendsPerIpPerMinute) {
+        log.info(s"PLGN PHC, SendSyncTo, abuse, peer=${wrap.info.nodeId.toString}")
+        wrap sendHostedMsg ReplyPublicHostedChannelsEnd(kit.nodeParams.chainHash)
+      } else sendCompleteNetworkTo(wrap, data.phcNetwork) onComplete {
         case Failure(err) => log.info(s"PLGN PHC, SendSyncTo, fail, peer=${wrap.info.nodeId.toString} error=${err.getMessage}")
         case _ => log.info(s"PLGN PHC, SendSyncTo, success, peer=${wrap.info.nodeId.toString}")
       }
 
+      // Record this request for anti-spam
+      ipAntiSpam(wrap.remoteIp) += 1
       stay
 
     // PERIODIC SYNC
@@ -167,15 +186,16 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
       context.parent ! GetPeersForSync
       stay
 
-    case Event(PeersToGetSyncFrom(peers), data: OperationalData) =>
+    case Event(PeersToSyncFrom(peers), data: OperationalData) =>
       val connectedPublicPeers: Seq[PeerConnectedWrap] = publicPeers(peers, data)
       val randomPeers: Seq[PeerConnectedWrap] = Random.shuffle(connectedPublicPeers)
 
       randomPeers.headOption match {
         case Some(publicPeerConnectedWrap) =>
-          log.info(s"PLGN PHC, HostedSync, sync with nodeId=${publicPeerConnectedWrap.info.nodeId.toString}")
-          publicPeerConnectedWrap sendMsg QueryPublicHostedChannels(kit.nodeParams.chainHash)
-          goto(DOING_PHC_SYNC)
+          val lastSyncNodeIdOpt = Some(publicPeerConnectedWrap.info.nodeId)
+          log.info(s"PLGN PHC, HostedSync, with nodeId=${publicPeerConnectedWrap.info.nodeId.toString}")
+          publicPeerConnectedWrap sendHostedMsg QueryPublicHostedChannels(kit.nodeParams.chainHash)
+          goto(DOING_PHC_SYNC) using data.copy(lastSyncNodeId = lastSyncNodeIdOpt)
 
         case None =>
           // A frequent ask timer has been scheduled in transition
@@ -194,6 +214,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
     case WAIT_FOR_NORMAL_NETWORK_DATA -> WAIT_FOR_PHC_SYNC =>
       context.system.eventStream.unsubscribe(channel = classOf[SyncProgress], subscriber = self)
       // We always ask for full sync on startup, keep asking frequently if no PHC peer is connected yet
+      startTimerWithFixedDelay(TickClearIpAntiSpam.label, TickClearIpAntiSpam, 1.minute)
       startTimerWithFixedDelay(RefreshRouterData.label, RefreshRouterData, 10.minutes)
       self ! GetPeersForSync
   }
@@ -210,17 +231,17 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
 
   initialize()
 
-  def publicPeers(peers: Seq[PeerConnectedWrap], data: OperationalData): Seq[PeerConnectedWrap] =
+  private def publicPeers(peers: Seq[PeerConnectedWrap], data: OperationalData): Seq[PeerConnectedWrap] =
     peers.filter(wrap => data.normalGraph.getIncomingEdgesOf(wrap.info.nodeId).nonEmpty)
 
   // These checks require router and graph data
-  def isNewAnnounceAcceptable(announce: ChannelAnnouncement, data: OperationalData): Boolean = {
+  private def isNewAnnounceAcceptable(announce: ChannelAnnouncement, data: OperationalData): Boolean = {
     val node1HasEnoughIncomingChans = data.normalGraph.getIncomingEdgesOf(announce.nodeId1).count(_.desc.a != announce.nodeId2) >= phcConfig.minNormalChans
     val node2HasEnoughIncomingChans = data.normalGraph.getIncomingEdgesOf(announce.nodeId2).count(_.desc.a != announce.nodeId1) >= phcConfig.minNormalChans
     !data.normalChannels.contains(announce.shortChannelId) && node1HasEnoughIncomingChans && node2HasEnoughIncomingChans
   }
 
-  def isUpdateAcceptable(update: ChannelUpdate, data: OperationalData): Boolean =
+  private def isUpdateAcceptable(update: ChannelUpdate, data: OperationalData): Boolean =
     update.htlcMaximumMsat.contains(phcConfig.capacity) && data.phcNetwork.channels.get(update.shortChannelId).exists(_ verifySig update)
 
   private def tryPersist(phcNetwork: PHCNetwork) = Try {
@@ -229,6 +250,11 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
       case message: ChannelUpdate => updatesDb.addUpdate(message)
       case m => throw new RuntimeException(s"Unacceptable $m")
     }.toSeq), updatesDb.db)
+  }
+
+  private def sendCompleteNetworkTo(wrap: PeerConnectedWrap, phcNetwork: PHCNetwork) = Future {
+    phcNetwork.channels.values.flatMap(_.orderedMessages).foreach(wrap.sendUnknownMsg)
+    wrap sendHostedMsg ReplyPublicHostedChannelsEnd(kit.nodeParams.chainHash)
   }
 
   abstract class AnnouncementMessageProcessor {

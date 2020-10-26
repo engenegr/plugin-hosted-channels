@@ -8,7 +8,7 @@ import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.channel.{Channel, ChannelVersion, Origin}
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.transactions.{CommitmentSpec, IncomingHtlc, OutgoingHtlc}
-import fr.acinq.eclair.wire.{ChannelUpdate, Error, UpdateAddHtlc}
+import fr.acinq.eclair.wire.{AnnouncementSignatures, ChannelUpdate, Error, UpdateAddHtlc, UpdateFailHtlc}
 import fr.acinq.hc.app.channel.{HOSTED_DATA_COMMITMENTS, HostedState}
 import fr.acinq.hc.app.wire._
 import org.scalatest.funsuite.AnyFunSuite
@@ -103,8 +103,8 @@ class HostedWireSpec extends AnyFunSuite {
 
   test("Encode and decode messages") {
     import HostedWireSpec._
-    assert(Codecs.toUnknownMessage(lcss1).tag === HC.HC_LAST_CROSS_SIGNED_STATE_TAG)
-    assert(Codecs.decode(Codecs.toUnknownMessage(lcss1)).require === lcss1)
+    assert(Codecs.toUnknownHostedMessage(lcss1).tag === HC.HC_LAST_CROSS_SIGNED_STATE_TAG)
+    assert(Codecs.decodeHostedMessage(Codecs.toUnknownHostedMessage(lcss1)).require === lcss1)
   }
 
   test("Encode and decode routing messages") {
@@ -120,5 +120,21 @@ class HostedWireSpec extends AnyFunSuite {
     assert(Codecs.toUnknownAnnounceMessage(channel_update_1, isGossip = false).tag === HC.PHC_UPDATE_SYNC_TAG)
     assert(Codecs.decodeAnnounceMessage(Codecs.toUnknownAnnounceMessage(channel, isGossip = true)).require === channel)
     assert(Codecs.decodeAnnounceMessage(Codecs.toUnknownAnnounceMessage(channel_update_2, isGossip = false)).require === channel_update_2)
+  }
+
+  test("Encode and decode standard messages with channel id") {
+    def bin(len: Int, fill: Byte) = ByteVector.fill(len)(fill)
+    def bin32(fill: Byte) = ByteVector32(bin(32, fill))
+    val update_fail_htlc = UpdateFailHtlc(randomBytes32, 2, bin(154, 0))
+    val update_add_htlc = UpdateAddHtlc(randomBytes32, 2, 3.msat, bin32(0), CltvExpiry(4), TestConstants.emptyOnionPacket)
+    val announcement_signatures = AnnouncementSignatures(randomBytes32, ShortChannelId(42), randomBytes64, randomBytes64)
+
+    assert(Codecs.toUnknownHasChanIdMessage(update_fail_htlc).tag === HC.HC_UPDATE_FAIL_HTLC_TAG)
+    assert(Codecs.toUnknownHasChanIdMessage(update_add_htlc).tag === HC.HC_UPDATE_ADD_HTLC_TAG)
+    assert(Codecs.toUnknownHasChanIdMessage(announcement_signatures).tag === HC.HC_ANNOUNCEMENT_SIGNATURES_TAG)
+
+    assert(Codecs.decodeHasChanIdMessage(Codecs.toUnknownHasChanIdMessage(update_fail_htlc)).require === update_fail_htlc)
+    assert(Codecs.decodeHasChanIdMessage(Codecs.toUnknownHasChanIdMessage(update_add_htlc)).require === update_add_htlc)
+    assert(Codecs.decodeHasChanIdMessage(Codecs.toUnknownHasChanIdMessage(announcement_signatures)).require === announcement_signatures)
   }
 }

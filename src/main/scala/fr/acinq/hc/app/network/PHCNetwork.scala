@@ -13,9 +13,9 @@ import fr.acinq.bitcoin.Crypto
 
 object PHC {
   val staleThreshold: Long = 14.days.toSeconds // Remove ChannelUpdate if it has not been refreshed for this much days
-  val tickUpdateThreshold: Long = 5.days.toSeconds // Periodically refresh and resend ChannelUpdate gossip for local PHC with a given interval
+  val tickUpdateThreshold: FiniteDuration = 5.days // Periodically refresh and resend ChannelUpdate gossip for local PHC with a given interval
   val tickRequestFullSyncThreshold: FiniteDuration = 2.days // Periodically request full PHC gossip sync from one of supporting peers with a given interval
-  val tickStaggeredBroadcastThreshold: Long = 10.minutes.toSeconds // Periodically send collected PHC gossip messages to supporting peers with a given interval
+  val tickStaggeredBroadcastThreshold: FiniteDuration = 10.minutes // Periodically send collected PHC gossip messages to supporting peers with a given interval
   val reAnnounceThreshold: Long = 10.days.toSeconds // Re-initiate full announce/update procedure for PHC if last ChannelUpdate has been sent this many days ago
 }
 

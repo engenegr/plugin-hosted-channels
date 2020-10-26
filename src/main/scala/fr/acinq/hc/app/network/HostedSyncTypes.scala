@@ -1,7 +1,9 @@
 package fr.acinq.hc.app.network
 
+import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.router.Graph.GraphStructure.DirectedGraph
 import fr.acinq.eclair.router.Router.PublicChannel
+
 import scala.collection.immutable.SortedMap
 import fr.acinq.eclair.ShortChannelId
 
@@ -27,5 +29,6 @@ case class WaitForNormalNetworkData(phcNetwork: PHCNetwork) extends HostedSyncDa
 
 case class OperationalData(phcNetwork: PHCNetwork,
                            phcGossip: CollectedGossip,
+                           lastSyncNodeId: Option[PublicKey],
                            normalChannels: SortedMap[ShortChannelId, PublicChannel],
                            normalGraph: DirectedGraph) extends HostedSyncData

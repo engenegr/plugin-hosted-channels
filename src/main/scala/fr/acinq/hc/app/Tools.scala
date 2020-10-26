@@ -3,7 +3,7 @@ package fr.acinq.hc.app
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol, Satoshi}
-import fr.acinq.eclair.wire.{AnnouncementMessage, Color, UnknownMessage}
+import fr.acinq.eclair.wire.{AnnouncementMessage, Color, HasChannelId, UnknownMessage}
 import fr.acinq.eclair.{CltvExpiryDelta, MilliSatoshi, ShortChannelId}
 import com.typesafe.config.{Config => Configuration}
 import java.io.{ByteArrayInputStream, File}
@@ -18,6 +18,7 @@ import fr.acinq.hc.app.wire.Codecs
 import slick.jdbc.PostgresProfile
 import scodec.bits.ByteVector
 import java.nio.ByteOrder
+
 import scala.util.Try
 
 
@@ -54,10 +55,12 @@ object Tools {
   }
 }
 
-case class PeerConnectedWrap(info: PeerConnected) {
-  def sendMsg(message: HostedChannelMessage): Unit = sendUnknownMsg(Codecs toUnknownMessage message)
+case class PeerConnectedWrap(info: PeerConnected) { me =>
+  def sendChanMsg(message: HasChannelId): Unit = me sendUnknownMsg Codecs.toUnknownHasChanIdMessage(message)
+  def sendHostedMsg(message: HostedChannelMessage): Unit = me sendUnknownMsg Codecs.toUnknownHostedMessage(message)
+  def sendGossipMsg(message: AnnouncementMessage): Unit = me sendUnknownMsg Codecs.toUnknownAnnounceMessage(message, isGossip = true)
   def sendUnknownMsg(message: UnknownMessage): Unit = info.peer ! OutgoingMessage(message, info.connectionInfo.peerConnection)
-  def sendGossipMsg(message: AnnouncementMessage): Unit = info.peer ! OutgoingMessage(Codecs.toUnknownAnnounceMessage(message, isGossip = true), info.connectionInfo.peerConnection)
+  lazy val remoteIp: Array[Byte] = info.connectionInfo.address.getAddress.getAddress
 }
 
 
@@ -84,13 +87,13 @@ case class BrandingData(logo: String, color: Color) {
   }
 }
 
-case class PHCConfig(capacityMsat: Long, maxPerNode: Long, minNormalChans: Long) {
+case class PHCConfig(capacityMsat: Long, maxPerNode: Long, minNormalChans: Long, maxSyncSendsPerIpPerMinute: Int) {
   val capacity: MilliSatoshi = MilliSatoshi(capacityMsat)
 }
 
 case class Vals(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDeltaBlocks: Int, onChainRefundThresholdSat: Long,
                 liabilityDeadlineBlockdays: Int, defaultCapacityMsat: Long, defaultClientBalanceMsat: Long, maxHtlcValueInFlightMsat: Long,
-                htlcMinimumMsat: Long, maxAcceptedHtlcs: Int, acceptNewChans: Boolean, branding: BrandingData, phcConfig: PHCConfig) {
+                htlcMinimumMsat: Long, maxAcceptedHtlcs: Int, maxNewChansPerIpPerHour: Int, branding: BrandingData, phcConfig: PHCConfig) {
 
   val feeBase: MilliSatoshi = MilliSatoshi(feeBaseMsat)
 

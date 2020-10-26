@@ -4,8 +4,9 @@ import fr.acinq.hc.app._
 import fr.acinq.hc.app.HC._
 import fr.acinq.eclair.wire._
 import fr.acinq.eclair.wire.CommonCodecs._
+import fr.acinq.eclair.wire.LightningMessageCodecs._
 import scodec.codecs.{bool, listOfN, uint16, uint32}
-import scodec.{Attempt, Codec, DecodeResult, Err}
+import scodec.{Attempt, Codec, Err}
 
 
 object Codecs {
@@ -69,8 +70,9 @@ object Codecs {
   val replyPublicHostedChannelsEndCodec: Codec[ReplyPublicHostedChannelsEnd] =
     (bytes32 withContext "chainHash").as[ReplyPublicHostedChannelsEnd]
 
+  //
 
-  def decode(wrap: UnknownMessage): Attempt[HostedChannelMessage] = wrap.tag match {
+  def decodeHostedMessage(wrap: UnknownMessage): Attempt[HostedChannelMessage] = wrap.tag match {
     case HC_INVOKE_HOSTED_CHANNEL_TAG => invokeHostedChannelCodec.decode(wrap.data.toBitVector).map(_.value)
     case HC_INIT_HOSTED_CHANNEL_TAG => initHostedChannelCodec.decode(wrap.data.toBitVector).map(_.value)
     case HC_LAST_CROSS_SIGNED_STATE_TAG => lastCrossSignedStateCodec.decode(wrap.data.toBitVector).map(_.value)
@@ -82,7 +84,7 @@ object Codecs {
     case HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG => replyPublicHostedChannelsEndCodec.decode(wrap.data.toBitVector).map(_.value)
   }
 
-  def toUnknownMessage(message: HostedChannelMessage): UnknownMessage = message match {
+  def toUnknownHostedMessage(message: HostedChannelMessage): UnknownMessage = message match {
     case msg: InvokeHostedChannel => UnknownMessage(HC_INVOKE_HOSTED_CHANNEL_TAG, invokeHostedChannelCodec.encode(msg).require.toByteVector)
     case msg: InitHostedChannel => UnknownMessage(HC_INIT_HOSTED_CHANNEL_TAG, initHostedChannelCodec.encode(msg).require.toByteVector)
     case msg: LastCrossSignedState => UnknownMessage(HC_LAST_CROSS_SIGNED_STATE_TAG, lastCrossSignedStateCodec.encode(msg).require.toByteVector)
@@ -94,6 +96,29 @@ object Codecs {
     case msg: ReplyPublicHostedChannelsEnd => UnknownMessage(HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG, replyPublicHostedChannelsEndCodec.encode(msg).require.toByteVector)
   }
 
+  //
+
+  def decodeHasChanIdMessage(wrap: UnknownMessage): Attempt[HasChannelId] = wrap.tag match {
+    case HC_UPDATE_ADD_HTLC_TAG => updateAddHtlcCodec.decode(wrap.data.toBitVector).map(_.value)
+    case HC_UPDATE_FULFILL_HTLC_TAG => updateFulfillHtlcCodec.decode(wrap.data.toBitVector).map(_.value)
+    case HC_UPDATE_FAIL_HTLC_TAG => updateFailHtlcCodec.decode(wrap.data.toBitVector).map(_.value)
+    case HC_UPDATE_FAIL_MALFORMED_HTLC_TAG => updateFailMalformedHtlcCodec.decode(wrap.data.toBitVector).map(_.value)
+    case HC_ANNOUNCEMENT_SIGNATURES_TAG => announcementSignaturesCodec.decode(wrap.data.toBitVector).map(_.value)
+    case HC_ERROR_TAG => errorCodec.decode(wrap.data.toBitVector).map(_.value)
+    case tag => Attempt failure Err(s"PLGN PHC, unsupported chan tag=$tag")
+  }
+
+  def toUnknownHasChanIdMessage(message: HasChannelId): UnknownMessage = message match {
+    case msg: UpdateAddHtlc => UnknownMessage(HC_UPDATE_ADD_HTLC_TAG, LightningMessageCodecs.updateAddHtlcCodec.encode(msg).require.toByteVector)
+    case msg: UpdateFulfillHtlc => UnknownMessage(HC_UPDATE_FULFILL_HTLC_TAG, LightningMessageCodecs.updateFulfillHtlcCodec.encode(msg).require.toByteVector)
+    case msg: UpdateFailHtlc => UnknownMessage(HC_UPDATE_FAIL_HTLC_TAG, LightningMessageCodecs.updateFailHtlcCodec.encode(msg).require.toByteVector)
+    case msg: UpdateFailMalformedHtlc => UnknownMessage(HC_UPDATE_FAIL_MALFORMED_HTLC_TAG, LightningMessageCodecs.updateFailMalformedHtlcCodec.encode(msg).require.toByteVector)
+    case msg: AnnouncementSignatures => UnknownMessage(HC_ANNOUNCEMENT_SIGNATURES_TAG, LightningMessageCodecs.announcementSignaturesCodec.encode(msg).require.toByteVector)
+    case msg: Error => UnknownMessage(HC_ERROR_TAG, LightningMessageCodecs.errorCodec.encode(msg).require.toByteVector)
+    case msg => throw new RuntimeException(s"PLGN PHC, unacceptable chan message=${msg.getClass.toString}")
+  }
+
+  //
 
   def decodeAnnounceMessage(wrap: UnknownMessage): Attempt[AnnouncementMessage] = wrap.tag match {
     case PHC_ANNOUNCE_GOSSIP_TAG => LightningMessageCodecs.channelAnnouncementCodec.decode(wrap.data.toBitVector).map(_.value)

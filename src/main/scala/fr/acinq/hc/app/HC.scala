@@ -1,5 +1,7 @@
 package fr.acinq.hc.app
 
+import fr.acinq.eclair.{Feature, UnknownFeature}
+
 
 object HC {
   final val HC_INVOKE_HOSTED_CHANNEL_TAG = 65535
@@ -17,12 +19,29 @@ object HC {
   final val PHC_UPDATE_GOSSIP_TAG = 65513
   final val PHC_UPDATE_SYNC_TAG = 65511
 
+  final val HC_UPDATE_ADD_HTLC_TAG = 65509
+  final val HC_UPDATE_FULFILL_HTLC_TAG = 65507
+  final val HC_UPDATE_FAIL_HTLC_TAG = 65505
+  final val HC_UPDATE_FAIL_MALFORMED_HTLC_TAG = 65503
+  final val HC_ANNOUNCEMENT_SIGNATURES_TAG = 65501
+  final val HC_ERROR_TAG = 65499
+
   val announceTags: Set[Int] =
     Set(PHC_ANNOUNCE_GOSSIP_TAG, PHC_ANNOUNCE_SYNC_TAG,
       PHC_UPDATE_GOSSIP_TAG, PHC_UPDATE_SYNC_TAG)
 
-  val messageTags: Set[Int] =
+  val chanIdMessageTags: Set[Int] =
+    Set(HC_UPDATE_ADD_HTLC_TAG, HC_UPDATE_FULFILL_HTLC_TAG, HC_UPDATE_FAIL_HTLC_TAG,
+      HC_UPDATE_FAIL_MALFORMED_HTLC_TAG, HC_ANNOUNCEMENT_SIGNATURES_TAG, HC_ERROR_TAG)
+
+  val hostedMessageTags: Set[Int] =
     Set(HC_INVOKE_HOSTED_CHANNEL_TAG, HC_INIT_HOSTED_CHANNEL_TAG, HC_LAST_CROSS_SIGNED_STATE_TAG,
       HC_STATE_UPDATE_TAG, HC_STATE_OVERRIDE_TAG, HC_HOSTED_CHANNEL_BRANDING_TAG, HC_REFUND_PENDING_TAG,
       HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG, HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG)
+}
+
+case object HCFeature extends Feature {
+  val plugin: UnknownFeature = UnknownFeature(optional)
+  val rfcName = "hosted_channels"
+  val mandatory = 32772
 }
