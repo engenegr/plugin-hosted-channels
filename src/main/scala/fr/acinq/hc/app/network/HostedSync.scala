@@ -98,8 +98,8 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
       if data.lastSyncNodeId.contains(wrap.info.nodeId) =>
 
       tryPersist(data.phcNetwork).map { adds =>
-        val u1 = updatesDb.pruneOldUpdates1(System.currentTimeMillis / 1000)
-        val u2 = updatesDb.pruneOldUpdates2(System.currentTimeMillis / 1000)
+        val u1 = updatesDb.pruneOldUpdates1(System.currentTimeMillis.millis.toSeconds)
+        val u2 = updatesDb.pruneOldUpdates2(System.currentTimeMillis.millis.toSeconds)
         val ann = updatesDb.pruneUpdateLessAnnounces
         val phcNetwork1 = updatesDb.getState
 
@@ -266,9 +266,14 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
     val tags: Set[Int]
 
     def process(unknown: UnknownMessageReceived, data: OperationalData): OperationalData = Codecs.decodeAnnounceMessage(unknown.message) match {
-      case Attempt.Successful(msg: ChannelAnnouncement) if data.phcNetwork.channels.contains(msg.shortChannelId) && data.phcNetwork.isAnnounceAcceptable(msg) => processKnownAnnounce(msg, data, unknown.nodeId)
-      case Attempt.Successful(msg: ChannelAnnouncement) if isNewAnnounceAcceptable(msg, data) && data.phcNetwork.isNewAnnounceAcceptable(msg, phcConfig) => processNewAnnounce(msg, data, unknown.nodeId)
-      case Attempt.Successful(msg: ChannelUpdate) if isUpdateAcceptable(msg, data) && data.phcNetwork.isUpdateAcceptable(msg) => processUpdate(msg, data, unknown.nodeId)
+      case Attempt.Successful(msg: ChannelAnnouncement) if data.phcNetwork.channels.contains(msg.shortChannelId) && data.phcNetwork.isAnnounceAcceptable(msg) =>
+        processKnownAnnounce(msg, data, unknown.nodeId)
+
+      case Attempt.Successful(msg: ChannelAnnouncement) if isNewAnnounceAcceptable(msg, data) && data.phcNetwork.isNewAnnounceAcceptable(msg, phcConfig) =>
+        processNewAnnounce(msg, data, unknown.nodeId)
+
+      case Attempt.Successful(msg: ChannelUpdate) if isUpdateAcceptable(msg, data) && data.phcNetwork.isUpdateAcceptable(msg) =>
+        processUpdate(msg, data, unknown.nodeId)
 
       case Attempt.Successful(something) =>
         log.info(s"PLGN PHC, HostedSync, got unacceptable message=$something")
