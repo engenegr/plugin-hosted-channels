@@ -37,7 +37,7 @@ class HostedSyncSpec extends BaseRouterSpec {
 
   test("Hosted sync and gossip") { fixture =>
     implicit val system: ActorSystem = ActorSystem("test-actor-system")
-    val config = Config.vals.phcConfig.copy(minNormalChans = 0)
+    val config = Config.vals.phcConfig.copy(minNormalChans = 0, maxPerNode = 1)
     val (syncActor, peerProvider) = recreateHostedSync(HCTestUtils.testKit(system).copy(router = fixture.router), config)
     awaitCond(syncActor.stateName == WAIT_FOR_NORMAL_NETWORK_DATA)
     // Router has finished synchronization
@@ -86,7 +86,7 @@ class HostedSyncSpec extends BaseRouterSpec {
     val thirdPublicNode = routerData.nodes.keys.tail.tail.head
 
     {
-      // Getting invalid gossip, discarding it
+      // Getting invalid gossip (wrong announce format)
       val shortId = Tools.hostedShortChanId(c.value, a.value)
       val randomSig: ByteVector64 = Crypto.sign(randomBytes32, randomKey)
       val announce = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, shortId, c, a, b, d, randomSig, randomSig, randomSig, randomSig) // nodeId != bitcoinKey
@@ -112,11 +112,25 @@ class HostedSyncSpec extends BaseRouterSpec {
     }
 
     {
+      // Getting invalid gossip (too many PHC)
+      val shortId = Tools.hostedShortChanId(c.value, d.value)
+      val randomSig: ByteVector64 = Crypto.sign(randomBytes32, randomKey)
+      val announce = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, shortId, c, a, c, a, randomSig, randomSig, randomSig, randomSig)
+      val update1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_a, c, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.capacity, enable = true)
+      val update2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_c, a, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.capacity, enable = true)
+
+      syncActor ! UnknownMessageReceived(null, secondPublicNode, Codecs.toUnknownAnnounceMessage(announce, isGossip = true), null)
+      syncActor ! UnknownMessageReceived(null, secondPublicNode, Codecs.toUnknownAnnounceMessage(update1, isGossip = true), null)
+      syncActor ! UnknownMessageReceived(null, secondPublicNode, Codecs.toUnknownAnnounceMessage(update2, isGossip = true), null)
+    }
+
+    {
       // Broadcasting collected gossip
       val (gossipPeer1, _, gossipReceiver1) = createPeer(secondPublicNode)
       val (gossipPeer2, _, gossipReceiver2) = createPeer(thirdPublicNode)
       syncActor ! TickSendGossip(List(gossipReceiver1, gossipReceiver2))
       gossipPeer1.expectNoMessage() // We have seen gossip from this one, so no updates to it
+      // Only 3 messages, invalid gossip discarded
       assert(gossipPeer2.expectMsgType[OutgoingMessage].msg.asInstanceOf[UnknownMessage].tag == HC.PHC_ANNOUNCE_GOSSIP_TAG)
       assert(gossipPeer2.expectMsgType[OutgoingMessage].msg.asInstanceOf[UnknownMessage].tag == HC.PHC_UPDATE_GOSSIP_TAG)
       assert(gossipPeer2.expectMsgType[OutgoingMessage].msg.asInstanceOf[UnknownMessage].tag == HC.PHC_UPDATE_GOSSIP_TAG)
