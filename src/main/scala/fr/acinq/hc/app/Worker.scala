@@ -2,11 +2,12 @@ package fr.acinq.hc.app
 
 import fr.acinq.hc.app.HC._
 import scala.concurrent.duration._
-import akka.actor.{Actor, ActorRef, Props}
 import fr.acinq.hc.app.network.{HostedSync, PHC}
+import akka.actor.{Actor, ActorRef, OneForOneStrategy, Props}
 import fr.acinq.hc.app.dbo.{HostedChannelsDb, HostedUpdatesDb}
 import fr.acinq.eclair.io.{PeerConnected, PeerDisconnected, UnknownMessageReceived}
 import scala.concurrent.ExecutionContext.Implicits.global
+import akka.actor.SupervisorStrategy.Resume
 import fr.acinq.bitcoin.Crypto.PublicKey
 import scala.collection.mutable
 import grizzled.slf4j.Logging
@@ -32,7 +33,7 @@ class Worker(kit: Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChannelsDb,
 
   val ipAntiSpam: mutable.Map[Array[Byte], Int] = mutable.Map.empty withDefaultValue 0
 
-  val hostedSync: ActorRef = context actorOf Props(classOf[HostedSync], kit, updatesDb, phcConfig)
+  val hostedSync: ActorRef = context actorOf Props(classOf[HostedSync], kit, updatesDb, phcConfig, self)
 
   override def receive: Receive = {
     case systemMessage: PeerDisconnected =>
@@ -72,4 +73,10 @@ class Worker(kit: Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChannelsDb,
         }
       }
   }
+
+  override def supervisorStrategy: OneForOneStrategy =
+    OneForOneStrategy(-1, 5.seconds) { case error: Throwable =>
+      logger.info(s"PLGN PHC, error in child actor=${error.getMessage}")
+      Resume
+    }
 }

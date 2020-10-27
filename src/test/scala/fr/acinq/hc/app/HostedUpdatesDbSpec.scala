@@ -96,8 +96,8 @@ class HostedUpdatesDbSpec extends AnyFunSuite {
     assert(map3(channel_2.shortChannelId).channelUpdate1.get === channel_update_2_1)
     assert(map3(channel_2.shortChannelId).channelUpdate2.isEmpty)
 
-    udb.pruneOldUpdates1(System.currentTimeMillis + PHC.staleThreshold + 1)
-    udb.pruneOldUpdates2(System.currentTimeMillis + PHC.staleThreshold + 1)
+    udb.pruneOldUpdates1(System.currentTimeMillis / 1000 + PHC.staleThreshold + 1)
+    udb.pruneOldUpdates2(System.currentTimeMillis / 1000 + PHC.staleThreshold + 1)
     assert(udb.getState.channels.values.flatMap(u => u.channelUpdate1 ++ u.channelUpdate2).isEmpty)
 
     udb.pruneUpdateLessAnnounces

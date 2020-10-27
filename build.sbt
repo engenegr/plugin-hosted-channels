@@ -9,6 +9,8 @@ libraryDependencies += "fr.acinq.eclair" % "eclair-node_2.13" % "0.4.3-SNAPSHOT"
 
 libraryDependencies += "org.scalatest" % "scalatest_2.13" % "3.1.1"
 
+libraryDependencies += "com.softwaremill.quicklens" % "quicklens_2.13" % "1.5.0" // Same as Eclair
+
 libraryDependencies += "org.scodec" % "scodec-core_2.13" % "1.11.7" // Same as Eclair
 
 libraryDependencies += "org.clapper" % "grizzled-slf4j_2.13" % "1.3.4" // Same as Eclair

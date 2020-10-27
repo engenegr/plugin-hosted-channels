@@ -5,7 +5,6 @@ import fr.acinq.hc.app.HC._
 import scala.concurrent.duration._
 import slick.jdbc.PostgresProfile.api._
 import fr.acinq.hc.app.network.HostedSync._
-
 import fr.acinq.eclair.wire.{ChannelAnnouncement, ChannelUpdate}
 import fr.acinq.eclair.{FSMDiagnosticActorLogging, Kit}
 import fr.acinq.hc.app.dbo.{Blocking, HostedUpdatesDb}
@@ -15,9 +14,11 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import fr.acinq.eclair.io.UnknownMessageReceived
 import fr.acinq.eclair.router.SyncProgress
 import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.eclair.channel.Nothing
 import fr.acinq.hc.app.wire.Codecs
 import scala.collection.mutable
 import scala.concurrent.Future
+import akka.actor.ActorRef
 import scodec.Attempt
 
 
@@ -37,7 +38,7 @@ object HostedSync {
   case class GotAllSyncFrom(info: PeerConnectedWrap)
 }
 
-class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) extends FSMDiagnosticActorLogging[HostedSyncState, HostedSyncData] {
+class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, peerProvider: ActorRef) extends FSMDiagnosticActorLogging[HostedSyncState, HostedSyncData] {
   startWith(stateData = WaitForNormalNetworkData(updatesDb.getState), stateName = WAIT_FOR_NORMAL_NETWORK_DATA)
 
   context.system.eventStream.subscribe(channel = classOf[SyncProgress], subscriber = self)
@@ -79,10 +80,10 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
       goto(WAIT_FOR_PHC_SYNC) using data1
   }
 
-  /**
-   * WAIT_FOR_PHC_SYNC state has no specific events for now,
-   * used for scheduling a frequent GetPeersForSync in transitions
-   */
+  when(WAIT_FOR_PHC_SYNC) {
+    case Event(Nothing, _) =>
+      stay
+  }
 
   when(DOING_PHC_SYNC, stateTimeout = 10.minutes) {
     case Event(StateTimeout, data: OperationalData) =>
@@ -97,8 +98,8 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
       if data.lastSyncNodeId.contains(wrap.info.nodeId) =>
 
       tryPersist(data.phcNetwork).map { adds =>
-        val u1 = updatesDb.pruneOldUpdates1(System.currentTimeMillis)
-        val u2 = updatesDb.pruneOldUpdates2(System.currentTimeMillis)
+        val u1 = updatesDb.pruneOldUpdates1(System.currentTimeMillis / 1000)
+        val u2 = updatesDb.pruneOldUpdates2(System.currentTimeMillis / 1000)
         val ann = updatesDb.pruneUpdateLessAnnounces
         val phcNetwork1 = updatesDb.getState
 
@@ -114,9 +115,10 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
       }.get
   }
 
-  /**
-   * OPERATIONAL state has no specific events for now
-   */
+  when(OPERATIONAL) {
+    case Event(Nothing, _) =>
+      stay
+  }
 
   whenUnhandled {
     case Event(TickClearIpAntiSpam, _) =>
@@ -171,9 +173,14 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
       if (ipAntiSpam(wrap.remoteIp) > phcConfig.maxSyncSendsPerIpPerMinute) {
         log.info(s"PLGN PHC, SendSyncTo, abuse, peer=${wrap.info.nodeId.toString}")
         wrap sendHostedMsg ReplyPublicHostedChannelsEnd(kit.nodeParams.chainHash)
-      } else sendCompleteNetworkTo(wrap, data.phcNetwork) onComplete {
-        case Failure(err) => log.info(s"PLGN PHC, SendSyncTo, fail, peer=${wrap.info.nodeId.toString} error=${err.getMessage}")
-        case _ => log.info(s"PLGN PHC, SendSyncTo, success, peer=${wrap.info.nodeId.toString}")
+      } else {
+        Future {
+          data.phcNetwork.channels.values.flatMap(_.orderedMessages).foreach(wrap.sendUnknownMsg)
+          wrap sendHostedMsg ReplyPublicHostedChannelsEnd(kit.nodeParams.chainHash)
+        } onComplete {
+          case Failure(err) => log.info(s"PLGN PHC, SendSyncTo, fail, peer=${wrap.info.nodeId.toString} error=${err.getMessage}")
+          case _ => log.info(s"PLGN PHC, SendSyncTo, success, peer=${wrap.info.nodeId.toString}")
+        }
       }
 
       // Record this request for anti-spam
@@ -183,7 +190,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
     // PERIODIC SYNC
 
     case Event(GetPeersForSync, _) =>
-      context.parent ! GetPeersForSync
+      peerProvider ! GetPeersForSync
       stay
 
     case Event(PeersToSyncFrom(peers), data: OperationalData) =>
@@ -250,11 +257,6 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
       case message: ChannelUpdate => updatesDb.addUpdate(message)
       case m => throw new RuntimeException(s"Unacceptable $m")
     }.toSeq), updatesDb.db)
-  }
-
-  private def sendCompleteNetworkTo(wrap: PeerConnectedWrap, phcNetwork: PHCNetwork) = Future {
-    phcNetwork.channels.values.flatMap(_.orderedMessages).foreach(wrap.sendUnknownMsg)
-    wrap sendHostedMsg ReplyPublicHostedChannelsEnd(kit.nodeParams.chainHash)
   }
 
   abstract class AnnouncementMessageProcessor {

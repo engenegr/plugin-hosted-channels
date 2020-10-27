@@ -1,10 +1,9 @@
 package fr.acinq.hc.app.network
 
-import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.router.Graph.GraphStructure.DirectedGraph
 import fr.acinq.eclair.router.Router.PublicChannel
-
 import scala.collection.immutable.SortedMap
+import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.ShortChannelId
 
 // STATE
