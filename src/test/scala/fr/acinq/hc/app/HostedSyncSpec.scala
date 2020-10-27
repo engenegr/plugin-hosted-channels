@@ -86,6 +86,19 @@ class HostedSyncSpec extends BaseRouterSpec {
     val thirdPublicNode = routerData.nodes.keys.tail.tail.head
 
     {
+      // Getting invalid gossip, discarding it
+      val shortId = Tools.hostedShortChanId(c.value, a.value)
+      val randomSig: ByteVector64 = Crypto.sign(randomBytes32, randomKey)
+      val announce = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, shortId, c, a, b, d, randomSig, randomSig, randomSig, randomSig) // nodeId != bitcoinKey
+      val update1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_c, a, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.capacity, enable = true)
+      val update2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_a, c, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.capacity, enable = true)
+
+      syncActor ! UnknownMessageReceived(null, secondPublicNode, Codecs.toUnknownAnnounceMessage(announce, isGossip = true), null)
+      syncActor ! UnknownMessageReceived(null, secondPublicNode, Codecs.toUnknownAnnounceMessage(update1, isGossip = true), null)
+      syncActor ! UnknownMessageReceived(null, secondPublicNode, Codecs.toUnknownAnnounceMessage(update2, isGossip = true), null)
+    }
+
+    {
       // Getting gossip
       val shortId = Tools.hostedShortChanId(c.value, d.value)
       val randomSig: ByteVector64 = Crypto.sign(randomBytes32, randomKey)
