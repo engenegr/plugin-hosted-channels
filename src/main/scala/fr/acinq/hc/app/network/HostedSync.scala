@@ -2,20 +2,22 @@ package fr.acinq.hc.app.network
 
 import fr.acinq.hc.app._
 import fr.acinq.hc.app.HC._
+
 import scala.concurrent.duration._
 import slick.jdbc.PostgresProfile.api._
 import fr.acinq.hc.app.network.HostedSync._
 import fr.acinq.eclair.wire.{ChannelAnnouncement, ChannelUpdate}
 import fr.acinq.eclair.{FSMDiagnosticActorLogging, Kit}
 import fr.acinq.hc.app.dbo.{Blocking, HostedUpdatesDb}
-import scala.util.{Failure, Random, Success, Try}
 
+import scala.util.{Failure, Random, Success, Try}
 import scala.concurrent.ExecutionContext.Implicits.global
 import fr.acinq.eclair.io.UnknownMessageReceived
-import fr.acinq.eclair.router.SyncProgress
+import fr.acinq.eclair.router.{Router, SyncProgress}
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.channel.Nothing
 import fr.acinq.hc.app.wire.Codecs
+
 import scala.collection.mutable
 import scala.concurrent.Future
 import akka.actor.ActorRef
@@ -71,7 +73,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
 
   when(WAIT_FOR_NORMAL_NETWORK_DATA) {
     case Event(SyncProgress(1D), _) =>
-      kit.router ! Symbol("data")
+      kit.router ! Router.GetRouterData
       stay
 
     case Event(routerData: fr.acinq.eclair.router.Router.Data, data: WaitForNormalNetworkData) =>
@@ -126,12 +128,12 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
       stay
 
     case Event(RefreshRouterData, _: OperationalData) =>
-      kit.router ! Symbol("data")
+      kit.router ! Router.GetRouterData
       stay
 
-    case Event(routerData: fr.acinq.eclair.router.Router.Data, data: OperationalData) =>
+    case Event(routerData: Router.Data, data: OperationalData) =>
       val data1 = data.copy(normalChannels = routerData.channels, normalGraph = routerData.graph)
-      log.info("PLGN PHC, HostedSync, updated normal network data")
+      log.info("PLGN PHC, HostedSync, updated normal network data from Router")
       stay using data1
 
     // SEND OUT GOSSIP AND SYNC

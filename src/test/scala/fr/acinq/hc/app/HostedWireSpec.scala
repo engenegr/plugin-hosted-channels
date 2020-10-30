@@ -5,11 +5,11 @@ import java.util.UUID
 import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto, Satoshi}
 import fr.acinq.eclair._
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
-import fr.acinq.eclair.channel.{Channel, ChannelVersion, Origin}
+import fr.acinq.eclair.channel.{Channel, Origin}
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.transactions.{CommitmentSpec, IncomingHtlc, OutgoingHtlc}
 import fr.acinq.eclair.wire.{AnnouncementSignatures, ChannelUpdate, Error, UpdateAddHtlc, UpdateFailHtlc}
-import fr.acinq.hc.app.channel.{HOSTED_DATA_COMMITMENTS, HostedState}
+import fr.acinq.hc.app.channel.{HC_DATA_ESTABLISHED, HostedCommitments, HostedState}
 import fr.acinq.hc.app.wire._
 import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits.ByteVector
@@ -54,27 +54,33 @@ object HostedWireSpec {
 
   val error: Error = Error(ByteVector32.Zeroes, ByteVector.fromValidHex("0000"))
 
-  val hdc: HOSTED_DATA_COMMITMENTS = HOSTED_DATA_COMMITMENTS(
-    localNodeId = randomKey.publicKey,
-    remoteNodeId = randomKey.publicKey,
-    channelVersion = ChannelVersion.ZEROES,
-    lastCrossSignedState = lcss1,
-    futureUpdates = List(Right(add1), Left(add2)),
-    originChannels = Map(42L -> Origin.LocalCold(UUID.randomUUID), 15000L -> Origin.ChannelRelayedCold(ByteVector32(ByteVector.fill(32)(42)), 43, MilliSatoshi(11000000L), MilliSatoshi(10000000L))),
-    localSpec = cs,
+  val hdc: HostedCommitments = HostedCommitments(
     isHost = true,
-    channelUpdate = channelUpdate,
+    randomKey.publicKey,
+    randomKey.publicKey,
+    channelId = randomBytes32,
+    localSpec = cs,
+    originChannels = Map(42L -> Origin.LocalCold(UUID.randomUUID),
+      15000L -> Origin.ChannelRelayedCold(ByteVector32(ByteVector.fill(32)(42)), 43, MilliSatoshi(11000000L), MilliSatoshi(10000000L))),
+    lcss1,
+    futureUpdates = List(Right(add1), Left(add2)),
+    timedOutToPeerHtlcLeftOverIds = Set.empty,
+    fulfilledByPeerHtlcLeftOverIds = Set.empty,
+    announceChannel = false)
+
+  val data: HC_DATA_ESTABLISHED = HC_DATA_ESTABLISHED(
+    hdc,
     localError = None,
     remoteError = Some(error),
-    failedToPeerHtlcLeftoverIds = Set.empty,
-    fulfilledByPeerHtlcLeftoverIds = Set(1, 2, 10000),
     overrideProposal = None,
     refundPendingInfo = Some(RefundPending(System.currentTimeMillis / 1000)),
     refundCompleteInfo = Some("Has been refunded to address n3RzaNTD8LnBGkREBjSkouy5gmd2dVf7jQ"),
-    announceChannel = false)
+    channelUpdate)
 }
 
 class HostedWireSpec extends AnyFunSuite {
+  import HostedWireSpec._
+
   test("Correctly derive HC id and short id") {
     val pubkey1 = randomKey.publicKey.value
     val pubkey2 = randomKey.publicKey.value
@@ -82,12 +88,16 @@ class HostedWireSpec extends AnyFunSuite {
     assert(Tools.hostedShortChanId(pubkey1, pubkey2) === Tools.hostedShortChanId(pubkey2, pubkey1))
   }
 
-  test("Encode and decode commitments") {
-    import HostedWireSpec._
+  test("Encode and decode data") {
+    val binary = HostedChannelCodecs.HC_DATA_ESTABLISHED_Codec.encode(data).require
+    val check = HostedChannelCodecs.HC_DATA_ESTABLISHED_Codec.decodeValue(binary).require
+    assert(data === check)
+  }
 
+  test("Encode and decode commitments") {
     {
-      val binary = HostedChannelCodecs.HOSTED_DATA_COMMITMENTSCodec.encode(hdc).require
-      val check = HostedChannelCodecs.HOSTED_DATA_COMMITMENTSCodec.decodeValue(binary).require
+      val binary = HostedChannelCodecs.hostedCommitmentsCodec.encode(hdc).require
+      val check = HostedChannelCodecs.hostedCommitmentsCodec.decodeValue(binary).require
       assert(hdc.localSpec === check.localSpec)
       assert(hdc === check)
     }

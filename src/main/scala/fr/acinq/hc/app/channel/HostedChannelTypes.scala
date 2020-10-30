@@ -3,43 +3,78 @@ package fr.acinq.hc.app.channel
 import fr.acinq.eclair._
 import fr.acinq.eclair.wire._
 import fr.acinq.eclair.channel._
-import fr.acinq.hc.app.channel.HOSTED_DATA_COMMITMENTS._
-import fr.acinq.hc.app.{LastCrossSignedState, RefundPending, StateOverride, Tools}
+import fr.acinq.hc.app.{InitHostedChannel, InvokeHostedChannel, LastCrossSignedState, RefundPending, StateOverride}
 import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc, OutgoingHtlc}
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, Satoshi}
 import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
-import scala.util.{Failure, Success, Try}
 
+import scala.util.{Failure, Success, Try}
+import fr.acinq.hc.app.channel.HostedCommitments.LocalOrRemoteUpdate
 import fr.acinq.eclair.payment.OutgoingPacket
 import fr.acinq.eclair.MilliSatoshi
+import scodec.bits.ByteVector
 
+
+// Commands
+
+case object CMD_HOSTED_CLEAR_IDLE_CHANNELS
+
+sealed trait HasHostedChanIdCommand {
+  def channelId: ByteVector32
+}
+
+case class CMD_HOSTED_INVOKE_CHANNEL(channelId: ByteVector32, remoteNodeId: PublicKey, refundScriptPubKey: ByteVector, secret: ByteVector) extends HasHostedChanIdCommand
+
+case class CMD_HOSTED_OVERRIDE(channelId: ByteVector32, newLocalBalance: MilliSatoshi) extends HasHostedChanIdCommand
+
+case class CMD_HOSTED_EXTERNAL_FULFILL(channelId: ByteVector32, htlcId: Long, paymentPreimage: ByteVector32) extends HasHostedChanIdCommand {
+  val fulfillMessage: UpdateFulfillHtlc = UpdateFulfillHtlc(channelId, htlcId, paymentPreimage)
+}
+
+case class CMD_INIT_PENDING_REFUND(channelId: ByteVector32) extends HasHostedChanIdCommand
+case class CMD_FINALIZE_REFUND(channelId: ByteVector32, info: String) extends HasHostedChanIdCommand
+
+case class CMD_TURN_PUBLIC(channelId: ByteVector32) extends HasHostedChanIdCommand
+case class CMD_TURN_PRIVATE(channelId: ByteVector32) extends HasHostedChanIdCommand
+
+// Data
 
 sealed trait HostedData
 
-case object HostedNothing extends HostedData
+case object HC_NOTHING extends HostedData
 
-object HOSTED_DATA_COMMITMENTS {
+case class HC_DATA_CLIENT_WAIT_HOST_INIT(refundScriptPubKey: ByteVector) extends HostedData
+
+case class HC_DATA_CLIENT_WAIT_HOST_STATE_UPDATE(commitments: HostedCommitments) extends HostedData with HasAbstractCommitments
+
+case class HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE(init: InitHostedChannel, invoke: InvokeHostedChannel) extends HostedData {
+  require(Helpers.Closing.isValidFinalScriptPubkey(invoke.refundScriptPubKey), "invalid refundScriptPubKey when opening a hosted channel")
+}
+
+case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
+                               localError: Option[wire.Error] = None,
+                               remoteError: Option[wire.Error] = None,
+                               overrideProposal: Option[StateOverride] = None, // CLOSED channel override can be initiated by Host, a new proposed balance should be retained once this happens
+                               refundPendingInfo: Option[RefundPending] = None, // Will be present in case if funds should be refunded, but `liabilityDeadlineBlockdays` has not passed yet
+                               refundCompleteInfo: Option[String] = None, // Will be present after channel has been manually updated as a refunded one
+                               channelUpdate: ChannelUpdate) extends HostedData with HasAbstractCommitments // TODO: should htlcsToFailInOrigin be overridden here?
+
+object HostedCommitments {
   // Left is locally sent from us to peer, Right is remotely sent from from peer to us
   type LocalOrRemoteUpdate = Either[UpdateMessage, UpdateMessage]
 }
 
-case class HOSTED_DATA_COMMITMENTS(localNodeId: PublicKey,
-                                   remoteNodeId: PublicKey,
-                                   channelVersion: ChannelVersion,
-                                   lastCrossSignedState: LastCrossSignedState,
-                                   futureUpdates: List[LocalOrRemoteUpdate], // For CLOSED channel we need to look here for UpdateFail/Fulfill messages from network for in-flight (client -> we -> network) payments
-                                   localSpec: CommitmentSpec,
-                                   originChannels: Map[Long, Origin],
-                                   isHost: Boolean,
-                                   channelUpdate: ChannelUpdate,
-                                   localError: Option[wire.Error],
-                                   remoteError: Option[wire.Error],
-                                   failedToPeerHtlcLeftoverIds: Set[Long], // CLOSED channel may have in-flight HTLCs (network -> we -> client) which can later be failed, collect their IDs here
-                                   fulfilledByPeerHtlcLeftoverIds: Set[Long], // CLOSED channel may have in-flight HTLCs (network -> we -> client) which can later be fulfilled, collect their IDs here
-                                   overrideProposal: Option[StateOverride], // CLOSED channel override can be initiated by Host, a new proposed balance should be retained once this happens
-                                   refundPendingInfo: Option[RefundPending], // Will be present in case if funds should be refunded, but `liabilityDeadlineBlockdays` has not passed yet
-                                   refundCompleteInfo: Option[String], // Will be present in case if channel balance has been refunded after `liabilityDeadlineBlockdays` has passed
-                                   announceChannel: Boolean) extends AbstractCommitments with HostedData {
+case class HostedCommitments(isHost: Boolean,
+                             localNodeId: PublicKey,
+                             remoteNodeId: PublicKey,
+                             channelId: ByteVector32,
+                             localSpec: CommitmentSpec,
+                             originChannels: Map[Long, Origin],
+                             lastCrossSignedState: LastCrossSignedState,
+                             futureUpdates: List[LocalOrRemoteUpdate], // For CLOSED channel we need to look here for UpdateFail/Fulfill messages from network for in-flight (client -> we -> network) payments
+                             timedOutToPeerHtlcLeftOverIds: Set[Long], // CLOSED channel may have in-flight HTLCs (network -> we -> client), we don't accept peer failure for those and only fail them on timeout
+                             fulfilledByPeerHtlcLeftOverIds: Set[Long], // CLOSED channel may have in-flight HTLCs (network -> we -> client) which can later be fulfilled, collect their IDs here
+                             announceChannel: Boolean) extends AbstractCommitments {
 
   val (nextLocalUpdates, nextRemoteUpdates, nextTotalLocal, nextTotalRemote) =
     futureUpdates.foldLeft((List.empty[UpdateMessage], List.empty[UpdateMessage], lastCrossSignedState.localUpdates, lastCrossSignedState.remoteUpdates)) {
@@ -49,7 +84,7 @@ case class HOSTED_DATA_COMMITMENTS(localNodeId: PublicKey,
 
   val nextLocalSpec: CommitmentSpec = CommitmentSpec.reduce(localSpec, nextLocalUpdates, nextRemoteUpdates)
 
-  val channelId: ByteVector32 = Tools.hostedChanId(localNodeId.value, remoteNodeId.value)
+  val currentAndNextInFlightHtlcs: Set[DirectedHtlc] = localSpec.htlcs ++ nextLocalSpec.htlcs // TODO: what about leftovers for closed channel
 
   val availableBalanceForSend: MilliSatoshi = nextLocalSpec.toLocal
 
@@ -57,11 +92,11 @@ case class HOSTED_DATA_COMMITMENTS(localNodeId: PublicKey,
 
   val capacity: Satoshi = lastCrossSignedState.initHostedChannel.channelCapacityMsat.truncateToSatoshi
 
-  val currentAndNextInFlightHtlcs: Set[DirectedHtlc] = localSpec.htlcs ++ nextLocalSpec.htlcs
+  // Present incoming cross-signed HTLCs as outgoing from peer's point of view
+  // no need to look at next incoming HTLCs here because they are not cross-signed so there was no relay attempt
+  def htlcsRemoteCommit: Set[DirectedHtlc] = localSpec.htlcs.collect(DirectedHtlc.incoming).map(OutgoingHtlc)
 
-  def getError: Option[wire.Error] = localError.orElse(remoteError)
-
-  def addProposal(update: LocalOrRemoteUpdate): HOSTED_DATA_COMMITMENTS = copy(futureUpdates = futureUpdates :+ update)
+  def addProposal(update: LocalOrRemoteUpdate): HostedCommitments = copy(futureUpdates = futureUpdates :+ update)
 
   // Find a cross-signed (in localSpec) and still not resolved (also in nextLocalSpec)
   def getOutgoingHtlcCrossSigned(htlcId: Long): Option[UpdateAddHtlc] =
@@ -82,11 +117,12 @@ case class HOSTED_DATA_COMMITMENTS(localNodeId: PublicKey,
       localSigned.add
     }
 
-  // Meaning sent from us to peer
+  // Meaning sent from us to peer, including the ones yet unsigned by peer
+  // peer may send us fail and then disconnect, so look at both current and next
   def timedOutOutgoingHtlcs(blockHeight: Long): Set[UpdateAddHtlc] =
     for {
       OutgoingHtlc(add) <- currentAndNextInFlightHtlcs if blockHeight > add.cltvExpiry.toLong
-      if !failedToPeerHtlcLeftoverIds.contains(add.id) && !fulfilledByPeerHtlcLeftoverIds.contains(add.id)
+      if !timedOutToPeerHtlcLeftOverIds.contains(add.id) && !fulfilledByPeerHtlcLeftOverIds.contains(add.id)
     } yield add
 
   def nextLocalUnsignedLCSS(blockDay: Long): LastCrossSignedState = {
@@ -97,14 +133,14 @@ case class HOSTED_DATA_COMMITMENTS(localNodeId: PublicKey,
 
   // Rebuild all messaging and state history starting from local LCSS,
   // then try to find a future state with same update numbers as remote LCSS
-  def findState(remoteLCSS: LastCrossSignedState): Seq[HOSTED_DATA_COMMITMENTS] =
+  def findState(remoteLCSS: LastCrossSignedState): Seq[HostedCommitments] =
     for {
       previousIndex <- futureUpdates.indices drop 1
       previousHC = copy(futureUpdates = futureUpdates take previousIndex)
       if previousHC.nextLocalUnsignedLCSS(remoteLCSS.blockDay).isEven(remoteLCSS)
     } yield previousHC
 
-  def sendAdd(cmd: CMD_ADD_HTLC, blockHeight: Long): Either[ChannelException, (HOSTED_DATA_COMMITMENTS, UpdateAddHtlc)] = {
+  def sendAdd(cmd: CMD_ADD_HTLC, blockHeight: Long): Either[ChannelException, (HostedCommitments, UpdateAddHtlc)] = {
     val minExpiry = Channel.MIN_CLTV_EXPIRY_DELTA.toCltvExpiry(blockHeight)
     if (cmd.cltvExpiry < minExpiry) {
       return Left(ExpiryTooSmall(channelId, minimum = minExpiry, actual = cmd.cltvExpiry, blockCount = blockHeight))
@@ -140,7 +176,7 @@ case class HOSTED_DATA_COMMITMENTS(localNodeId: PublicKey,
     Right(commits1, add)
   }
 
-  def receiveAdd(add: UpdateAddHtlc): Try[HOSTED_DATA_COMMITMENTS] = Try {
+  def receiveAdd(add: UpdateAddHtlc): Try[HostedCommitments] = Try {
     if (add.id != nextTotalRemote + 1) {
       throw UnexpectedHtlcId(channelId, expected = nextTotalRemote + 1, actual = add.id)
     }
@@ -169,7 +205,7 @@ case class HOSTED_DATA_COMMITMENTS(localNodeId: PublicKey,
     commits1
   }
 
-  def sendFulfill(cmd: CMD_FULFILL_HTLC): Try[(HOSTED_DATA_COMMITMENTS, UpdateFulfillHtlc)] =
+  def sendFulfill(cmd: CMD_FULFILL_HTLC): Try[(HostedCommitments, UpdateFulfillHtlc)] =
     getIncomingHtlcCrossSigned(cmd.id) match {
       case Some(add) if add.paymentHash == Crypto.sha256(cmd.r) =>
         val fulfill = UpdateFulfillHtlc(channelId, cmd.id, cmd.r)
@@ -178,23 +214,23 @@ case class HOSTED_DATA_COMMITMENTS(localNodeId: PublicKey,
       case None => Failure(UnknownHtlcId(channelId, cmd.id))
     }
 
-  def receiveFulfill(fulfill: UpdateFulfillHtlc): Try[(HOSTED_DATA_COMMITMENTS, Origin, UpdateAddHtlc)] =
-    // Technically peer may send a preimage any moment, even if new LCSS has not been reached yet so do our best and always resolve on getting it
+  def receiveFulfill(fulfill: UpdateFulfillHtlc): Try[(HostedCommitments, Origin, UpdateAddHtlc)] =
+    // Technically peer may send a preimage at any moment, even if new LCSS has not been reached yet so do our best and always resolve on getting it
     nextLocalSpec.findOutgoingHtlcById(fulfill.id) match {
-      // We do not accept fulfills after payment to peer has been failed (probably due to timeout so we failed in upstream already)
-      case _ if failedToPeerHtlcLeftoverIds.contains(fulfill.id) || fulfilledByPeerHtlcLeftoverIds.contains(fulfill.id) => throw UnknownHtlcId(channelId, fulfill.id)
+      // We do not accept fulfills after payment to peer has been failed (due to timeout so we failed in upstream already)
+      case _ if timedOutToPeerHtlcLeftOverIds.contains(fulfill.id) || fulfilledByPeerHtlcLeftOverIds.contains(fulfill.id) => throw UnknownHtlcId(channelId, fulfill.id)
       case Some(htlc) if htlc.add.paymentHash == Crypto.sha256(fulfill.paymentPreimage) => Try((addProposal(Right(fulfill)), originChannels(fulfill.id), htlc.add))
       case Some(_) => Failure(InvalidHtlcPreimage(channelId, fulfill.id))
       case None => Failure(UnknownHtlcId(channelId, fulfill.id))
     }
 
-  def sendFail(cmd: CMD_FAIL_HTLC, nodeSecret: PrivateKey): Try[(HOSTED_DATA_COMMITMENTS, UpdateFailHtlc)] =
+  def sendFail(cmd: CMD_FAIL_HTLC, nodeSecret: PrivateKey): Try[(HostedCommitments, UpdateFailHtlc)] =
     getIncomingHtlcCrossSigned(cmd.id) match {
       case Some(add) => OutgoingPacket.buildHtlcFailure(nodeSecret, cmd, add).map(updateFail => (addProposal(Left(updateFail)), updateFail))
       case None => Failure(UnknownHtlcId(channelId, cmd.id))
     }
 
-  def sendFailMalformed(cmd: CMD_FAIL_MALFORMED_HTLC): Try[(HOSTED_DATA_COMMITMENTS, UpdateFailMalformedHtlc)] = {
+  def sendFailMalformed(cmd: CMD_FAIL_MALFORMED_HTLC): Try[(HostedCommitments, UpdateFailMalformedHtlc)] = {
     // BADONION bit must be set in failure_code
     if ((cmd.failureCode & FailureMessageCodecs.BADONION) == 0) {
       Failure(InvalidFailureCode(channelId))
@@ -208,14 +244,14 @@ case class HOSTED_DATA_COMMITMENTS(localNodeId: PublicKey,
     }
   }
 
-  def receiveFail(fail: UpdateFailHtlc): Try[(HOSTED_DATA_COMMITMENTS, Origin, UpdateAddHtlc)] =
+  def receiveFail(fail: UpdateFailHtlc): Try[(HostedCommitments, Origin, UpdateAddHtlc)] =
     // Unlike Fulfill for Fail/FailMalformed here we make sure they fail our cross-signed outgoing payment
     getOutgoingHtlcCrossSigned(fail.id) match {
       case Some(add) => Try((addProposal(Right(fail)), originChannels(fail.id), add))
       case None => Failure(UnknownHtlcId(channelId, fail.id))
     }
 
-  def receiveFailMalformed(fail: UpdateFailMalformedHtlc): Try[(HOSTED_DATA_COMMITMENTS, Origin, UpdateAddHtlc)] = {
+  def receiveFailMalformed(fail: UpdateFailMalformedHtlc): Try[(HostedCommitments, Origin, UpdateAddHtlc)] = {
     // A receiving node MUST fail the channel if the BADONION bit in failure_code is not set for update_fail_malformed_htlc.
     if ((fail.failureCode & FailureMessageCodecs.BADONION) == 0) {
       Failure(InvalidFailureCode(channelId))
@@ -228,7 +264,6 @@ case class HOSTED_DATA_COMMITMENTS(localNodeId: PublicKey,
   }
 }
 
-case class HostedState(channelId: ByteVector32,
-                       nextLocalUpdates: List[UpdateMessage],
-                       nextRemoteUpdates: List[UpdateMessage],
-                       lastCrossSignedState: LastCrossSignedState)
+case class HostedState(channelId: ByteVector32, nextLocalUpdates: List[UpdateMessage], nextRemoteUpdates: List[UpdateMessage], lastCrossSignedState: LastCrossSignedState)
+
+case class RemoteHostedStateResult(state: HostedState, isLocalSigValid: Boolean)

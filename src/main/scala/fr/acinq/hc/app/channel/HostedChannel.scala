@@ -6,6 +6,6 @@ import fr.acinq.eclair.Kit
 import akka.actor.Actor
 
 
-class HostedChannel(kit: Kit, vals: Vals, remoteNodeId: PublicKey) extends Actor {
+class HostedChannel(kit: Kit, vals: Vals) extends Actor {
   override def receive: Receive = ???
 }

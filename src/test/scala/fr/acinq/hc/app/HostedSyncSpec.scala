@@ -11,7 +11,7 @@ import fr.acinq.bitcoin.{Block, ByteVector64, Crypto}
 import fr.acinq.eclair.channel.Channel.OutgoingMessage
 import fr.acinq.eclair.io.{ConnectionInfo, PeerConnected, UnknownMessageReceived}
 import fr.acinq.eclair.router.Router.Data
-import fr.acinq.eclair.router.{Announcements, BaseRouterSpec, SyncProgress}
+import fr.acinq.eclair.router.{Announcements, BaseRouterSpec, Router, SyncProgress}
 import fr.acinq.eclair.wire.UnknownMessage
 import fr.acinq.hc.app.dbo.HostedUpdatesDb
 import fr.acinq.hc.app.network.HostedSync.{GotAllSyncFrom, SendSyncTo, TickSendGossip}
@@ -51,7 +51,7 @@ class HostedSyncSpec extends BaseRouterSpec {
     syncActor ! HostedSync.PeersToSyncFrom(List(createPeer(randomKey.publicKey)._3)) // Not seen in graph
     awaitCond(syncActor.stateName == WAIT_FOR_PHC_SYNC)
 
-    peerProvider.send(fixture.router, Symbol("data"))
+    peerProvider.send(fixture.router, Router.GetRouterData)
     val routerData = peerProvider.expectMsgType[Data]
 
     val (peer, _, wrap) = createPeer(routerData.nodes.keys.head)

@@ -12,7 +12,7 @@ trait HostedChannelMessage
 
 case class InvokeHostedChannel(chainHash: ByteVector32,
                                refundScriptPubKey: ByteVector,
-                               secret: ByteVector = ByteVector.empty) extends HostedChannelMessage {
+                               secret: ByteVector) extends HostedChannelMessage {
   val finalSecret: ByteVector = secret.take(64)
 }
 

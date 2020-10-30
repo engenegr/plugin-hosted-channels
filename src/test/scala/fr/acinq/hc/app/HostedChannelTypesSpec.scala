@@ -6,16 +6,15 @@ import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair._
 import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto}
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
-import fr.acinq.eclair.channel.{CMD_ADD_HTLC, CMD_FULFILL_HTLC, ChannelVersion, ExpiryTooSmall, HtlcValueTooHighInFlight, HtlcValueTooSmall, InsufficientFunds, TooManyAcceptedHtlcs}
+import fr.acinq.eclair.channel._
 import fr.acinq.eclair.payment.OutgoingPacket
 import fr.acinq.eclair.router.Router.ChannelHop
 import fr.acinq.eclair.transactions.CommitmentSpec
 import fr.acinq.eclair.wire.Onion.FinalLegacyPayload
 import fr.acinq.eclair.wire.{ChannelUpdate, UpdateAddHtlc, UpdateFulfillHtlc}
-import fr.acinq.hc.app.channel.HOSTED_DATA_COMMITMENTS
+import fr.acinq.hc.app.channel.HostedCommitments
 import org.scalatest.funsuite.AnyFunSuite
-
-import scala.util.{Failure, Success}
+import scala.util.Success
 
 
 class HostedChannelTypesSpec extends AnyFunSuite {
@@ -89,9 +88,8 @@ class HostedChannelTypesSpec extends AnyFunSuite {
     (payment_preimage, cmd)
   }
 
-  private val hdc = HOSTED_DATA_COMMITMENTS(randomKey.publicKey, randomKey.publicKey, ChannelVersion.ZEROES, lcss1, futureUpdates = Nil, localCommitmentSpec, originChannels = Map.empty,
-    isHost = true, channelUpdate, localError = None, remoteError = None, failedToPeerHtlcLeftoverIds = Set.empty, fulfilledByPeerHtlcLeftoverIds = Set.empty, overrideProposal = None,
-    refundPendingInfo = None, refundCompleteInfo = None, announceChannel = false)
+  private val hdc = HostedCommitments(isHost = true, randomKey.publicKey, randomKey.publicKey, channelId, localCommitmentSpec, originChannels = Map.empty,
+    lcss1, futureUpdates = Nil, timedOutToPeerHtlcLeftOverIds = Set.empty, fulfilledByPeerHtlcLeftOverIds = Set.empty, announceChannel = true)
 
   test("Processing HTLCs") {
     val (_, cmdAdd1) = makeCmdAdd(5.msat, randomKey.publicKey, currentBlockHeight = 100)

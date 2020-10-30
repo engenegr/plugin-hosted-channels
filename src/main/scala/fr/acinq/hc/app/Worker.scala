@@ -1,23 +1,20 @@
 package fr.acinq.hc.app
 
 import fr.acinq.hc.app.HC._
-
 import scala.concurrent.duration._
 import fr.acinq.hc.app.network.{HostedSync, PHC}
-import akka.actor.{Actor, ActorRef, OneForOneStrategy, Props, Terminated}
 import fr.acinq.hc.app.dbo.{HostedChannelsDb, HostedUpdatesDb}
+import fr.acinq.hc.app.channel.{HC_DATA_ESTABLISHED, HostedChannel}
+import akka.actor.{Actor, ActorRef, OneForOneStrategy, Props, Terminated}
 import fr.acinq.eclair.io.{PeerConnected, PeerDisconnected, UnknownMessageReceived}
-
 import scala.concurrent.ExecutionContext.Implicits.global
 import akka.actor.SupervisorStrategy.Resume
 import com.google.common.collect.HashBiMap
-import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.bitcoin.Crypto.PublicKey
-
+import fr.acinq.bitcoin.ByteVector32
 import scala.collection.mutable
 import grizzled.slf4j.Logging
 import fr.acinq.eclair.Kit
-import fr.acinq.hc.app.channel.{HOSTED_DATA_COMMITMENTS, HostedChannel}
 import scodec.Attempt
 
 
@@ -91,22 +88,22 @@ class Worker(kit: Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChannelsDb,
       Resume
     }
 
-  def spawnNewChannel(channelId: ByteVector32, remoteNodeId: PublicKey): ActorRef = {
-    val channel = context actorOf Props(classOf[HostedChannel], kit, vals, remoteNodeId)
+  def spawnNewChannel(channelId: ByteVector32): ActorRef = {
+    val channel = context actorOf Props(classOf[HostedChannel], kit, vals)
     inMemoryHostedChannels.put(channelId, channel)
     context.watch(channel)
     channel
   }
 
-  def restoreChannel(commits: HOSTED_DATA_COMMITMENTS): ActorRef = {
-    val channel = spawnNewChannel(commits.channelId, commits.remoteNodeId)
+  def restoreChannel(commits: HC_DATA_ESTABLISHED): ActorRef = {
+    val channel = spawnNewChannel(commits.channelId)
     channel ! commits
     channel
   }
 
-  def restoreOrSpawnNew(channelId: ByteVector32, remoteNodeId: PublicKey): ActorRef =
+  def restoreOrSpawnNew(channelId: ByteVector32): ActorRef =
     channelsDb.getChannelById(channelId).map(restoreChannel) match {
-      case None => spawnNewChannel(channelId, remoteNodeId)
+      case None => spawnNewChannel(channelId)
       case Some(channel) => channel
     }
 
