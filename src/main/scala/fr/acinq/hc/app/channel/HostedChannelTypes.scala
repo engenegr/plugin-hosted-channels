@@ -84,7 +84,12 @@ case class HostedCommitments(isHost: Boolean,
 
   val nextLocalSpec: CommitmentSpec = CommitmentSpec.reduce(localSpec, nextLocalUpdates, nextRemoteUpdates)
 
-  val currentAndNextInFlightHtlcs: Set[DirectedHtlc] = localSpec.htlcs ++ nextLocalSpec.htlcs // TODO: what about leftovers for closed channel
+  val currentAndNextInFlightHtlcs: Set[DirectedHtlc] = {
+    // Failed channel may have HTLCs in current/next commit which are resolved post-closing
+    // that is, either they time out and get failed or peer sends a preimage and they get fulfilled
+    val postCloseResolvedHtlcIds = timedOutToPeerHtlcLeftOverIds ++ fulfilledByPeerHtlcLeftOverIds
+    (localSpec.htlcs ++ nextLocalSpec.htlcs).filterNot(postCloseResolvedHtlcIds contains _.add.id)
+  }
 
   val availableBalanceForSend: MilliSatoshi = nextLocalSpec.toLocal
 
@@ -92,7 +97,7 @@ case class HostedCommitments(isHost: Boolean,
 
   val capacity: Satoshi = lastCrossSignedState.initHostedChannel.channelCapacityMsat.truncateToSatoshi
 
-  // Present incoming cross-signed HTLCs as outgoing from peer's point of view
+  // Represent incoming cross-signed HTLCs as outgoing from peer's point of view
   // no need to look at next incoming HTLCs here because they are not cross-signed so there was no relay attempt
   def htlcsRemoteCommit: Set[DirectedHtlc] = localSpec.htlcs.collect(DirectedHtlc.incoming).map(OutgoingHtlc)
 
@@ -117,18 +122,21 @@ case class HostedCommitments(isHost: Boolean,
       localSigned.add
     }
 
-  // Meaning sent from us to peer, including the ones yet unsigned by peer
-  // peer may send us fail and then disconnect, so look at both current and next
+  // Meaning sent from us to peer, including the ones yet unsigned by them
+  // look into next AND current commit since they may send fail and disconnect
   def timedOutOutgoingHtlcs(blockHeight: Long): Set[UpdateAddHtlc] =
     for {
-      OutgoingHtlc(add) <- currentAndNextInFlightHtlcs if blockHeight > add.cltvExpiry.toLong
-      if !timedOutToPeerHtlcLeftOverIds.contains(add.id) && !fulfilledByPeerHtlcLeftOverIds.contains(add.id)
+      OutgoingHtlc(add) <- currentAndNextInFlightHtlcs
+      if blockHeight > add.cltvExpiry.toLong
     } yield add
 
   def nextLocalUnsignedLCSS(blockDay: Long): LastCrossSignedState = {
-    val (incomingHtlcs, outgoingHtlcs) = nextLocalSpec.htlcs.toList.partition(DirectedHtlc.incoming.isDefinedAt)
-    LastCrossSignedState(lastCrossSignedState.refundScriptPubKey, lastCrossSignedState.initHostedChannel, blockDay, nextLocalSpec.toLocal, nextLocalSpec.toRemote,
-      nextTotalLocal, nextTotalRemote, incomingHtlcs.map(_.add), outgoingHtlcs.map(_.add), localSigOfRemote = ByteVector64.Zeroes, remoteSigOfLocal = ByteVector64.Zeroes)
+    val incomingAdds = nextLocalSpec.htlcs.collect(DirectedHtlc.incoming).toList
+    val outgoingAdds = nextLocalSpec.htlcs.collect(DirectedHtlc.outgoing).toList
+
+    LastCrossSignedState(lastCrossSignedState.refundScriptPubKey, lastCrossSignedState.initHostedChannel, blockDay,
+      nextLocalSpec.toLocal, nextLocalSpec.toRemote, nextTotalLocal, nextTotalRemote, incomingAdds, outgoingAdds,
+      localSigOfRemote = ByteVector64.Zeroes, remoteSigOfLocal = ByteVector64.Zeroes)
   }
 
   // Rebuild all messaging and state history starting from local LCSS,
