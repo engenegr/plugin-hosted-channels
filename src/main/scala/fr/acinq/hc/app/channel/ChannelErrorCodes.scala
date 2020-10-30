@@ -25,7 +25,7 @@ object ChannelErrorCodes {
     ERR_HOSTED_CHANNEL_DENIED -> "ERR_HOSTED_CHANNEL_DENIED"
   )
 
-  implicit class ErrorExt(error: Error) {
+  case class ErrorExt(error: Error) {
     lazy val tag: ByteVector = error.data.take(2)
 
     lazy val postTagData: ByteVector = error.data.drop(2)
@@ -33,7 +33,7 @@ object ChannelErrorCodes {
     def toHostedAscii: String = knownHostedCodes.get(tag) match {
       case Some(code) if postTagData.isEmpty => s"hosted-code=$code"
       case Some(code) => s"hosted-code=$code, extra=${error.copy(data = postTagData).toAscii}"
-      case false => error.toAscii
+      case None => error.toAscii
     }
   }
 }
