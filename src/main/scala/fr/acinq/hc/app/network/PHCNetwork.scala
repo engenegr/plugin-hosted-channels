@@ -52,7 +52,7 @@ object PHCNetwork {
 case class MessagesReceived(announces: Set[ChannelAnnouncement], updates: Set[ChannelUpdate] = Set.empty) {
   def add(message: ChannelAnnouncement): MessagesReceived = copy(announces = announces + message)
   def add(message: ChannelUpdate): MessagesReceived = copy(updates = updates + message)
-  def orderedMessages: Set[AnnouncementMessage] = announces ++ updates
+  lazy val orderedMessages: Set[AnnouncementMessage] = announces ++ updates
 }
 
 case class PHCNetwork(channels: Map[ShortChannelId, PHC],
