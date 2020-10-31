@@ -70,7 +70,7 @@ object Codecs {
   val replyPublicHostedChannelsEndCodec: Codec[ReplyPublicHostedChannelsEnd] =
     (bytes32 withContext "chainHash").as[ReplyPublicHostedChannelsEnd]
 
-  //
+  // HC messages which don't have channel id
 
   def decodeHostedMessage(wrap: UnknownMessage): Attempt[HostedChannelMessage] = wrap.tag match {
     case HC_INVOKE_HOSTED_CHANNEL_TAG => invokeHostedChannelCodec.decode(wrap.data.toBitVector).map(_.value)
@@ -80,8 +80,6 @@ object Codecs {
     case HC_STATE_OVERRIDE_TAG => stateOverrideCodec.decode(wrap.data.toBitVector).map(_.value)
     case HC_HOSTED_CHANNEL_BRANDING_TAG => hostedChannelBrandingCodec.decode(wrap.data.toBitVector).map(_.value)
     case HC_REFUND_PENDING_TAG => refundPendingCodec.decode(wrap.data.toBitVector).map(_.value)
-    case HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG => queryPublicHostedChannelsCodec.decode(wrap.data.toBitVector).map(_.value)
-    case HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG => replyPublicHostedChannelsEndCodec.decode(wrap.data.toBitVector).map(_.value)
   }
 
   def toUnknownHostedMessage(message: HostedChannelMessage): UnknownMessage = message match {
@@ -92,11 +90,21 @@ object Codecs {
     case msg: StateOverride => UnknownMessage(HC_STATE_OVERRIDE_TAG, stateOverrideCodec.encode(msg).require.toByteVector)
     case msg: HostedChannelBranding => UnknownMessage(HC_HOSTED_CHANNEL_BRANDING_TAG, hostedChannelBrandingCodec.encode(msg).require.toByteVector)
     case msg: RefundPending => UnknownMessage(HC_REFUND_PENDING_TAG, refundPendingCodec.encode(msg).require.toByteVector)
+  }
+
+  // PHC routing messages
+
+  def decodeHostedRoutingMessage(wrap: UnknownMessage): Attempt[HostedRoutingMessage] = wrap.tag match {
+    case HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG => queryPublicHostedChannelsCodec.decode(wrap.data.toBitVector).map(_.value)
+    case HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG => replyPublicHostedChannelsEndCodec.decode(wrap.data.toBitVector).map(_.value)
+  }
+
+  def toUnknownHostedRoutingMessage(message: HostedRoutingMessage): UnknownMessage = message match {
     case msg: QueryPublicHostedChannels => UnknownMessage(HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG, queryPublicHostedChannelsCodec.encode(msg).require.toByteVector)
     case msg: ReplyPublicHostedChannelsEnd => UnknownMessage(HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG, replyPublicHostedChannelsEndCodec.encode(msg).require.toByteVector)
   }
 
-  //
+  // Normal channel messages which are also used in HC
 
   def decodeHasChanIdMessage(wrap: UnknownMessage): Attempt[HasChannelId] = wrap.tag match {
     case HC_UPDATE_ADD_HTLC_TAG => updateAddHtlcCodec.decode(wrap.data.toBitVector).map(_.value)
@@ -118,7 +126,7 @@ object Codecs {
     case msg => throw new RuntimeException(s"PLGN PHC, unacceptable chan message=${msg.getClass.toString}")
   }
 
-  //
+  // Normal gossip messages which are also used in PHC gossip
 
   def decodeAnnounceMessage(wrap: UnknownMessage): Attempt[AnnouncementMessage] = wrap.tag match {
     case PHC_ANNOUNCE_GOSSIP_TAG => LightningMessageCodecs.channelAnnouncementCodec.decode(wrap.data.toBitVector).map(_.value)

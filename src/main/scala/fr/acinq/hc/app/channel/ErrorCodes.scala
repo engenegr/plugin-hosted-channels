@@ -4,7 +4,7 @@ import fr.acinq.eclair.wire.Error
 import scodec.bits.ByteVector
 
 
-object ChannelErrorCodes {
+object ErrorCodes {
   final val ERR_HOSTED_WRONG_BLOCKDAY = ByteVector.fromValidHex("0001")
   final val ERR_HOSTED_WRONG_LOCAL_SIG = ByteVector.fromValidHex("0002")
   final val ERR_HOSTED_WRONG_REMOTE_SIG = ByteVector.fromValidHex("0003")
@@ -26,9 +26,9 @@ object ChannelErrorCodes {
   )
 
   case class ErrorExt(error: Error) {
-    lazy val tag: ByteVector = error.data.take(2)
+    val tag: ByteVector = error.data.take(2)
 
-    lazy val postTagData: ByteVector = error.data.drop(2)
+    val postTagData: ByteVector = error.data.drop(2)
 
     def toHostedAscii: String = knownHostedCodes.get(tag) match {
       case Some(code) if postTagData.isEmpty => s"hosted-code=$code"

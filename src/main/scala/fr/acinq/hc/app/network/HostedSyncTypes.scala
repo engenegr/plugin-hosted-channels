@@ -10,7 +10,7 @@ import fr.acinq.eclair.ShortChannelId
 
 sealed trait HostedSyncState
 
-case object WAIT_FOR_NORMAL_NETWORK_DATA extends HostedSyncState
+case object WAIT_FOR_ROUTER_DATA extends HostedSyncState
 
 case object WAIT_FOR_PHC_SYNC extends HostedSyncState
 

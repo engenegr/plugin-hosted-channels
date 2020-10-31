@@ -41,7 +41,7 @@ object HostedSync {
 }
 
 class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, peerProvider: ActorRef) extends FSMDiagnosticActorLogging[HostedSyncState, HostedSyncData] {
-  startWith(stateData = WaitForNormalNetworkData(updatesDb.getState), stateName = WAIT_FOR_NORMAL_NETWORK_DATA)
+  startWith(stateData = WaitForNormalNetworkData(updatesDb.getState), stateName = WAIT_FOR_ROUTER_DATA)
 
   context.system.eventStream.subscribe(channel = classOf[SyncProgress], subscriber = self)
 
@@ -71,7 +71,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
       data.copy(phcGossip = data.phcGossip.addUpdate(update, seenFrom), phcNetwork = data.phcNetwork addUpdate update)
   }
 
-  when(WAIT_FOR_NORMAL_NETWORK_DATA) {
+  when(WAIT_FOR_ROUTER_DATA) {
     case Event(SyncProgress(1D), _) =>
       kit.router ! Router.GetRouterData
       stay
@@ -150,13 +150,13 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
           (_, wrap) <- data.phcGossip.announces
           publicPeerConnectedWrap <- currentPublicPeers
           if !wrap.seenFrom.contains(publicPeerConnectedWrap.info.nodeId)
-        } publicPeerConnectedWrap sendGossipMsg wrap.announcement
+        } publicPeerConnectedWrap sendRoutingMsg wrap.announcement
 
         for {
           wrap <- allUpdates
           publicPeerConnectedWrap <- currentPublicPeers
           if !wrap.seenFrom.contains(publicPeerConnectedWrap.info.nodeId)
-        } publicPeerConnectedWrap sendGossipMsg wrap.update
+        } publicPeerConnectedWrap sendRoutingMsg wrap.update
       } onComplete {
         case Failure(err) => log.info(s"PLGN PHC, TickSendGossip, fail, error=${err.getMessage}")
         case _ => log.info(s"PLGN PHC, TickSendGossip, success, ${data.phcGossip.asString}")
@@ -174,11 +174,11 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
     case Event(SendSyncTo(wrap), data: OperationalData) =>
       if (ipAntiSpam(wrap.remoteIp) > phcConfig.maxSyncSendsPerIpPerMinute) {
         log.info(s"PLGN PHC, SendSyncTo, abuse, peer=${wrap.info.nodeId.toString}")
-        wrap sendHostedMsg ReplyPublicHostedChannelsEnd(kit.nodeParams.chainHash)
+        wrap sendHostedRoutingMsg ReplyPublicHostedChannelsEnd(kit.nodeParams.chainHash)
       } else {
         Future {
           data.phcNetwork.channels.values.flatMap(_.orderedMessages).foreach(wrap.sendUnknownMsg)
-          wrap sendHostedMsg ReplyPublicHostedChannelsEnd(kit.nodeParams.chainHash)
+          wrap sendHostedRoutingMsg ReplyPublicHostedChannelsEnd(kit.nodeParams.chainHash)
         } onComplete {
           case Failure(err) => log.info(s"PLGN PHC, SendSyncTo, fail, peer=${wrap.info.nodeId.toString} error=${err.getMessage}")
           case _ => log.info(s"PLGN PHC, SendSyncTo, success, peer=${wrap.info.nodeId.toString}")
@@ -203,7 +203,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
         case Some(publicPeerConnectedWrap) =>
           val lastSyncNodeIdOpt = Some(publicPeerConnectedWrap.info.nodeId)
           log.info(s"PLGN PHC, HostedSync, with nodeId=${publicPeerConnectedWrap.info.nodeId.toString}")
-          publicPeerConnectedWrap sendHostedMsg QueryPublicHostedChannels(kit.nodeParams.chainHash)
+          publicPeerConnectedWrap sendHostedRoutingMsg QueryPublicHostedChannels(kit.nodeParams.chainHash)
           goto(DOING_PHC_SYNC) using data.copy(lastSyncNodeId = lastSyncNodeIdOpt)
 
         case None =>
@@ -220,7 +220,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
   }
 
   onTransition {
-    case WAIT_FOR_NORMAL_NETWORK_DATA -> WAIT_FOR_PHC_SYNC =>
+    case WAIT_FOR_ROUTER_DATA -> WAIT_FOR_PHC_SYNC =>
       context.system.eventStream.unsubscribe(channel = classOf[SyncProgress], subscriber = self)
       // We always ask for full sync on startup, keep asking frequently if no PHC peer is connected yet
       startTimerWithFixedDelay(TickClearIpAntiSpam.label, TickClearIpAntiSpam, 1.minute)

@@ -8,7 +8,7 @@ import scodec.bits.ByteVector
 import java.nio.ByteOrder
 
 
-trait HostedChannelMessage
+sealed trait HostedChannelMessage
 
 case class InvokeHostedChannel(chainHash: ByteVector32,
                                refundScriptPubKey: ByteVector,
@@ -84,8 +84,8 @@ case class RefundPending(startedAt: Long) extends HostedChannelMessage
 
 // PHC
 
-trait HostedChannelRoutingMessage
+sealed trait HostedRoutingMessage
 
-case class QueryPublicHostedChannels(chainHash: ByteVector32) extends HostedChannelMessage with HostedChannelRoutingMessage
+case class QueryPublicHostedChannels(chainHash: ByteVector32) extends HostedRoutingMessage
 
-case class ReplyPublicHostedChannelsEnd(chainHash: ByteVector32) extends HostedChannelMessage with HostedChannelRoutingMessage
+case class ReplyPublicHostedChannelsEnd(chainHash: ByteVector32) extends HostedRoutingMessage

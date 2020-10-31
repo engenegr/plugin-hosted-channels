@@ -17,8 +17,6 @@ import scodec.bits.ByteVector
 
 // Commands
 
-case object CMD_HOSTED_CLEAR_IDLE_CHANNELS
-
 sealed trait HasHostedChanIdCommand {
   def channelId: ByteVector32
 }

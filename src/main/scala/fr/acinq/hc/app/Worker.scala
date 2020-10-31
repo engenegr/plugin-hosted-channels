@@ -22,11 +22,14 @@ object Worker {
   case object TickSendGossip { val label = "TickSendGossip" }
 
   case object TickClearIpAntiSpam { val label = "TickClearIpAntiSpam" }
+
+  case object TickRemoveIdleChannels { val label = "TickRemoveIdleChannels" }
 }
 
 class Worker(kit: Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChannelsDb, vals: Vals) extends Actor with Logging {
   context.system.scheduler.scheduleWithFixedDelay(10.minutes, PHC.tickStaggeredBroadcastThreshold, self, Worker.TickSendGossip)
   context.system.scheduler.scheduleWithFixedDelay(60.minutes, 60.minutes, self, Worker.TickClearIpAntiSpam)
+  context.system.scheduler.scheduleWithFixedDelay(2.days, 2.days, self, Worker.TickRemoveIdleChannels)
 
   context.system.eventStream.subscribe(channel = classOf[UnknownMessageReceived], subscriber = self)
   context.system.eventStream.subscribe(channel = classOf[PeerDisconnected], subscriber = self)
@@ -62,29 +65,33 @@ class Worker(kit: Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChannelsDb,
 
     case peerMessage: UnknownMessageReceived
       if chanIdMessageTags.contains(peerMessage.message.tag) =>
+      ???
+
+    case peerMessage: UnknownMessageReceived
+      if hostedRoutingTags.contains(peerMessage.message.tag) =>
       remoteNode2Connection.get(peerMessage.nodeId).foreach { wrap =>
-        fr.acinq.hc.app.wire.Codecs.decodeHasChanIdMessage(peerMessage.message) match {
-          case _ => // Do nothing
+        fr.acinq.hc.app.wire.Codecs.decodeHostedRoutingMessage(peerMessage.message) match {
+          case Attempt.Successful(_: QueryPublicHostedChannels) => hostedSync ! HostedSync.SendSyncTo(wrap)
+          case Attempt.Successful(_: ReplyPublicHostedChannelsEnd) => hostedSync ! HostedSync.GotAllSyncFrom(wrap)
+          case Attempt.Failure(error) => logger.info(s"PLGN HC, decode fail, tag=${peerMessage.message.tag}")
         }
       }
 
     case peerMessage: UnknownMessageReceived
       if hostedMessageTags.contains(peerMessage.message.tag) =>
-      remoteNode2Connection.get(peerMessage.nodeId).foreach { wrap =>
-        fr.acinq.hc.app.wire.Codecs.decodeHostedMessage(peerMessage.message) match {
-          case Attempt.Successful(_: QueryPublicHostedChannels) => hostedSync ! HostedSync.SendSyncTo(wrap)
-          case Attempt.Successful(_: ReplyPublicHostedChannelsEnd) => hostedSync ! HostedSync.GotAllSyncFrom(wrap)
-          case _ => // Do nothing
-        }
-      }
+      ???
 
     case Terminated(channelRef) =>
       inMemoryHostedChannels.inverse.remove(channelRef)
+
+    case Worker.TickRemoveIdleChannels =>
+      logger.info(s"PLGN HC, in-memory HC=${inMemoryHostedChannels.size}")
+      inMemoryHostedChannels.values.forEach(_ ! Worker.TickRemoveIdleChannels)
   }
 
   override def supervisorStrategy: OneForOneStrategy =
     OneForOneStrategy(-1, 5.seconds) { case error: Throwable =>
-      logger.info(s"PLGN PHC, error in child actor=${error.getMessage}")
+      logger.info(s"PLGN PHC, error in child=${error.getMessage}")
       Resume
     }
 
