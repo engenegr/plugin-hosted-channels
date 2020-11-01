@@ -7,13 +7,12 @@ import fr.acinq.hc.app.{InitHostedChannel, InvokeHostedChannel, LastCrossSignedS
 import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc, OutgoingHtlc}
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, Satoshi}
 import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
-
 import scala.util.{Failure, Success, Try}
+
 import fr.acinq.hc.app.channel.HostedCommitments.LocalOrRemoteUpdate
 import fr.acinq.eclair.payment.OutgoingPacket
 import fr.acinq.eclair.MilliSatoshi
 import scodec.bits.ByteVector
-
 
 // Commands
 

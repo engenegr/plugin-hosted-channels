@@ -11,7 +11,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import akka.actor.SupervisorStrategy.Resume
 import com.google.common.collect.HashBiMap
 import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.bitcoin.ByteVector32
+import fr.acinq.hc.app.wire.Codecs
 import scala.collection.mutable
 import grizzled.slf4j.Logging
 import fr.acinq.eclair.Kit
@@ -59,27 +59,32 @@ class Worker(kit: Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChannelsDb,
     case HostedSync.GetPeersForSync =>
       hostedSync ! HostedSync.PeersToSyncFrom(remoteNode2Connection.values.toList)
 
-    case peerMessage: UnknownMessageReceived
-      if announceTags.contains(peerMessage.message.tag) =>
+    case peerMessage: UnknownMessageReceived if announceTags.contains(peerMessage.message.tag) =>
+      // Gossip and sync PHC announcement messages are fully handled by sync actor for better performance
       hostedSync ! peerMessage
 
-    case peerMessage: UnknownMessageReceived
-      if chanIdMessageTags.contains(peerMessage.message.tag) =>
-      ???
-
-    case peerMessage: UnknownMessageReceived
-      if hostedRoutingTags.contains(peerMessage.message.tag) =>
-      remoteNode2Connection.get(peerMessage.nodeId).foreach { wrap =>
-        fr.acinq.hc.app.wire.Codecs.decodeHostedMessage(peerMessage.message) match {
-          case Attempt.Successful(_: QueryPublicHostedChannels) => hostedSync ! HostedSync.SendSyncTo(wrap)
-          case Attempt.Successful(_: ReplyPublicHostedChannelsEnd) => hostedSync ! HostedSync.GotAllSyncFrom(wrap)
-          case Attempt.Failure(error) => logger.info(s"PLGN PHC, decode fail, error=${error.message}")
-          case _ => logger.info(s"PLGN PHC, decode mismatch, tag=${peerMessage.message.tag}")
-        }
+    case peerMessage: UnknownMessageReceived if chanIdMessageTags.contains(peerMessage.message.tag) =>
+      // Messages with channel id presume a target HC exists, it must not be spawned if not actually found
+      Tuple2(Codecs decodeHasChanIdMessage peerMessage.message, inMemoryHostedChannels get peerMessage.nodeId) match {
+        case (_: Attempt.Failure, _) => logger.info(s"PLGN PHC, hasChanId decode fail, tag=${peerMessage.message.tag}, peer=${peerMessage.nodeId.toString}")
+        case (Attempt.Successful(msg), null) => restoreAndTellOrElse(peerMessage.nodeId, msg)(logger debug s"PLGN PHC, no target chan, peer=${peerMessage.nodeId.toString}")
+        case (Attempt.Successful(msg), channelRef) => channelRef ! msg
       }
 
-    case peerMessage: UnknownMessageReceived
-      if hostedMessageTags.contains(peerMessage.message.tag) =>
+    case peerMessage: UnknownMessageReceived if hostedMessageTags.contains(peerMessage.message.tag) =>
+//      remoteNode2Connection.get(peerMessage.nodeId).foreach { wrap =>
+//        if (HC_INVOKE_HOSTED_CHANNEL_TAG == peerMessage.message.tag && ipAntiSpam(wrap.remoteIp) > vals.maxNewChansPerIpPerHour) {
+//          wrap sendHasChannelIdMsg fr.acinq.eclair.wire.Error(ByteVector32.Zeroes, ErrorCodes.ERR_HOSTED_CHANNEL_DENIED)
+//          logger.info(s"PLGN PHC, new channel abuse, peer=${peerMessage.nodeId.toString}")
+//        } else {
+//          fr.acinq.hc.app.wire.Codecs.decodeHostedMessage(peerMessage.message) match {
+//            case Attempt.Successful(_: QueryPublicHostedChannels) => hostedSync ! HostedSync.SendSyncTo(wrap)
+//            case Attempt.Successful(_: ReplyPublicHostedChannelsEnd) => hostedSync ! HostedSync.GotAllSyncFrom(wrap)
+//
+//            case Attempt.Failure(error) => logger.info(s"PLGN PHC, decode fail, tag=${peerMessage.message.tag}, error=${error.message}")
+//          }
+//        }
+//      }
       ???
 
     case Terminated(channelRef) =>
@@ -96,28 +101,23 @@ class Worker(kit: Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChannelsDb,
       Resume
     }
 
-  def spawnNewChannel(remoteNodeId: PublicKey): ActorRef = {
+  def spawnChannel(nodeId: PublicKey): ActorRef = {
     val channel = context actorOf Props(classOf[HostedChannel], kit, vals)
-    inMemoryHostedChannels.put(remoteNodeId, channel)
+    inMemoryHostedChannels.put(nodeId, channel)
+    // To receive Terminated once it stops
     context.watch(channel)
     channel
   }
 
-  def restoreChannel(data: HC_DATA_ESTABLISHED): ActorRef = {
-    val channel = spawnNewChannel(data.commitments.remoteNodeId)
+  def spawnPreparedChannel(data: HC_DATA_ESTABLISHED): ActorRef = {
+    val channel = spawnChannel(data.commitments.remoteNodeId)
     channel ! data
     channel
   }
 
-  def restoreOrSpawnNew(remoteNodeId: PublicKey): ActorRef =
-    channelsDb.getChannelByRemoteNodeId(remoteNodeId).map(restoreChannel) match {
-      case None => spawnNewChannel(remoteNodeId)
-      case Some(channel) => channel
-    }
-
-  def restoreOrNotFound(remoteNodeId: PublicKey)(whenRestored: ActorRef => Unit): Unit =
-    channelsDb.getChannelByRemoteNodeId(remoteNodeId).map(restoreChannel) match {
-      case None => sender ! s"HC not found, nodeId=${remoteNodeId.toString}"
-      case Some(channel) => whenRestored(channel)
+  def restoreAndTellOrElse(nodeId: PublicKey, message: Any)(orElse: => Unit): Unit =
+    channelsDb.getChannelByRemoteNodeId(remoteNodeId = nodeId) match {
+      case Some(data) => spawnPreparedChannel(data) ! message
+      case None => orElse
     }
 }
