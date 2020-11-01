@@ -57,9 +57,9 @@ class HostedUpdatesDbSpec extends AnyFunSuite {
     Blocking.txWrite(Updates.findAnnounceDeletableCompiled.delete, Config.db)
     assert(Blocking.txRead(Updates.model.result, Config.db).nonEmpty)
 
-    Blocking.txWrite(Updates.findUpdate1stOldUpdatableCompiled(System.currentTimeMillis + PHC.staleThreshold + 1).update(None), Config.db)
+    Blocking.txWrite(Updates.findUpdate1stOldUpdatableCompiled(System.currentTimeMillis / 1000 + PHC.staleThreshold + 1).update(None), Config.db)
     assert(Blocking.txRead(Updates.model.result, Config.db).nonEmpty)
-    Blocking.txWrite(Updates.findUpdate2ndOldUpdatableCompiled(System.currentTimeMillis + PHC.staleThreshold + 1).update(None), Config.db)
+    Blocking.txWrite(Updates.findUpdate2ndOldUpdatableCompiled(System.currentTimeMillis / 1000 + PHC.staleThreshold + 1).update(None), Config.db)
     Blocking.txWrite(Updates.findAnnounceDeletableCompiled.delete, Config.db)
     assert(Blocking.txRead(Updates.model.result, Config.db).isEmpty)
   }

@@ -21,12 +21,12 @@ class HostedChannelsDbSpec extends AnyFunSuite {
 
     cdb.updateOrAddNewChannel(data) // Insert
     cdb.updateOrAddNewChannel(data) // Update
-    assert(!cdb.getChannelById(hdc.channelId).head.commitments.announceChannel)
+    assert(!cdb.getChannelByRemoteNodeId(hdc.remoteNodeId).head.commitments.announceChannel)
 
     val data1 = data.copy(commitments = hdc.copy(announceChannel = true)) // Channel becomes public
 
     cdb.updateOrAddNewChannel(data1) // Update
-    assert(cdb.getChannelById(hdc.channelId).head.commitments.announceChannel) // channelId is the same, but announce updated
+    assert(cdb.getChannelByRemoteNodeId(hdc.remoteNodeId).head.commitments.announceChannel) // channelId is the same, but announce updated
 
     val data2 = data1.copy(commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32)) // Different remote NodeId, but shortId is the same (which is theoretically possible)
 
@@ -34,11 +34,11 @@ class HostedChannelsDbSpec extends AnyFunSuite {
       def insert(data: HC_DATA_ESTABLISHED): Boolean = cdb.addNewChannel(data)
     }
 
-    assert(cdb.getChannelById(data2.channelId).isEmpty) // Such a channel could not be found
+    assert(cdb.getChannelByRemoteNodeId(data2.commitments.remoteNodeId).isEmpty) // Such a channel could not be found
     assert(Failure(DuplicateShortId) === insertOrFail.execute(data2)) // New channel could not be created because of existing shortId
 
     for (n <- 0 to 10) cdb.updateOrAddNewChannel(data1.copy(commitments = data1.commitments.copy(timedOutToPeerHtlcLeftOverIds = Set(n))))
-    assert(cdb.getChannelById(data1.commitments.channelId).get.commitments.timedOutToPeerHtlcLeftOverIds === Set(10L)) // Ten updates in a row
+    assert(cdb.getChannelByRemoteNodeId(data1.commitments.remoteNodeId).get.commitments.timedOutToPeerHtlcLeftOverIds === Set(10L)) // Ten updates in a row
   }
 
   test("Update secret") {
@@ -52,7 +52,7 @@ class HostedChannelsDbSpec extends AnyFunSuite {
 
     cdb.updateOrAddNewChannel(data1)
     assert(cdb.getChannelBySecret(secret).isEmpty)
-    assert(cdb.updateSecretById(data1.channelId, secret))
+    assert(cdb.updateSecretById(data1.commitments.remoteNodeId, secret))
     assert(cdb.getChannelBySecret(secret).get === data1)
   }
 

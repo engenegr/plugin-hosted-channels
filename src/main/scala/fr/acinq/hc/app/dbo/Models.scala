@@ -27,7 +27,7 @@ object Blocking {
   def txWrite[T](act: DBIOAction[T, NoStream, Effect.Write], db: Database): T = Await.result(db.run(act.transactionally), span)
 
   def createTablesIfNotExist(db: Database): Unit = {
-    val tables = Seq(Channels.model).map(_.schema.createIfNotExists)
+    val tables = Seq(Channels.model, Updates.model).map(_.schema.createIfNotExists)
     Await.result(db.run(DBIO.sequence(tables).transactionally), span)
   }
 }
@@ -40,15 +40,15 @@ object Channels {
   type DbType = (Long, ByteArray, Long, Int, Boolean, CompleteRefund, PendingRefund, Long, Long, ByteArray, ByteArray)
 
   val insertCompiled = Compiled {
-    for (x <- model) yield (x.channelId, x.shortChannelId, x.inFlightHtlcs, x.announceChannel, x.completeRefund, x.pendingRefund, x.lastBlockDay, x.createdAt, x.data, x.secret)
+    for (x <- model) yield (x.remoteNodeId, x.shortChannelId, x.inFlightHtlcs, x.announceChannel, x.completeRefund, x.pendingRefund, x.lastBlockDay, x.createdAt, x.data, x.secret)
   }
 
-  val findByChannelIdUpdatableCompiled = Compiled {
-    (channelId: RepByteArray) => for (x <- model if x.channelId === channelId) yield (x.inFlightHtlcs, x.announceChannel, x.completeRefund, x.pendingRefund, x.lastBlockDay, x.data)
+  val findByRemoteNodeIdUpdatableCompiled = Compiled {
+    (nodeId: RepByteArray) => for (x <- model if x.remoteNodeId === nodeId) yield (x.inFlightHtlcs, x.announceChannel, x.completeRefund, x.pendingRefund, x.lastBlockDay, x.data)
   }
 
-  val findSecretUpdatableByIdCompiled = Compiled {
-    (channelId: RepByteArray) => for (x <- model if x.channelId === channelId) yield x.secret
+  val findSecretUpdatableByRemoteNodeIdCompiled = Compiled {
+    (nodeId: RepByteArray) => for (x <- model if x.remoteNodeId === nodeId) yield x.secret
   }
 
   val findBySecretCompiled = Compiled {
@@ -67,9 +67,9 @@ object Channels {
 class Channels(tag: Tag) extends Table[Channels.DbType](tag, Channels.tableName) {
   def id: Rep[Long] = column[Long]("id", O.PrimaryKey, O.AutoInc)
   // These are not updatable
-  def channelId: Rep[ByteArray] = column[ByteArray]("channel_id", O.Unique)
+  def remoteNodeId: Rep[ByteArray] = column[ByteArray]("remote_node_id", O.Unique)
   def shortChannelId: Rep[Long] = column[Long]("short_channel_id", O.Unique)
-  def createdAt: Rep[Long] = column[Long]("created_at")
+  def createdAt: Rep[Long] = column[Long]("created_at_msec")
   // These get derived from data when updating
   def inFlightHtlcs: Rep[Int] = column[Int]("in_flight_htlcs")
   def announceChannel: Rep[Boolean] = column[Boolean]("announce_channel")
@@ -84,7 +84,7 @@ class Channels(tag: Tag) extends Table[Channels.DbType](tag, Channels.tableName)
   def idx2: Index = index("channels__in_flight_htlcs__idx", inFlightHtlcs, unique = false) // Select these on startup
   def idx3: Index = index("channels__secret__idx", secret, unique = false) // Find these on user request
 
-  def * = (id, channelId, shortChannelId, inFlightHtlcs, announceChannel, completeRefund, pendingRefund, lastBlockDay, createdAt, data, secret)
+  def * = (id, remoteNodeId, shortChannelId, inFlightHtlcs, announceChannel, completeRefund, pendingRefund, lastBlockDay, createdAt, data, secret)
 }
 
 
@@ -107,12 +107,12 @@ object Updates {
   }
 
   def update1st(shortChannelId: Long, update: String, updateStamp: Long): SqlAction[Int, NoStream, Effect] = sqlu"""
-    UPDATE #${Updates.tableName} SET channel_update_1_opt = $update, update_1_stamp = $updateStamp
+    UPDATE #${Updates.tableName} SET channel_update_1_opt = $update, update_1_stamp_sec = $updateStamp
     WHERE short_channel_id = $shortChannelId
   """
 
   def update2nd(shortChannelId: Long, update: String, updateStamp: Long): SqlAction[Int, NoStream, Effect] = sqlu"""
-    UPDATE #${Updates.tableName} SET channel_update_2_opt = $update, update_2_stamp = $updateStamp
+    UPDATE #${Updates.tableName} SET channel_update_2_opt = $update, update_2_stamp_sec = $updateStamp
     WHERE short_channel_id = $shortChannelId
   """
 
@@ -128,11 +128,11 @@ class Updates(tag: Tag) extends Table[Updates.DbType](tag, Updates.tableName) {
   def channelAnnounce: Rep[String] = column[String]("channel_announce")
   def channelUpdate1: Rep[OptionalUpdate] = column[OptionalUpdate]("channel_update_1_opt", O Default None)
   def channelUpdate2: Rep[OptionalUpdate] = column[OptionalUpdate]("channel_update_2_opt", O Default None)
-  def update1Stamp: Rep[Long] = column[Long]("update_1_stamp", O Default 0L)
-  def update2Stamp: Rep[Long] = column[Long]("update_2_stamp", O Default 0L)
+  def update1Stamp: Rep[Long] = column[Long]("update_1_stamp_sec", O Default 0L)
+  def update2Stamp: Rep[Long] = column[Long]("update_2_stamp_sec", O Default 0L)
 
-  def idx1: Index = index("updates__update_1_stamp__idx", update1Stamp, unique = false)
-  def idx2: Index = index("updates__update_2_stamp__idx", update2Stamp, unique = false)
+  def idx1: Index = index("updates__update_1_stamp_sec__idx", update1Stamp, unique = false)
+  def idx2: Index = index("updates__update_2_stamp_sec__idx", update2Stamp, unique = false)
   def idx3: Index = index("updates__channel_update_1_opt__channel_update_2_opt__idx", (channelUpdate1, channelUpdate2), unique = false)
 
   def * = (id, shortChannelId, channelAnnounce, channelUpdate1, channelUpdate2, update1Stamp, update2Stamp)

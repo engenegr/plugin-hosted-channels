@@ -37,9 +37,9 @@ class Worker(kit: Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChannelsDb,
 
   val remoteNode2Connection = mutable.Map.empty[PublicKey, PeerConnectedWrap]
 
-  val ipAntiSpam: mutable.Map[Array[Byte], Int] = mutable.Map.empty withDefaultValue 0
+  val inMemoryHostedChannels: HashBiMap[PublicKey, ActorRef] = HashBiMap.create[PublicKey, ActorRef]
 
-  val inMemoryHostedChannels: HashBiMap[ByteVector32, ActorRef] = HashBiMap.create[ByteVector32, ActorRef]
+  val ipAntiSpam: mutable.Map[Array[Byte], Int] = mutable.Map.empty withDefaultValue 0
 
   val hostedSync: ActorRef = context actorOf Props(classOf[HostedSync], kit, updatesDb, vals.phcConfig, self)
 
@@ -96,28 +96,28 @@ class Worker(kit: Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChannelsDb,
       Resume
     }
 
-  def spawnNewChannel(channelId: ByteVector32): ActorRef = {
+  def spawnNewChannel(remoteNodeId: PublicKey): ActorRef = {
     val channel = context actorOf Props(classOf[HostedChannel], kit, vals)
-    inMemoryHostedChannels.put(channelId, channel)
+    inMemoryHostedChannels.put(remoteNodeId, channel)
     context.watch(channel)
     channel
   }
 
-  def restoreChannel(commits: HC_DATA_ESTABLISHED): ActorRef = {
-    val channel = spawnNewChannel(commits.channelId)
-    channel ! commits
+  def restoreChannel(data: HC_DATA_ESTABLISHED): ActorRef = {
+    val channel = spawnNewChannel(data.commitments.remoteNodeId)
+    channel ! data
     channel
   }
 
-  def restoreOrSpawnNew(channelId: ByteVector32): ActorRef =
-    channelsDb.getChannelById(channelId).map(restoreChannel) match {
-      case None => spawnNewChannel(channelId)
+  def restoreOrSpawnNew(remoteNodeId: PublicKey): ActorRef =
+    channelsDb.getChannelByRemoteNodeId(remoteNodeId).map(restoreChannel) match {
+      case None => spawnNewChannel(remoteNodeId)
       case Some(channel) => channel
     }
 
-  def restoreOrNotFound(channelId: ByteVector32)(whenRestored: ActorRef => Unit): Unit =
-    channelsDb.getChannelById(channelId).map(restoreChannel) match {
-      case None => sender ! s"HC not found, channelId=$channelId"
+  def restoreOrNotFound(remoteNodeId: PublicKey)(whenRestored: ActorRef => Unit): Unit =
+    channelsDb.getChannelByRemoteNodeId(remoteNodeId).map(restoreChannel) match {
+      case None => sender ! s"HC not found, nodeId=${remoteNodeId.toString}"
       case Some(channel) => whenRestored(channel)
     }
 }
