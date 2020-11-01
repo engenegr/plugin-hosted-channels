@@ -86,13 +86,13 @@ case class BrandingData(logo: String, color: Color) {
   }
 }
 
-case class PHCConfig(capacityMsat: Long, maxPerNode: Long, minNormalChans: Long, maxSyncSendsPerIpPerMinute: Int) {
-  val capacity: MilliSatoshi = MilliSatoshi(capacityMsat)
+case class PHCConfig(maxPerNode: Long, minNormalChans: Long, maxSyncSendsPerIpPerMinute: Int) {
+  val capacity: MilliSatoshi = MilliSatoshi(100000000000000L) // Always exactly 1000 BTC
 }
 
 case class Vals(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDeltaBlocks: Int, onChainRefundThresholdSat: Long,
-                liabilityDeadlineBlockdays: Int, defaultCapacityMsat: Long, defaultClientBalanceMsat: Long, maxHtlcValueInFlightMsat: Long,
-                htlcMinimumMsat: Long, maxAcceptedHtlcs: Int, maxNewChansPerIpPerHour: Int, branding: BrandingData, phcConfig: PHCConfig) {
+                liabilityDeadlineBlockdays: Int, defaultCapacityMsat: Long, maxHtlcValueInFlightMsat: Long, htlcMinimumMsat: Long,
+                maxAcceptedHtlcs: Int, maxNewChansPerIpPerHour: Int, branding: BrandingData, phcConfig: PHCConfig) {
 
   val feeBase: MilliSatoshi = MilliSatoshi(feeBaseMsat)
 
@@ -102,7 +102,7 @@ case class Vals(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDeltaBlo
 
   val defaultCapacity: MilliSatoshi = MilliSatoshi(defaultCapacityMsat)
 
-  val defaultClientBalance: MilliSatoshi = MilliSatoshi(defaultClientBalanceMsat)
+  val defaultClientBalance: MilliSatoshi = MilliSatoshi(0L)
 
   val maxHtlcValueInFlight: MilliSatoshi = MilliSatoshi(maxHtlcValueInFlightMsat)
 
