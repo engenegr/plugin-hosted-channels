@@ -54,9 +54,11 @@ object HostedWireSpec {
 
   val error: Error = Error(ByteVector32.Zeroes, ByteVector.fromValidHex("0000"))
 
+  val localNodeId = randomKey.publicKey
+
   val hdc: HostedCommitments = HostedCommitments(
     isHost = true,
-    randomKey.publicKey,
+    localNodeId,
     randomKey.publicKey,
     channelId = randomBytes32,
     localSpec = cs,
