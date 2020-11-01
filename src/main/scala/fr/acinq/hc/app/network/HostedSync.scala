@@ -174,11 +174,11 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
     case Event(SendSyncTo(wrap), data: OperationalData) =>
       if (ipAntiSpam(wrap.remoteIp) > phcConfig.maxSyncSendsPerIpPerMinute) {
         log.info(s"PLGN PHC, SendSyncTo, abuse, peer=${wrap.info.nodeId.toString}")
-        wrap sendHostedRoutingMsg ReplyPublicHostedChannelsEnd(kit.nodeParams.chainHash)
+        wrap sendHostedChannelMsg ReplyPublicHostedChannelsEnd(kit.nodeParams.chainHash)
       } else {
         Future {
           data.phcNetwork.channels.values.flatMap(_.orderedMessages).foreach(wrap.sendUnknownMsg)
-          wrap sendHostedRoutingMsg ReplyPublicHostedChannelsEnd(kit.nodeParams.chainHash)
+          wrap sendHostedChannelMsg ReplyPublicHostedChannelsEnd(kit.nodeParams.chainHash)
         } onComplete {
           case Failure(err) => log.info(s"PLGN PHC, SendSyncTo, fail, peer=${wrap.info.nodeId.toString} error=${err.getMessage}")
           case _ => log.info(s"PLGN PHC, SendSyncTo, success, peer=${wrap.info.nodeId.toString}")
@@ -203,7 +203,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
         case Some(publicPeerConnectedWrap) =>
           val lastSyncNodeIdOpt = Some(publicPeerConnectedWrap.info.nodeId)
           log.info(s"PLGN PHC, HostedSync, with nodeId=${publicPeerConnectedWrap.info.nodeId.toString}")
-          publicPeerConnectedWrap sendHostedRoutingMsg QueryPublicHostedChannels(kit.nodeParams.chainHash)
+          publicPeerConnectedWrap sendHostedChannelMsg QueryPublicHostedChannels(kit.nodeParams.chainHash)
           goto(DOING_PHC_SYNC) using data.copy(lastSyncNodeId = lastSyncNodeIdOpt)
 
         case None =>

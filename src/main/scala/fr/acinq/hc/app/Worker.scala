@@ -70,10 +70,11 @@ class Worker(kit: Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChannelsDb,
     case peerMessage: UnknownMessageReceived
       if hostedRoutingTags.contains(peerMessage.message.tag) =>
       remoteNode2Connection.get(peerMessage.nodeId).foreach { wrap =>
-        fr.acinq.hc.app.wire.Codecs.decodeHostedRoutingMessage(peerMessage.message) match {
+        fr.acinq.hc.app.wire.Codecs.decodeHostedMessage(peerMessage.message) match {
           case Attempt.Successful(_: QueryPublicHostedChannels) => hostedSync ! HostedSync.SendSyncTo(wrap)
           case Attempt.Successful(_: ReplyPublicHostedChannelsEnd) => hostedSync ! HostedSync.GotAllSyncFrom(wrap)
-          case Attempt.Failure(error) => logger.info(s"PLGN HC, decode fail, tag=${peerMessage.message.tag}")
+          case Attempt.Failure(error) => logger.info(s"PLGN PHC, decode fail, error=${error.message}")
+          case _ => logger.info(s"PLGN PHC, decode mismatch, tag=${peerMessage.message.tag}")
         }
       }
 
@@ -85,7 +86,7 @@ class Worker(kit: Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChannelsDb,
       inMemoryHostedChannels.inverse.remove(channelRef)
 
     case Worker.TickRemoveIdleChannels =>
-      logger.info(s"PLGN HC, in-memory HC=${inMemoryHostedChannels.size}")
+      logger.info(s"PLGN PHC, in-memory HC=${inMemoryHostedChannels.size}")
       inMemoryHostedChannels.values.forEach(_ ! Worker.TickRemoveIdleChannels)
   }
 

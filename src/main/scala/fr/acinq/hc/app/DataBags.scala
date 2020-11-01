@@ -84,8 +84,6 @@ case class RefundPending(startedAt: Long) extends HostedChannelMessage
 
 // PHC
 
-sealed trait HostedRoutingMessage
+case class QueryPublicHostedChannels(chainHash: ByteVector32) extends HostedChannelMessage
 
-case class QueryPublicHostedChannels(chainHash: ByteVector32) extends HostedRoutingMessage
-
-case class ReplyPublicHostedChannelsEnd(chainHash: ByteVector32) extends HostedRoutingMessage
+case class ReplyPublicHostedChannelsEnd(chainHash: ByteVector32) extends HostedChannelMessage

@@ -8,7 +8,8 @@ import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.channel.{Channel, Origin}
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.transactions.{CommitmentSpec, IncomingHtlc, OutgoingHtlc}
-import fr.acinq.eclair.wire.{AnnouncementSignatures, ChannelUpdate, Error, UpdateAddHtlc, UpdateFailHtlc}
+import fr.acinq.eclair.wire.{AnnouncementSignatures, ChannelUpdate, Error, LightningMessageCodecs, UnknownMessage, UpdateAddHtlc, UpdateFailHtlc}
+import fr.acinq.hc.app.HC.HC_UPDATE_ADD_HTLC_TAG
 import fr.acinq.hc.app.channel.{HC_DATA_ESTABLISHED, HostedCommitments, HostedState}
 import fr.acinq.hc.app.wire._
 import org.scalatest.funsuite.AnyFunSuite

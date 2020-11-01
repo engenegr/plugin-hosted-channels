@@ -57,7 +57,6 @@ object Tools {
 case class PeerConnectedWrap(info: PeerConnected) { me =>
   def sendHasChannelIdMsg(message: HasChannelId): Unit = me sendUnknownMsg Codecs.toUnknownHasChanIdMessage(message)
   def sendHostedChannelMsg(message: HostedChannelMessage): Unit = me sendUnknownMsg Codecs.toUnknownHostedMessage(message)
-  def sendHostedRoutingMsg(message: HostedRoutingMessage): Unit = me sendUnknownMsg Codecs.toUnknownHostedRoutingMessage(message)
   def sendRoutingMsg(message: AnnouncementMessage): Unit = me sendUnknownMsg Codecs.toUnknownAnnounceMessage(message, isGossip = true)
   def sendUnknownMsg(message: UnknownMessage): Unit = info.peer ! OutgoingMessage(message, info.connectionInfo.peerConnection)
   lazy val remoteIp: Array[Byte] = info.connectionInfo.address.getAddress.getAddress
