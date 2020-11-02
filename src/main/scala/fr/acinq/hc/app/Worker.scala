@@ -28,7 +28,7 @@ object Worker {
 
   val hostedChanDenied: eclair.wire.Error = eclair.wire.Error(ByteVector32.Zeroes, ErrorCodes.ERR_HOSTED_CHANNEL_DENIED)
 
-  val noChanFound: FSM.Failure = FSM.Failure("HC with given remote peer is not found")
+  val noChanFound: FSM.Failure = FSM.Failure("HC not found")
 }
 
 class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChannelsDb, vals: Vals) extends Actor with Logging {

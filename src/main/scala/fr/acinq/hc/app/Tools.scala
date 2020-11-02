@@ -5,12 +5,12 @@ import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol, Satoshi}
 import fr.acinq.eclair.wire.{AnnouncementMessage, Color, HasChannelId, UnknownMessage}
 import fr.acinq.eclair.{CltvExpiryDelta, MilliSatoshi, ShortChannelId}
-import com.typesafe.config.{Config => Configuration}
 import java.io.{ByteArrayInputStream, File}
 import java.nio.file.{Files, Paths}
 
 import fr.acinq.eclair.channel.Channel.OutgoingMessage
 import net.ceedubs.ficus.readers.ValueReader
+import fr.acinq.bitcoin.Crypto.PublicKey
 import com.typesafe.config.ConfigFactory
 import org.postgresql.util.PSQLException
 import fr.acinq.eclair.io.PeerConnected
@@ -23,7 +23,7 @@ import scala.util.Try
 
 object Tools {
   def none: PartialFunction[Any, Unit] = { case _ => }
-  def toMapBy[K, V](items: Iterable[V], mapper: V => K): Map[K, V] = items.map(item => mapper(item) -> item).toMap
+  def toMapBy[K, V](items: Iterable[V])(mapper: V => K): Map[K, V] = items.map(item => mapper(item) -> item).toMap
   case object DuplicateShortId extends Throwable("Duplicate ShortId is not allowed here")
 
   abstract class DuplicateHandler[T] { me =>
@@ -65,7 +65,7 @@ case class PeerConnectedWrap(info: PeerConnected) { me =>
 
 
 object Config {
-  val config: Configuration = ConfigFactory parseFile new File(s"${System getProperty "user.dir"}/src/main/resources", "hc.conf")
+  private val config = ConfigFactory parseFile new File(s"${System getProperty "user.dir"}/src/main/resources", "hc.conf")
 
   val db: PostgresProfile.backend.Database = PostgresProfile.backend.Database.forConfig("config.relationalDb", config)
 
@@ -77,23 +77,9 @@ object Config {
 }
 
 
-case class BrandingData(logo: String, color: Color) {
-  var brandingMessageOpt: Option[HostedChannelBranding] = None
-
-  Try {
-    val pngBytes = ByteVector view Files.readAllBytes(Paths get logo)
-    val message = HostedChannelBranding(color, pngBytes)
-    brandingMessageOpt = Some(message)
-  }
-}
-
-case class PHCConfig(maxPerNode: Long, minNormalChans: Long, maxSyncSendsPerIpPerMinute: Int) {
-  val capacity: MilliSatoshi = MilliSatoshi(100000000000000L) // Always exactly 1000 BTC
-}
-
-case class Vals(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDeltaBlocks: Int, onChainRefundThresholdSat: Long,
-                liabilityDeadlineBlockdays: Int, defaultCapacityMsat: Long, maxHtlcValueInFlightMsat: Long, htlcMinimumMsat: Long,
-                maxAcceptedHtlcs: Int, maxNewChansPerIpPerHour: Int, branding: BrandingData, phcConfig: PHCConfig) {
+case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDeltaBlocks: Int, onChainRefundThresholdSat: Long,
+                    liabilityDeadlineBlockdays: Int, defaultCapacityMsat: Long, maxHtlcValueInFlightMsat: Long,
+                    htlcMinimumMsat: Long, maxAcceptedHtlcs: Int) {
 
   val feeBase: MilliSatoshi = MilliSatoshi(feeBaseMsat)
 
@@ -108,4 +94,29 @@ case class Vals(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDeltaBlo
   val maxHtlcValueInFlight: MilliSatoshi = MilliSatoshi(maxHtlcValueInFlightMsat)
 
   val htlcMinimum: MilliSatoshi = MilliSatoshi(htlcMinimumMsat)
+}
+
+case class HCOverrideParams(nodeId: String, params: HCParams)
+
+case class Branding(logo: String, color: Color) {
+  var brandingMessageOpt: Option[HostedChannelBranding] = None
+
+  Try {
+    val pngBytes = ByteVector view Files.readAllBytes(Paths get logo)
+    val message = HostedChannelBranding(color, pngBytes)
+    brandingMessageOpt = Some(message)
+  }
+}
+
+case class PHCConfig(maxPerNode: Long, minNormalChans: Long, maxSyncSendsPerIpPerMinute: Int) {
+  val capacity: MilliSatoshi = MilliSatoshi(100000000000000L) // Always exactly 1000 BTC
+}
+
+case class Vals(hcDefaultParams: HCParams, hcOverrideParams: List[HCOverrideParams],
+                maxNewChansPerIpPerHour: Int, branding: Branding, phcConfig: PHCConfig) {
+
+  val hcOverrideMap: Map[PublicKey, HCOverrideParams] =
+    Tools.toMapBy[PublicKey, HCOverrideParams](hcOverrideParams) {
+      hcParams => PublicKey(ByteVector fromValidHex hcParams.nodeId)
+    }
 }
