@@ -53,7 +53,7 @@ case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
                                overrideProposal: Option[StateOverride] = None, // CLOSED channel override can be initiated by Host, a new proposed balance should be retained once this happens
                                refundPendingInfo: Option[RefundPending] = None, // Will be present in case if funds should be refunded, but `liabilityDeadlineBlockdays` has not passed yet
                                refundCompleteInfo: Option[String] = None, // Will be present after channel has been manually updated as a refunded one
-                               channelUpdate: wire.ChannelUpdate) extends HostedData with HasAbstractCommitments // TODO: should htlcsToFailInOrigin be overridden here?
+                               channelUpdate: wire.ChannelUpdate) extends HostedData with HasAbstractCommitments
 
 object HostedCommitments {
   // Left is locally sent from us to peer, Right is remotely sent from from peer to us

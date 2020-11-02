@@ -122,11 +122,9 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
     Option(inMemoryHostedChannels get nodeId)
 
   def spawnChannel(nodeId: PublicKey): ActorRef = {
-    val channel = context actorOf Props(classOf[HostedChannel], kit, channelsDb, vals)
+    val channel = context actorOf Props(classOf[HostedChannel], kit, nodeId, channelsDb, vals)
     inMemoryHostedChannels.put(nodeId, channel)
-    // To receive Terminated once it stops
-    context.watch(channel)
-    channel
+    context watch channel
   }
 
   def spawnPreparedChannel(data: HC_DATA_ESTABLISHED): ActorRef = {
