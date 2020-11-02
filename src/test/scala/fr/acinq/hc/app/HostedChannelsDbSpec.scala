@@ -74,26 +74,29 @@ class HostedChannelsDbSpec extends AnyFunSuite {
     assert(cdb.listHotChannels.toSet === Set(data1, data2))
   }
 
-  test("list public channels") {
+  test("list client channels") {
     import HostedWireSpec._
     HCTestUtils.resetEntireDatabase()
     val cdb = new HostedChannelsDb(Config.db, localNodeId)
 
-    val data1 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(1L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32, announceChannel = true))
-    val data2 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(2L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32, announceChannel = true))
-    val data3 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(3L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
+    val data1 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(1L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32, isHost = true))
+    val data2 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(2L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32, isHost = true))
+    val data3 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(3L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32, isHost = true))
 
     cdb.addNewChannel(data1)
     cdb.addNewChannel(data2)
     cdb.addNewChannel(data3)
 
-    assert(cdb.listPublicChannels.isEmpty)
+    assert(cdb.listClientChannels.isEmpty)
 
-    cdb.updateOrAddNewChannel(data1)
-    cdb.updateOrAddNewChannel(data2)
+    val data4 = data1.copy(commitments = data1.commitments.copy(isHost = false))
+    val data5 = data2.copy(commitments = data2.commitments.copy(isHost = false))
+
+    cdb.updateOrAddNewChannel(data4)
+    cdb.updateOrAddNewChannel(data5)
     cdb.updateOrAddNewChannel(data3)
 
-    assert(cdb.listPublicChannels.toSet === Set(data1, data2))
+    assert(cdb.listClientChannels.toSet === Set(data4, data5))
   }
 
   test("Processing 1000 hot channels") {

@@ -20,12 +20,10 @@ class HostedChannelsDb(db: PostgresProfile.backend.Database, localNodeId: Public
     decoded
   }
 
-  def addNewChannel(data: HC_DATA_ESTABLISHED): Boolean = {
-    // inFlightHtlcs=0, announceChannel=false when adding a new channel
-    Blocking.txWrite(Channels.insertCompiled += (data.commitments.remoteNodeId.value.toArray, data.channelUpdate.shortChannelId.toLong, 0, false,
-      None, None, data.commitments.lastCrossSignedState.blockDay, System.currentTimeMillis, HC_DATA_ESTABLISHED_Codec.encode(data).require.toByteArray,
-      Array.emptyByteArray), db) > 0
-  }
+  def addNewChannel(data: HC_DATA_ESTABLISHED): Boolean =
+    Blocking.txWrite(Channels.insertCompiled += (data.commitments.remoteNodeId.value.toArray, data.channelUpdate.shortChannelId.toLong,
+      0, data.commitments.isHost, None, None, data.commitments.lastCrossSignedState.blockDay, System.currentTimeMillis,
+      HC_DATA_ESTABLISHED_Codec.encode(data).require.toByteArray, Array.emptyByteArray), db) > 0
 
   def updateOrAddNewChannel(data: HC_DATA_ESTABLISHED): Unit = {
     val encoded = HC_DATA_ESTABLISHED_Codec.encode(data).require.toByteArray
@@ -33,12 +31,12 @@ class HostedChannelsDb(db: PostgresProfile.backend.Database, localNodeId: Public
     val remoteNodeId = data.commitments.remoteNodeId.value.toArray
     val startedAtLong = data.refundPendingInfo.map(_.startedAt)
 
-    val updateTuple = (inFlightHtlcs, data.commitments.announceChannel, data.refundCompleteInfo, startedAtLong, data.commitments.lastCrossSignedState.blockDay, encoded)
+    val updateTuple = (inFlightHtlcs, data.commitments.isHost, data.refundCompleteInfo, startedAtLong, data.commitments.lastCrossSignedState.blockDay, encoded)
     val updateHasFailed: Boolean = Blocking.txWrite(Channels.findByRemoteNodeIdUpdatableCompiled(remoteNodeId).update(updateTuple), db) == 0
 
     if (updateHasFailed) {
       Blocking.txWrite(Channels.insertCompiled += (remoteNodeId, data.channelUpdate.shortChannelId.toLong, inFlightHtlcs,
-        data.commitments.announceChannel, data.refundCompleteInfo, startedAtLong, data.commitments.lastCrossSignedState.blockDay,
+        data.commitments.isHost, data.refundCompleteInfo, startedAtLong, data.commitments.lastCrossSignedState.blockDay,
         System.currentTimeMillis, encoded, Array.emptyByteArray), db)
     }
   }
@@ -56,6 +54,6 @@ class HostedChannelsDb(db: PostgresProfile.backend.Database, localNodeId: Public
   def listHotChannels: Seq[HC_DATA_ESTABLISHED] =
     Blocking.txRead(Channels.listHotChannelsCompiled.result, db).map(decode)
 
-  def listPublicChannels: Seq[HC_DATA_ESTABLISHED] =
-    Blocking.txRead(Channels.listPublicChannelsCompiled.result, db).map(decode)
+  def listClientChannels: Seq[HC_DATA_ESTABLISHED] =
+    Blocking.txRead(Channels.listClientChannelsCompiled.result, db).map(decode)
 }

@@ -40,11 +40,11 @@ object Channels {
   type DbType = (Long, ByteArray, Long, Int, Boolean, CompleteRefund, PendingRefund, Long, Long, ByteArray, ByteArray)
 
   val insertCompiled = Compiled {
-    for (x <- model) yield (x.remoteNodeId, x.shortChannelId, x.inFlightHtlcs, x.announceChannel, x.completeRefund, x.pendingRefund, x.lastBlockDay, x.createdAt, x.data, x.secret)
+    for (x <- model) yield (x.remoteNodeId, x.shortChannelId, x.inFlightHtlcs, x.isHost, x.completeRefund, x.pendingRefund, x.lastBlockDay, x.createdAt, x.data, x.secret)
   }
 
   val findByRemoteNodeIdUpdatableCompiled = Compiled {
-    (nodeId: RepByteArray) => for (x <- model if x.remoteNodeId === nodeId) yield (x.inFlightHtlcs, x.announceChannel, x.completeRefund, x.pendingRefund, x.lastBlockDay, x.data)
+    (nodeId: RepByteArray) => for (x <- model if x.remoteNodeId === nodeId) yield (x.inFlightHtlcs, x.isHost, x.completeRefund, x.pendingRefund, x.lastBlockDay, x.data)
   }
 
   val findSecretUpdatableByRemoteNodeIdCompiled = Compiled {
@@ -59,8 +59,8 @@ object Channels {
     for (x <- model if x.inFlightHtlcs > 0) yield x.data
   }
 
-  val listPublicChannelsCompiled = Compiled {
-    for (x <- model if x.announceChannel) yield x.data
+  val listClientChannelsCompiled = Compiled {
+    for (x <- model if !x.isHost) yield x.data
   }
 }
 
@@ -72,7 +72,7 @@ class Channels(tag: Tag) extends Table[Channels.DbType](tag, Channels.tableName)
   def createdAt: Rep[Long] = column[Long]("created_at_msec")
   // These get derived from data when updating
   def inFlightHtlcs: Rep[Int] = column[Int]("in_flight_htlcs")
-  def announceChannel: Rep[Boolean] = column[Boolean]("announce_channel")
+  def isHost: Rep[Boolean] = column[Boolean]("is_host")
   def completeRefund: Rep[CompleteRefund] = column[CompleteRefund]("complete_refund")
   def pendingRefund: Rep[PendingRefund] = column[PendingRefund]("pending_refund")
   def lastBlockDay: Rep[Long] = column[Long]("last_block_day")
@@ -80,11 +80,11 @@ class Channels(tag: Tag) extends Table[Channels.DbType](tag, Channels.tableName)
   def data: Rep[ByteArray] = column[ByteArray]("data")
   def secret: Rep[ByteArray] = column[ByteArray]("secret")
 
-  def idx1: Index = index("channels__announce_channel__idx", announceChannel, unique = false) // Select these on startup
-  def idx2: Index = index("channels__in_flight_htlcs__idx", inFlightHtlcs, unique = false) // Select these on startup
+  def idx1: Index = index("channels__is_host__idx", isHost, unique = false) // Select non-hosts on startup for automatic reconnect
+  def idx2: Index = index("channels__in_flight_htlcs__idx", inFlightHtlcs, unique = false) // Select these on startup for HTLC resolution
   def idx3: Index = index("channels__secret__idx", secret, unique = false) // Find these on user request
 
-  def * = (id, remoteNodeId, shortChannelId, inFlightHtlcs, announceChannel, completeRefund, pendingRefund, lastBlockDay, createdAt, data, secret)
+  def * = (id, remoteNodeId, shortChannelId, inFlightHtlcs, isHost, completeRefund, pendingRefund, lastBlockDay, createdAt, data, secret)
 }
 
 
