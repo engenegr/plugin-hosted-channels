@@ -5,7 +5,7 @@ import fr.acinq.hc.app.channel._
 import scala.concurrent.duration._
 import fr.acinq.hc.app.network.{HostedSync, PHC}
 import fr.acinq.hc.app.dbo.{HostedChannelsDb, HostedUpdatesDb}
-import akka.actor.{Actor, ActorRef, OneForOneStrategy, Props, Terminated}
+import akka.actor.{Actor, ActorRef, OneForOneStrategy, Props, Terminated, FSM}
 import fr.acinq.eclair.io.{PeerConnected, PeerDisconnected, UnknownMessageReceived}
 import scala.concurrent.ExecutionContext.Implicits.global
 import akka.actor.SupervisorStrategy.Resume
@@ -27,6 +27,8 @@ object Worker {
   case object TickRemoveIdleChannels { val label = "TickRemoveIdleChannels" }
 
   val hostedChanDenied: eclair.wire.Error = eclair.wire.Error(ByteVector32.Zeroes, ErrorCodes.ERR_HOSTED_CHANNEL_DENIED)
+
+  val noChanFound: FSM.Failure = FSM.Failure("HC with given remote peer is not found")
 }
 
 class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChannelsDb, vals: Vals) extends Actor with Logging {
@@ -72,7 +74,7 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
       // Messages with channel id presume a target HC exists, it must not be spawned if not actually found
       Tuple2(Codecs decodeHasChanIdMessage message, inMemoryHostedChannels get nodeId) match {
         case (_: Attempt.Failure, _) => logger.debug(s"PLGN PHC, hasChanId decode fail, tag=${message.tag}, peer=${nodeId.toString}")
-        case (Attempt.Successful(msg), null) => restoreAndTellOrElse(msg, nodeId)(_ => logger debug s"PLGN PHC, hasChanId no target, peer=${nodeId.toString}")
+        case (Attempt.Successful(msg), null) => restoreOrElse(msg, nodeId)(_ => logger debug s"PLGN PHC, hasChanId no target, peer=${nodeId.toString}")
         case (Attempt.Successful(msg), channelRef) => channelRef ! msg
       }
 
@@ -84,10 +86,22 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
         case (Attempt.Successful(_: QueryPublicHostedChannels), Some(peerWrap), _) => hostedSync ! HostedSync.SendSyncTo(peerWrap)
 
         case (Attempt.Successful(_: InvokeHostedChannel), Some(peerWrap), null) if ipAntiSpam(peerWrap.remoteIp) > vals.maxNewChansPerIpPerHour => peerWrap sendHasChannelIdMsg Worker.hostedChanDenied
-        case (Attempt.Successful(msg: InvokeHostedChannel), Some(peerWrap), null) => restoreAndTellOrElse(HostedChannel.RemoteInvoke(msg, peerWrap), nodeId)(msg => spawnChannel(nodeId) ! msg)
+        case (Attempt.Successful(msg: InvokeHostedChannel), Some(peerWrap), null) => restoreOrElse(HostedChannel.RemoteInvoke(msg, peerWrap), nodeId)(msg => spawnChannel(nodeId) ! msg)
         case (Attempt.Successful(msg: InvokeHostedChannel), Some(peerWrap), channelRef) => channelRef ! HostedChannel.RemoteInvoke(msg, peerWrap)
-        case (Attempt.Successful(msg: HostedChannelMessage), _, null) => restoreAndTellOrElse(msg, nodeId)(Tools.none)
+        case (Attempt.Successful(msg: HostedChannelMessage), _, null) => restoreOrElse(msg, nodeId)(Tools.none)
         case (Attempt.Successful(msg: HostedChannelMessage), _, channelRef) => channelRef ! msg
+      }
+
+    case cmd: CMD_HOSTED_LOCAL_INVOKE =>
+      val isInMemory = channelRefOpt(cmd.remoteNodeId).isEmpty
+      val isInDb = channelsDb.getChannelByRemoteNodeId(cmd.remoteNodeId).isEmpty
+      if (isInMemory || isInDb) sender ! FSM.Failure("HC exists already")
+      else spawnChannel(cmd.remoteNodeId) forward cmd
+
+    case cmd: HasRemoteNodeIdHostedCommand =>
+      inMemoryHostedChannels get cmd.remoteNodeId match {
+        case null => restoreOrElse(cmd, cmd.remoteNodeId)(_ => sender ! Worker.noChanFound)
+        case channelRef => channelRef forward cmd
       }
 
     case Terminated(channelRef) =>
@@ -108,7 +122,7 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
     Option(inMemoryHostedChannels get nodeId)
 
   def spawnChannel(nodeId: PublicKey): ActorRef = {
-    val channel = context actorOf Props(classOf[HostedChannel], kit, vals)
+    val channel = context actorOf Props(classOf[HostedChannel], kit, channelsDb, vals)
     inMemoryHostedChannels.put(nodeId, channel)
     // To receive Terminated once it stops
     context.watch(channel)
@@ -121,7 +135,7 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
     channel
   }
 
-  def restoreAndTellOrElse[T](message: T, nodeId: PublicKey)(orElse: T => Unit): Unit =
+  def restoreOrElse[T](message: T, nodeId: PublicKey)(orElse: T => Unit): Unit =
     channelsDb.getChannelByRemoteNodeId(remoteNodeId = nodeId) match {
       case Some(data) => spawnPreparedChannel(data) ! message
       case None => orElse(message)
