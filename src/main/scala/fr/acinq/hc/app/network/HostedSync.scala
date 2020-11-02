@@ -278,11 +278,11 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
         processUpdate(msg, data, unknown.nodeId)
 
       case Attempt.Successful(something) =>
-        log.info(s"PLGN PHC, HostedSync, got unacceptable message=$something")
+        log.info(s"PLGN PHC, HostedSync, got unacceptable message=$something, peer=${unknown.nodeId.toString}")
         data
 
       case Attempt.Failure(err) =>
-        log.info(s"PLGN PHC, HostedSync, parsing fail=${err.message}")
+        log.info(s"PLGN PHC, HostedSync, parsing fail=${err.message}, peer=${unknown.nodeId.toString}")
         data
     }
   }
