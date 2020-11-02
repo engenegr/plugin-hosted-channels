@@ -21,9 +21,9 @@ class HostedUpdatesDb(val db: PostgresProfile.backend.Database) {
       Tuple7(_, shortChannelId, channelAnnounce, channelUpdate1, channelUpdate2, _, _) <- Blocking.txRead(Updates.model.result, db)
     } yield PHC(ShortChannelId(shortChannelId), toAnnounce(channelAnnounce), channelUpdate1 map toUpdate, channelUpdate2 map toUpdate)
 
-    val channelMap: Map[ShortChannelId, PHC] = Tools.toMapBy[ShortChannelId, PHC](updates, _.shortChannelId)
-    val perNodeMap = updates.flatMap(_.nodeIdToShortId).groupMap(_._1)(_._2).view.mapValues(_.toSet).toMap
-    PHCNetwork(channelMap, perNodeMap, PHCNetwork.emptyUnsaved)
+    val channelMap: Map[ShortChannelId, PHC] = Tools.toMapBy[ShortChannelId, PHC](updates)(_.shortChannelId)
+    val channelSetPerNodeMap = updates.flatMap(_.nodeIdToShortId).groupMap(_._1)(_._2).view.mapValues(_.toSet).toMap
+    PHCNetwork(channelMap, channelSetPerNodeMap, PHCNetwork.emptyUnsaved)
   }
 
   def pruneUpdateLessAnnounces: Int = Blocking.txWrite(Updates.findAnnounceDeletableCompiled.delete, db)
