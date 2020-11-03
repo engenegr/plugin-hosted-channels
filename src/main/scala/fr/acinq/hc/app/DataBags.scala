@@ -1,9 +1,10 @@
 package fr.acinq.hc.app
 
+import fr.acinq.eclair._
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, LexicographicalOrdering, Protocol, Satoshi}
 import fr.acinq.eclair.wire.{Color, LightningMessageCodecs, UpdateAddHtlc}
 import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
-import fr.acinq.eclair.{MilliSatoshi, UInt64}
+import fr.acinq.eclair.channel.Helpers
 import scodec.bits.ByteVector
 import java.nio.ByteOrder
 
@@ -12,7 +13,10 @@ sealed trait HostedChannelMessage
 
 case class InvokeHostedChannel(chainHash: ByteVector32,
                                refundScriptPubKey: ByteVector,
-                               secret: ByteVector) extends HostedChannelMessage {
+                               secret: ByteVector = ByteVector.empty) extends HostedChannelMessage {
+
+  require(Helpers.Closing.isValidFinalScriptPubkey(refundScriptPubKey), "invalid refundScriptPubKey when opening a hosted channel")
+
   val finalSecret: ByteVector = secret.take(64)
 }
 
@@ -22,7 +26,7 @@ case class InitHostedChannel(maxHtlcValueInFlightMsat: UInt64,
                              channelCapacityMsat: MilliSatoshi,
                              liabilityDeadlineBlockdays: Int,
                              minimalOnchainRefundAmountSatoshis: Satoshi,
-                             initialClientBalanceMsat: MilliSatoshi) extends HostedChannelMessage
+                             initialClientBalanceMsat: MilliSatoshi = 0L.msat) extends HostedChannelMessage
 
 case class HostedChannelBranding(rgbColor: Color, pngIcon: ByteVector) extends HostedChannelMessage
 

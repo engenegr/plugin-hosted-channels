@@ -39,13 +39,11 @@ sealed trait HostedData
 
 case object HC_NOTHING extends HostedData
 
+case class HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE(init: InitHostedChannel) extends HostedData
+
 case class HC_DATA_CLIENT_WAIT_HOST_INIT(refundScriptPubKey: ByteVector) extends HostedData
 
 case class HC_DATA_CLIENT_WAIT_HOST_STATE_UPDATE(commitments: HostedCommitments) extends HostedData with HasAbstractCommitments
-
-case class HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE(init: InitHostedChannel, invoke: InvokeHostedChannel) extends HostedData {
-  require(Helpers.Closing.isValidFinalScriptPubkey(invoke.refundScriptPubKey), "invalid refundScriptPubKey when opening a hosted channel")
-}
 
 case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
                                localError: Option[wire.Error] = None,
@@ -53,7 +51,10 @@ case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
                                overrideProposal: Option[StateOverride] = None, // CLOSED channel override can be initiated by Host, a new proposed balance should be retained once this happens
                                refundPendingInfo: Option[RefundPending] = None, // Will be present in case if funds should be refunded, but `liabilityDeadlineBlockdays` has not passed yet
                                refundCompleteInfo: Option[String] = None, // Will be present after channel has been manually updated as a refunded one
-                               channelUpdate: wire.ChannelUpdate) extends HostedData with HasAbstractCommitments
+                               channelUpdate: wire.ChannelUpdate) extends HostedData with HasAbstractCommitments {
+
+  def getError: Option[wire.Error] = localError orElse remoteError
+}
 
 object HostedCommitments {
   // Left is locally sent from us to peer, Right is remotely sent from from peer to us

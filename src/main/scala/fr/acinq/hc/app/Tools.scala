@@ -4,7 +4,7 @@ import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol, Satoshi}
 import fr.acinq.eclair.wire.{AnnouncementMessage, Color, HasChannelId, UnknownMessage}
-import fr.acinq.eclair.{CltvExpiryDelta, MilliSatoshi, ShortChannelId}
+import fr.acinq.eclair.{CltvExpiryDelta, MilliSatoshi, ShortChannelId, UInt64}
 import java.io.{ByteArrayInputStream, File}
 import java.nio.file.{Files, Paths}
 
@@ -22,7 +22,6 @@ import scala.util.Try
 
 
 object Tools {
-  def none: PartialFunction[Any, Unit] = { case _ => }
   def toMapBy[K, V](items: Iterable[V])(mapper: V => K): Map[K, V] = items.map(item => mapper(item) -> item).toMap
   case object DuplicateShortId extends Throwable("Duplicate ShortId is not allowed here")
 
@@ -89,9 +88,7 @@ case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDelt
 
   val defaultCapacity: MilliSatoshi = MilliSatoshi(defaultCapacityMsat)
 
-  val defaultClientBalance: MilliSatoshi = MilliSatoshi(0L)
-
-  val maxHtlcValueInFlight: MilliSatoshi = MilliSatoshi(maxHtlcValueInFlightMsat)
+  val maxHtlcValueInFlight: UInt64 = UInt64(maxHtlcValueInFlightMsat)
 
   val htlcMinimum: MilliSatoshi = MilliSatoshi(htlcMinimumMsat)
 }
