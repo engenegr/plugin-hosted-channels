@@ -3,7 +3,7 @@ package fr.acinq.hc.app
 import fr.acinq.eclair._
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
-import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol, Satoshi}
+import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol}
 import fr.acinq.eclair.wire.{AnnouncementMessage, Color, HasChannelId, UnknownMessage}
 import java.io.{ByteArrayInputStream, File}
 import java.nio.file.{Files, Paths}

@@ -90,7 +90,7 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
 
         // Special anti-spam handling for InvokeHostedChannel
         case (Attempt.Successful(_: InvokeHostedChannel), Some(wrap), null) if ipAntiSpam(wrap.remoteIp) > vals.maxNewChansPerIpPerHour => wrap sendHasChannelIdMsg Worker.chanDenied
-        case (Attempt.Successful(msg: InvokeHostedChannel), _, null) => restoreOrElse(msg, nodeId)(invoke => spawnChannel(nodeId) ! invoke)
+        case (Attempt.Successful(msg: InvokeHostedChannel), _, null) => restoreOrElse(msg, nodeId)(newChannelInvoke => spawnChannel(nodeId) ! newChannelInvoke)
         case (Attempt.Successful(msg: InvokeHostedChannel), _, channelRef) => channelRef ! msg
 
         case (Attempt.Successful(msg: HostedChannelMessage), _, null) => restoreOrElse(msg, nodeId)(me logNoTarget nodeId.toString)
@@ -123,11 +123,8 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
 
       for (channelData <- channels) {
         spawnPreparedChannel(channelData)
-        if (!channelData.commitments.isHost) {
-          // Make sure core retries these in case of disconnect
-          val nodeId = channelData.commitments.remoteNodeId
-          kit.switchboard ! Peer.Connect(nodeId, None)
-        }
+        val nodeId = channelData.commitments.remoteNodeId
+        kit.switchboard ! Peer.Connect(nodeId, None)
       }
 
     case PeerConnection.ConnectionResult.NoAddressFound(nodeId) =>
@@ -141,7 +138,8 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
 
   def spawnChannel(nodeId: PublicKey): ActorRef = {
     val props = Props(classOf[HostedChannel], kit, remoteNode2Connection, nodeId, channelsDb, vals)
-    context watch inMemoryHostedChannels.put(nodeId, context actorOf props)
+    val channelRef = inMemoryHostedChannels.put(nodeId, context actorOf props)
+    context watch channelRef
   }
 
   def spawnPreparedChannel(data: HC_DATA_ESTABLISHED): ActorRef = {
