@@ -70,6 +70,13 @@ object Codecs {
   val replyPublicHostedChannelsEndCodec: Codec[ReplyPublicHostedChannelsEnd] =
     (bytes32 withContext "chainHash").as[ReplyPublicHostedChannelsEnd]
 
+  type UpdateWithChannelId = fr.acinq.eclair.wire.UpdateMessage with fr.acinq.eclair.wire.HasChannelId
+  // Left is locally sent from us to remote peer, Right is remotely sent from from remote peer to us
+  type LocalOrRemoteUpdateWithChannelId = Either[UpdateWithChannelId, UpdateWithChannelId]
+
+  val updateWithChannelIdCodec: Codec[UpdateWithChannelId] =
+    lightningMessageCodec.narrow(Attempt successful _.asInstanceOf[UpdateWithChannelId], identity)
+
   // HC messages which don't have channel id
 
   def decodeHostedMessage(wrap: UnknownMessage): Attempt[HostedChannelMessage] = wrap.tag match {

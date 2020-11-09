@@ -84,9 +84,6 @@ case class PHCNetwork(channels: Map[ShortChannelId, PHC],
     case None => this
   }
 
-  def isUpdateAcceptable(update: ChannelUpdate): Boolean =
-    channels.get(update.shortChannelId).exists(_ isUpdateFresh update)
-
   // Refresh an update, but keep everything else
   def addUpdate(update: ChannelUpdate): PHCNetwork = channels.get(update.shortChannelId) match {
     case Some(phc) => copy(channels = channels + phc.withUpdate(update).tuple, unsaved = unsaved add update)

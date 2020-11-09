@@ -61,9 +61,9 @@ class HostedChannelsDbSpec extends AnyFunSuite {
     HCTestUtils.resetEntireDatabase()
     val cdb = new HostedChannelsDb(Config.db, localNodeId)
 
-    val data1 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(1L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
-    val data2 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(2L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
-    val data3 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(3L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32,
+    val data1 = data.copy(localChannelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(1L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
+    val data2 = data.copy(localChannelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(2L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
+    val data3 = data.copy(localChannelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(3L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32,
       futureUpdates = Nil, localSpec = CommitmentSpec(htlcs = Set.empty, feeratePerKw = FeeratePerKw(Satoshi(0L)), toLocal = MilliSatoshi(Random.nextInt(Int.MaxValue)),
         toRemote = MilliSatoshi(Random.nextInt(Int.MaxValue)))))
 
@@ -79,9 +79,9 @@ class HostedChannelsDbSpec extends AnyFunSuite {
     HCTestUtils.resetEntireDatabase()
     val cdb = new HostedChannelsDb(Config.db, localNodeId)
 
-    val data1 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(1L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32, isHost = true))
-    val data2 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(2L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32, isHost = true))
-    val data3 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(3L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32, isHost = true))
+    val data1 = data.copy(localChannelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(1L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32, isHost = true))
+    val data2 = data.copy(localChannelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(2L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32, isHost = true))
+    val data3 = data.copy(localChannelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(3L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32, isHost = true))
 
     cdb.addNewChannel(data1)
     cdb.addNewChannel(data2)
@@ -104,7 +104,7 @@ class HostedChannelsDbSpec extends AnyFunSuite {
     HCTestUtils.resetEntireDatabase()
     val cdb = new HostedChannelsDb(Config.db, localNodeId)
 
-    val hdcs = for (n <- 0L to 1000L) yield data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(n)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
+    val hdcs = for (n <- 0L to 1000L) yield data.copy(localChannelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(n)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
     hdcs.foreach(cdb.updateOrAddNewChannel)
 
     val a = System.currentTimeMillis()

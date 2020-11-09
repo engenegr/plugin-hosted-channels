@@ -14,9 +14,6 @@ sealed trait HostedChannelMessage
 case class InvokeHostedChannel(chainHash: ByteVector32,
                                refundScriptPubKey: ByteVector,
                                secret: ByteVector = ByteVector.empty) extends HostedChannelMessage {
-
-  require(Helpers.Closing.isValidFinalScriptPubkey(refundScriptPubKey), "invalid refundScriptPubKey when opening a hosted channel")
-
   val finalSecret: ByteVector = secret.take(64)
 }
 
@@ -26,7 +23,7 @@ case class InitHostedChannel(maxHtlcValueInFlightMsat: UInt64,
                              channelCapacityMsat: MilliSatoshi,
                              liabilityDeadlineBlockdays: Int,
                              minimalOnchainRefundAmountSatoshis: Satoshi,
-                             initialClientBalanceMsat: MilliSatoshi = 0L.msat) extends HostedChannelMessage
+                             initialClientBalanceMsat: MilliSatoshi) extends HostedChannelMessage
 
 case class HostedChannelBranding(rgbColor: Color, pngIcon: ByteVector) extends HostedChannelMessage
 

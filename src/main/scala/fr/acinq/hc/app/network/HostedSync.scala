@@ -100,6 +100,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
       if data.lastSyncNodeId.contains(wrap.info.nodeId) =>
 
       tryPersist(data.phcNetwork).map { adds =>
+        // Note: nodes whose NC count falls below minimum will eventually be pruned out
         val u1 = updatesDb.pruneOldUpdates1(System.currentTimeMillis.millis.toSeconds)
         val u2 = updatesDb.pruneOldUpdates2(System.currentTimeMillis.millis.toSeconds)
         val ann = updatesDb.pruneUpdateLessAnnounces
@@ -244,14 +245,16 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
     peers.filter(wrap => data.normalGraph.getIncomingEdgesOf(wrap.info.nodeId).nonEmpty)
 
   // These checks require router and graph data
-  private def isNewAnnounceAcceptable(announce: ChannelAnnouncement, data: OperationalData): Boolean = {
+  private def phcNodeHasEnoughNormalChannels(announce: ChannelAnnouncement, data: OperationalData): Boolean = {
     val node1HasEnoughIncomingChans = data.normalGraph.getIncomingEdgesOf(announce.nodeId1).count(_.desc.a != announce.nodeId2) >= phcConfig.minNormalChans
     val node2HasEnoughIncomingChans = data.normalGraph.getIncomingEdgesOf(announce.nodeId2).count(_.desc.a != announce.nodeId1) >= phcConfig.minNormalChans
-    !data.normalChannels.contains(announce.shortChannelId) && node1HasEnoughIncomingChans && node2HasEnoughIncomingChans
+    node1HasEnoughIncomingChans && node2HasEnoughIncomingChans
   }
 
-  private def isUpdateAcceptable(update: ChannelUpdate, data: OperationalData): Boolean =
-    update.htlcMaximumMsat.contains(phcConfig.capacity) && data.phcNetwork.channels.get(update.shortChannelId).exists(_ verifySig update)
+  private def isUpdateAcceptable(update: ChannelUpdate, data: OperationalData): Boolean = data.phcNetwork.channels.get(update.shortChannelId) match {
+    case Some(phc) => update.htlcMaximumMsat.contains(phcConfig.capacity) && phc.isUpdateFresh(update) && phcNodeHasEnoughNormalChannels(phc.channelAnnounce, data) && phc.verifySig(update)
+    case None => false
+  }
 
   private def tryPersist(phcNetwork: PHCNetwork) = Try {
     Blocking.txWrite(DBIO.sequence(phcNetwork.unsaved.orderedMessages.map {
@@ -268,21 +271,21 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
     val tags: Set[Int]
 
     def process(unknown: UnknownMessageReceived, data: OperationalData): OperationalData = Codecs.decodeAnnounceMessage(unknown.message) match {
-      case Attempt.Successful(msg: ChannelAnnouncement) if data.phcNetwork.channels.contains(msg.shortChannelId) && data.phcNetwork.isAnnounceAcceptable(msg) =>
+      case Attempt.Successful(msg: ChannelAnnouncement) if phcNodeHasEnoughNormalChannels(msg, data) && data.phcNetwork.channels.contains(msg.shortChannelId) && data.phcNetwork.isAnnounceAcceptable(msg) =>
         processKnownAnnounce(msg, data, unknown.nodeId)
 
-      case Attempt.Successful(msg: ChannelAnnouncement) if isNewAnnounceAcceptable(msg, data) && data.phcNetwork.isNewAnnounceAcceptable(msg, phcConfig) =>
+      case Attempt.Successful(msg: ChannelAnnouncement) if phcNodeHasEnoughNormalChannels(msg, data) && data.phcNetwork.isNewAnnounceAcceptable(msg, phcConfig) =>
         processNewAnnounce(msg, data, unknown.nodeId)
 
-      case Attempt.Successful(msg: ChannelUpdate) if isUpdateAcceptable(msg, data) && data.phcNetwork.isUpdateAcceptable(msg) =>
+      case Attempt.Successful(msg: ChannelUpdate) if isUpdateAcceptable(msg, data) =>
         processUpdate(msg, data, unknown.nodeId)
 
       case Attempt.Successful(something) =>
         log.info(s"PLGN PHC, HostedSync, got unacceptable message=$something, peer=${unknown.nodeId.toString}")
         data
 
-      case Attempt.Failure(err) =>
-        log.info(s"PLGN PHC, HostedSync, parsing fail=${err.message}, peer=${unknown.nodeId.toString}")
+      case _: Attempt.Failure =>
+        log.info(s"PLGN PHC, HostedSync, parsing fail, peer=${unknown.nodeId.toString}")
         data
     }
   }

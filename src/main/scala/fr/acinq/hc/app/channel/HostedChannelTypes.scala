@@ -3,13 +3,11 @@ package fr.acinq.hc.app.channel
 import fr.acinq.eclair._
 import fr.acinq.hc.app._
 import fr.acinq.eclair.channel._
-
-import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc, OutgoingHtlc}
-import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, Satoshi}
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
 import scala.util.{Failure, Success, Try}
-
-import fr.acinq.hc.app.channel.HostedCommitments.LocalOrRemoteUpdate
+import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
+import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, Satoshi}
+import fr.acinq.hc.app.wire.Codecs.{LocalOrRemoteUpdateWithChannelId, UpdateWithChannelId}
+import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc, OutgoingHtlc}
 import fr.acinq.eclair.payment.OutgoingPacket
 import fr.acinq.eclair.MilliSatoshi
 import scodec.bits.ByteVector
@@ -39,26 +37,21 @@ sealed trait HostedData
 
 case object HC_NOTHING extends HostedData
 
-case class HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE(init: InitHostedChannel) extends HostedData
+case class HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE(invoke: InvokeHostedChannel) extends HostedData
 
 case class HC_DATA_CLIENT_WAIT_HOST_INIT(refundScriptPubKey: ByteVector) extends HostedData
 
 case class HC_DATA_CLIENT_WAIT_HOST_STATE_UPDATE(commitments: HostedCommitments) extends HostedData with HasAbstractCommitments
 
 case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
-                               localError: Option[wire.Error] = None,
-                               remoteError: Option[wire.Error] = None,
+                               localError: Option[ErrorExt] = None,
+                               remoteError: Option[ErrorExt] = None,
                                overrideProposal: Option[StateOverride] = None, // CLOSED channel override can be initiated by Host, a new proposed balance should be retained once this happens
                                refundPendingInfo: Option[RefundPending] = None, // Will be present in case if funds should be refunded, but `liabilityDeadlineBlockdays` has not passed yet
                                refundCompleteInfo: Option[String] = None, // Will be present after channel has been manually updated as a refunded one
-                               channelUpdate: wire.ChannelUpdate) extends HostedData with HasAbstractCommitments {
+                               localChannelUpdate: wire.ChannelUpdate) extends HostedData with HasAbstractCommitments {
 
-  def getError: Option[wire.Error] = localError orElse remoteError
-}
-
-object HostedCommitments {
-  // Left is locally sent from us to peer, Right is remotely sent from from peer to us
-  type LocalOrRemoteUpdate = Either[wire.UpdateMessage, wire.UpdateMessage]
+  lazy val errorExt: Option[ErrorExt] = localError orElse remoteError
 }
 
 case class HostedCommitments(isHost: Boolean,
@@ -68,13 +61,13 @@ case class HostedCommitments(isHost: Boolean,
                              localSpec: CommitmentSpec,
                              originChannels: Map[Long, Origin],
                              lastCrossSignedState: LastCrossSignedState,
-                             futureUpdates: List[LocalOrRemoteUpdate], // For CLOSED channel we need to look here for UpdateFail/Fulfill messages from network for in-flight (client -> we -> network) payments
+                             futureUpdates: List[LocalOrRemoteUpdateWithChannelId], // For CLOSED channel we need to look here for UpdateFail/Fulfill messages from network for in-flight (client -> we -> network) payments
                              timedOutToPeerHtlcLeftOverIds: Set[Long], // CLOSED channel may have in-flight HTLCs (network -> we -> client), we don't accept peer failure for those and only fail them on timeout
                              fulfilledByPeerHtlcLeftOverIds: Set[Long], // CLOSED channel may have in-flight HTLCs (network -> we -> client) which can later be fulfilled, collect their IDs here
                              announceChannel: Boolean) extends AbstractCommitments {
 
   val (nextLocalUpdates, nextRemoteUpdates, nextTotalLocal, nextTotalRemote) =
-    futureUpdates.foldLeft((List.empty[wire.UpdateMessage], List.empty[wire.UpdateMessage], lastCrossSignedState.localUpdates, lastCrossSignedState.remoteUpdates)) {
+    futureUpdates.foldLeft((List.empty[UpdateWithChannelId], List.empty[UpdateWithChannelId], lastCrossSignedState.localUpdates, lastCrossSignedState.remoteUpdates)) {
       case ((localMessages, remoteMessages, totalLocalNumber, totalRemoteNumber), Left(msg)) => (localMessages :+ msg, remoteMessages, totalLocalNumber + 1, totalRemoteNumber)
       case ((localMessages, remoteMessages, totalLocalNumber, totalRemoteNumber), Right(msg)) => (localMessages, remoteMessages :+ msg, totalLocalNumber, totalRemoteNumber + 1)
     }
@@ -98,7 +91,7 @@ case class HostedCommitments(isHost: Boolean,
   // no need to look at next incoming HTLCs here because they are not cross-signed so there was no relay attempt
   def htlcsRemoteCommit: Set[DirectedHtlc] = localSpec.htlcs.collect(DirectedHtlc.incoming).map(OutgoingHtlc)
 
-  def addProposal(update: LocalOrRemoteUpdate): HostedCommitments = copy(futureUpdates = futureUpdates :+ update)
+  def addProposal(update: LocalOrRemoteUpdateWithChannelId): HostedCommitments = copy(futureUpdates = futureUpdates :+ update)
 
   // Find a cross-signed (in localSpec) and still not resolved (also in nextLocalSpec)
   def getOutgoingHtlcCrossSigned(htlcId: Long): Option[wire.UpdateAddHtlc] =
@@ -275,3 +268,9 @@ case class HostedState(channelId: ByteVector32,
                        lastCrossSignedState: LastCrossSignedState)
 
 case class RemoteHostedStateResult(state: HostedState, isLocalSigValid: Boolean)
+
+// Channel errors
+
+case class InvalidBlockDay(override val channelId: ByteVector32, localBlockDay: Long, remoteBlockDay: Long) extends ChannelException(channelId, s"invalid block day local=$localBlockDay remote=$remoteBlockDay")
+
+case class InvalidRemoteStateSignature(override val channelId: ByteVector32) extends ChannelException(channelId, s"invalid remote state signature")

@@ -9,7 +9,7 @@ import fr.acinq.eclair.channel.{Channel, Origin}
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.transactions.{CommitmentSpec, IncomingHtlc, OutgoingHtlc}
 import fr.acinq.eclair.wire.{AnnouncementSignatures, ChannelUpdate, Error, UpdateAddHtlc, UpdateFailHtlc}
-import fr.acinq.hc.app.channel.{HC_DATA_ESTABLISHED, HostedCommitments, HostedState}
+import fr.acinq.hc.app.channel.{ErrorExt, HC_DATA_ESTABLISHED, HostedCommitments, HostedState}
 import fr.acinq.hc.app.wire._
 import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits.ByteVector
@@ -73,7 +73,7 @@ object HostedWireSpec {
   val data: HC_DATA_ESTABLISHED = HC_DATA_ESTABLISHED(
     hdc,
     localError = None,
-    remoteError = Some(error),
+    remoteError = Some(ErrorExt generateFrom error),
     overrideProposal = None,
     refundPendingInfo = Some(RefundPending(System.currentTimeMillis / 1000)),
     refundCompleteInfo = Some("Has been refunded to address n3RzaNTD8LnBGkREBjSkouy5gmd2dVf7jQ"),
