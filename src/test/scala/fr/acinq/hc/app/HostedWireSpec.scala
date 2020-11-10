@@ -8,7 +8,7 @@ import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.channel.{Channel, Origin}
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.transactions.{CommitmentSpec, IncomingHtlc, OutgoingHtlc}
-import fr.acinq.eclair.wire.{AnnouncementSignatures, ChannelUpdate, Error, UpdateAddHtlc, UpdateFailHtlc}
+import fr.acinq.eclair.wire.{ChannelUpdate, Error, UpdateAddHtlc, UpdateFailHtlc}
 import fr.acinq.hc.app.channel.{ErrorExt, HC_DATA_ESTABLISHED, HostedCommitments, HostedState}
 import fr.acinq.hc.app.wire._
 import org.scalatest.funsuite.AnyFunSuite
@@ -54,7 +54,7 @@ object HostedWireSpec {
 
   val error: Error = Error(ByteVector32.Zeroes, ByteVector.fromValidHex("0000"))
 
-  val localNodeId = randomKey.publicKey
+  val localNodeId: Crypto.PublicKey = randomKey.publicKey
 
   val hdc: HostedCommitments = HostedCommitments(
     isHost = true,
@@ -145,14 +145,14 @@ class HostedWireSpec extends AnyFunSuite {
     def bin32(fill: Byte) = ByteVector32(bin(32, fill))
     val update_fail_htlc = UpdateFailHtlc(randomBytes32, 2, bin(154, 0))
     val update_add_htlc = UpdateAddHtlc(randomBytes32, 2, 3.msat, bin32(0), CltvExpiry(4), TestConstants.emptyOnionPacket)
-    val announcement_signatures = AnnouncementSignatures(randomBytes32, ShortChannelId(42), randomBytes64, randomBytes64)
+    val announcement_signature = AnnouncementSignature(randomBytes64, wantsReply = false)
 
     assert(Codecs.toUnknownHasChanIdMessage(update_fail_htlc).tag === HC.HC_UPDATE_FAIL_HTLC_TAG)
     assert(Codecs.toUnknownHasChanIdMessage(update_add_htlc).tag === HC.HC_UPDATE_ADD_HTLC_TAG)
-    assert(Codecs.toUnknownHasChanIdMessage(announcement_signatures).tag === HC.HC_ANNOUNCEMENT_SIGNATURES_TAG)
+    assert(Codecs.toUnknownHostedMessage(announcement_signature).tag === HC.HC_ANNOUNCEMENT_SIGNATURE_TAG)
 
     assert(Codecs.decodeHasChanIdMessage(Codecs.toUnknownHasChanIdMessage(update_fail_htlc)).require === update_fail_htlc)
     assert(Codecs.decodeHasChanIdMessage(Codecs.toUnknownHasChanIdMessage(update_add_htlc)).require === update_add_htlc)
-    assert(Codecs.decodeHasChanIdMessage(Codecs.toUnknownHasChanIdMessage(announcement_signatures)).require === announcement_signatures)
+    assert(Codecs.decodeHostedMessage(Codecs.toUnknownHostedMessage(announcement_signature)).require === announcement_signature)
   }
 }

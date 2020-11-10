@@ -3,8 +3,8 @@ package fr.acinq.hc.app
 import fr.acinq.eclair._
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
-import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, LexicographicalOrdering, Protocol}
-import fr.acinq.eclair.wire.{AnnouncementMessage, AnnouncementSignatures, ChannelAnnouncement, Color, HasChannelId, UnknownMessage}
+import fr.acinq.eclair.wire.{AnnouncementMessage, ChannelAnnouncement, Color, HasChannelId, UnknownMessage}
+import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol}
 import java.io.{ByteArrayInputStream, File}
 import java.nio.file.{Files, Paths}
 
@@ -20,7 +20,6 @@ import fr.acinq.hc.app.wire.Codecs
 import slick.jdbc.PostgresProfile
 import scodec.bits.ByteVector
 import java.nio.ByteOrder
-
 import scala.util.Try
 
 

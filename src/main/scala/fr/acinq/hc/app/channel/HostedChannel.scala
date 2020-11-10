@@ -205,15 +205,15 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       }
 
     case Event(cmd: CMD_TURN_PUBLIC, data: HC_DATA_ESTABLISHED) =>
-      val commits1 = data.commitments.copy(announceChannel = true)
-      val data1 = data.copy(commitments = commits1)
+      val commitments1 = data.commitments.copy(announceChannel = true)
+      val data1 = data.copy(commitments = commitments1)
       self ! HostedChannel.SendAnnouncements
       sender ! CMDResponseSuccess(cmd)
       stay storingAndUsing data1
 
     case Event(cmd: CMD_TURN_PRIVATE, data: HC_DATA_ESTABLISHED) =>
-      val commits1 = data.commitments.copy(announceChannel = false)
-      val data1 = data.copy(commitments = commits1)
+      val commitments1 = data.commitments.copy(announceChannel = false)
+      val data1 = data.copy(channelAnnouncement = None, commitments = commitments1)
       sender ! CMDResponseSuccess(cmd)
       stay storingAndUsing data1
   }
@@ -276,8 +276,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
     }
 
     def publishing(message: AnnouncementMessage): HostedFsmState = {
-      val unknownMessage = Codecs.toUnknownAnnounceMessage(message, isGossip = true)
-      hostedSync ! UnknownMessageReceived(peer = null, kit.nodeParams.nodeId, unknownMessage, connectionInfo = null)
+      hostedSync ! Codecs.toUnknownAnnounceMessage(message, isGossip = true)
       state
     }
 

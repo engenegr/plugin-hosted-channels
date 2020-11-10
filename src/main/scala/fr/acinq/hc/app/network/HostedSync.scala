@@ -2,22 +2,21 @@ package fr.acinq.hc.app.network
 
 import fr.acinq.hc.app._
 import fr.acinq.hc.app.HC._
-
 import scala.concurrent.duration._
 import slick.jdbc.PostgresProfile.api._
 import fr.acinq.hc.app.network.HostedSync._
-import fr.acinq.eclair.wire.{ChannelAnnouncement, ChannelUpdate}
+
+import fr.acinq.eclair.wire.{ChannelAnnouncement, ChannelUpdate, UnknownMessage}
 import fr.acinq.eclair.{FSMDiagnosticActorLogging, Kit}
 import fr.acinq.hc.app.dbo.{Blocking, HostedUpdatesDb}
-
+import fr.acinq.eclair.router.{Router, SyncProgress}
 import scala.util.{Failure, Random, Success, Try}
+
 import scala.concurrent.ExecutionContext.Implicits.global
 import fr.acinq.eclair.io.UnknownMessageReceived
-import fr.acinq.eclair.router.{Router, SyncProgress}
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.channel.Nothing
 import fr.acinq.hc.app.wire.Codecs
-
 import scala.collection.mutable
 import scala.concurrent.Future
 import akka.actor.ActorRef
@@ -35,9 +34,9 @@ object HostedSync {
 
   case class TickSendGossip(peers: Seq[PeerConnectedWrap] = Nil)
 
-  case class SendSyncTo(info: PeerConnectedWrap)
-
   case class GotAllSyncFrom(info: PeerConnectedWrap)
+
+  case class SendSyncTo(info: PeerConnectedWrap)
 }
 
 class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, peerProvider: ActorRef) extends FSMDiagnosticActorLogging[HostedSyncState, HostedSyncData] {
@@ -48,7 +47,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
   val ipAntiSpam: mutable.Map[Array[Byte], Int] = mutable.Map.empty withDefaultValue 0
 
   private val syncProcessor = new AnnouncementMessageProcessor {
-    override val tags: Set[Int] = Set(PHC_ANNOUNCE_SYNC_TAG, PHC_UPDATE_SYNC_TAG)
+    override val tagsOfInterest: Set[Int] = Set(PHC_ANNOUNCE_SYNC_TAG, PHC_UPDATE_SYNC_TAG)
     override def processNewAnnounce(announce: ChannelAnnouncement, data: OperationalData, seenFrom: PublicKey): OperationalData =
       data.copy(phcNetwork = data.phcNetwork addNewAnnounce announce)
 
@@ -60,7 +59,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
   }
 
   private val gossipProcessor = new AnnouncementMessageProcessor {
-    override val tags: Set[Int] = Set(PHC_ANNOUNCE_GOSSIP_TAG, PHC_UPDATE_GOSSIP_TAG)
+    override val tagsOfInterest: Set[Int] = Set(PHC_ANNOUNCE_GOSSIP_TAG, PHC_UPDATE_GOSSIP_TAG)
     override def processNewAnnounce(announce: ChannelAnnouncement, data: OperationalData, seenFrom: PublicKey): OperationalData =
       data.copy(phcGossip = data.phcGossip.addAnnounce(announce, seenFrom), phcNetwork = data.phcNetwork addNewAnnounce announce)
 
@@ -93,21 +92,21 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
       goto(WAIT_FOR_PHC_SYNC) using WaitForNormalNetworkData(data.phcNetwork)
 
     case Event(msg: UnknownMessageReceived, data: OperationalData)
-      if syncProcessor.tags.contains(msg.message.tag) =>
-      stay using syncProcessor.process(msg, data)
+      if syncProcessor.tagsOfInterest.contains(msg.message.tag) =>
+      stay using syncProcessor.process(msg.nodeId, msg.message, data)
 
     case Event(GotAllSyncFrom(wrap), data: OperationalData)
       if data.lastSyncNodeId.contains(wrap.info.nodeId) =>
 
       tryPersist(data.phcNetwork).map { adds =>
         // Note: nodes whose NC count falls below minimum will eventually be pruned out
-        val u1 = updatesDb.pruneOldUpdates1(System.currentTimeMillis.millis.toSeconds)
-        val u2 = updatesDb.pruneOldUpdates2(System.currentTimeMillis.millis.toSeconds)
-        val ann = updatesDb.pruneUpdateLessAnnounces
+        val u1Count = updatesDb.pruneOldUpdates1(System.currentTimeMillis.millis.toSeconds)
+        val u2Count = updatesDb.pruneOldUpdates2(System.currentTimeMillis.millis.toSeconds)
+        val annCount = updatesDb.pruneUpdateLessAnnounces
         val phcNetwork1 = updatesDb.getState
 
         // In case of success we prune database and recreate network from scratch
-        log.info(s"PLGN PHC, HostedSync, added=${adds.sum}, removed u1=$u1, removed u2=$u2, removed ann=$ann")
+        log.info(s"PLGN PHC, HostedSync, added=${adds.sum}, removed u1=$u1Count, removed u2=$u2Count, removed ann=$annCount")
         log.info(s"PLGN PHC, HostedSync, chans old=${data.phcNetwork.channels.size}, new=${phcNetwork1.channels.size}")
         goto(OPERATIONAL) using data.copy(phcNetwork = phcNetwork1)
       }.recover { err =>
@@ -163,14 +162,11 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
         case _ => log.info(s"PLGN PHC, TickSendGossip, success, ${data.phcGossip.asString}")
       }
 
-      tryPersist(data.phcNetwork) match {
-        case Failure(err) => log.info(s"PLGN PHC, TickSendGossip, db fail=${err.getMessage}")
-        case Success(adds) => log.info(s"PLGN PHC, TickSendGossip, db adds=${adds.sum}")
-      }
-
       val emptyGossip = CollectedGossip(Map.empty)
       val phcNetwork1 = data.phcNetwork.copy(unsaved = PHCNetwork.emptyUnsaved)
-      stay using data.copy(phcNetwork = phcNetwork1, phcGossip = emptyGossip)
+      val data1 = data.copy(phcNetwork = phcNetwork1, phcGossip = emptyGossip)
+      tryPersistLog(data.phcNetwork)
+      stay using data1
 
     case Event(SendSyncTo(wrap), data: OperationalData) =>
       if (ipAntiSpam(wrap.remoteIp) > phcConfig.maxSyncSendsPerIpPerMinute) {
@@ -216,8 +212,15 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
     // LISTENING TO GOSSIP
 
     case Event(msg: UnknownMessageReceived, data: OperationalData)
-      if gossipProcessor.tags.contains(msg.message.tag) =>
-      stay using gossipProcessor.process(msg, data)
+      if gossipProcessor.tagsOfInterest.contains(msg.message.tag) =>
+      stay using gossipProcessor.process(msg.nodeId, msg.message, data)
+
+    case Event(msg: UnknownMessage, data: OperationalData)
+      if gossipProcessor.tagsOfInterest.contains(msg.tag) =>
+      log.info(s"PLGN PHC, got local gossip message=${msg.getClass.getName}")
+      val data1 = gossipProcessor.process(kit.nodeParams.nodeId, msg, data)
+      tryPersistLog(data1.phcNetwork)
+      stay using data1
   }
 
   onTransition {
@@ -264,33 +267,33 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
     }.toSeq), updatesDb.db)
   }
 
+  private def tryPersistLog(phcNetwork: PHCNetwork): Unit = tryPersist(phcNetwork) match {
+    case Failure(error) => log.info(s"PLGN PHC, TickSendGossip, db fail=${error.getMessage}")
+    case Success(adds) => log.info(s"PLGN PHC, TickSendGossip, db adds=${adds.sum}")
+  }
+
   abstract class AnnouncementMessageProcessor {
     def processNewAnnounce(announce: ChannelAnnouncement, data: OperationalData, seenFrom: PublicKey): OperationalData
     def processKnownAnnounce(announce: ChannelAnnouncement, data: OperationalData, seenFrom: PublicKey): OperationalData
     def processUpdate(update: ChannelUpdate, data: OperationalData, seenFrom: PublicKey): OperationalData
-    val tags: Set[Int]
+    val tagsOfInterest: Set[Int]
 
-    // IMPORTANT: unknown may have peer=null, connectionInfo=null if announce has been emitted locally
-    def process(unknown: UnknownMessageReceived, data: OperationalData): OperationalData = Codecs.decodeAnnounceMessage(unknown.message) match {
+    def process(fromNodeId: PublicKey, receivedMessage: UnknownMessage, data: OperationalData): OperationalData = Codecs.decodeAnnounceMessage(receivedMessage) match {
       case Attempt.Successful(msg: ChannelAnnouncement) if phcNodeHasEnoughNormalChannels(msg, data) && data.phcNetwork.channels.contains(msg.shortChannelId) && data.phcNetwork.isAnnounceAcceptable(msg) =>
-        if (unknown.nodeId == kit.nodeParams.nodeId) log.info(s"PLGN PHC, HostedSync, updated existing local announce")
-        processKnownAnnounce(msg, data, unknown.nodeId)
+        processKnownAnnounce(msg, data, fromNodeId)
 
       case Attempt.Successful(msg: ChannelAnnouncement) if phcNodeHasEnoughNormalChannels(msg, data) && data.phcNetwork.isNewAnnounceAcceptable(msg, phcConfig) =>
-        if (unknown.nodeId == kit.nodeParams.nodeId) log.info(s"PLGN PHC, HostedSync, added new local announce")
-        processNewAnnounce(msg, data, unknown.nodeId)
+        processNewAnnounce(msg, data, fromNodeId)
 
       case Attempt.Successful(msg: ChannelUpdate) if isUpdateAcceptable(msg, data) =>
-        if (unknown.nodeId == kit.nodeParams.nodeId) log.info(s"PLGN PHC, HostedSync, accepted local update")
-        processUpdate(msg, data, unknown.nodeId)
+        processUpdate(msg, data, fromNodeId)
 
       case Attempt.Successful(something) =>
-        if (unknown.nodeId == kit.nodeParams.nodeId) log.info(s"PLGN PHC, HostedSync, local sent unacceptable message=$something")
-        else log.info(s"PLGN PHC, HostedSync, remote sent unacceptable message=$something, peer=${unknown.nodeId.toString}")
+        log.info(s"PLGN PHC, HostedSync, unacceptable message=$something, peer=$fromNodeId")
         data
 
       case _: Attempt.Failure =>
-        log.info(s"PLGN PHC, HostedSync, parsing fail, peer=${unknown.nodeId.toString}")
+        log.info(s"PLGN PHC, HostedSync, parsing fail, peer=$fromNodeId")
         data
     }
   }
