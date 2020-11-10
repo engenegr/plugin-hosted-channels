@@ -64,6 +64,11 @@ object Codecs {
   val refundPendingCodec: Codec[RefundPending] =
     (uint32 withContext "startedAt").as[RefundPending]
 
+  val announcementSignatureCodec: Codec[AnnouncementSignature] = {
+    (bytes64 withContext "nodeSignature") ::
+      (bool withContext "wantsReply")
+  }.as[AnnouncementSignature]
+
   val queryPublicHostedChannelsCodec: Codec[QueryPublicHostedChannels] =
     (bytes32 withContext "chainHash").as[QueryPublicHostedChannels]
 
@@ -87,6 +92,7 @@ object Codecs {
     case HC_STATE_OVERRIDE_TAG => stateOverrideCodec.decode(wrap.data.toBitVector).map(_.value)
     case HC_HOSTED_CHANNEL_BRANDING_TAG => hostedChannelBrandingCodec.decode(wrap.data.toBitVector).map(_.value)
     case HC_REFUND_PENDING_TAG => refundPendingCodec.decode(wrap.data.toBitVector).map(_.value)
+    case HC_ANNOUNCEMENT_SIGNATURE_TAG => announcementSignatureCodec.decode(wrap.data.toBitVector).map(_.value)
     case HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG => queryPublicHostedChannelsCodec.decode(wrap.data.toBitVector).map(_.value)
     case HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG => replyPublicHostedChannelsEndCodec.decode(wrap.data.toBitVector).map(_.value)
   }
@@ -99,6 +105,7 @@ object Codecs {
     case msg: StateOverride => UnknownMessage(HC_STATE_OVERRIDE_TAG, stateOverrideCodec.encode(msg).require.toByteVector)
     case msg: HostedChannelBranding => UnknownMessage(HC_HOSTED_CHANNEL_BRANDING_TAG, hostedChannelBrandingCodec.encode(msg).require.toByteVector)
     case msg: RefundPending => UnknownMessage(HC_REFUND_PENDING_TAG, refundPendingCodec.encode(msg).require.toByteVector)
+    case msg: AnnouncementSignature => UnknownMessage(HC_ANNOUNCEMENT_SIGNATURE_TAG, announcementSignatureCodec.encode(msg).require.toByteVector)
     case msg: QueryPublicHostedChannels => UnknownMessage(HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG, queryPublicHostedChannelsCodec.encode(msg).require.toByteVector)
     case msg: ReplyPublicHostedChannelsEnd => UnknownMessage(HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG, replyPublicHostedChannelsEndCodec.encode(msg).require.toByteVector)
   }
@@ -110,7 +117,6 @@ object Codecs {
     case HC_UPDATE_FULFILL_HTLC_TAG => updateFulfillHtlcCodec.decode(wrap.data.toBitVector).map(_.value)
     case HC_UPDATE_FAIL_HTLC_TAG => updateFailHtlcCodec.decode(wrap.data.toBitVector).map(_.value)
     case HC_UPDATE_FAIL_MALFORMED_HTLC_TAG => updateFailMalformedHtlcCodec.decode(wrap.data.toBitVector).map(_.value)
-    case HC_ANNOUNCEMENT_SIGNATURES_TAG => announcementSignaturesCodec.decode(wrap.data.toBitVector).map(_.value)
     case HC_ERROR_TAG => errorCodec.decode(wrap.data.toBitVector).map(_.value)
     case tag => Attempt failure Err(s"PLGN PHC, unsupported chan tag=$tag")
   }
@@ -120,7 +126,6 @@ object Codecs {
     case msg: UpdateFulfillHtlc => UnknownMessage(HC_UPDATE_FULFILL_HTLC_TAG, LightningMessageCodecs.updateFulfillHtlcCodec.encode(msg).require.toByteVector)
     case msg: UpdateFailHtlc => UnknownMessage(HC_UPDATE_FAIL_HTLC_TAG, LightningMessageCodecs.updateFailHtlcCodec.encode(msg).require.toByteVector)
     case msg: UpdateFailMalformedHtlc => UnknownMessage(HC_UPDATE_FAIL_MALFORMED_HTLC_TAG, LightningMessageCodecs.updateFailMalformedHtlcCodec.encode(msg).require.toByteVector)
-    case msg: AnnouncementSignatures => UnknownMessage(HC_ANNOUNCEMENT_SIGNATURES_TAG, LightningMessageCodecs.announcementSignaturesCodec.encode(msg).require.toByteVector)
     case msg: Error => UnknownMessage(HC_ERROR_TAG, LightningMessageCodecs.errorCodec.encode(msg).require.toByteVector)
     case msg => throw new RuntimeException(s"PLGN PHC, unacceptable chan message=${msg.getClass.toString}")
   }

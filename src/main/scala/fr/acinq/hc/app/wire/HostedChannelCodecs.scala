@@ -2,10 +2,10 @@ package fr.acinq.hc.app.wire
 
 import fr.acinq.hc.app.wire.Codecs._
 import fr.acinq.eclair.wire.ChannelCodecs._
+import fr.acinq.eclair.wire.LightningMessageCodecs.{channelUpdateCodec, channelAnnouncementCodec, errorCodec}
 import fr.acinq.hc.app.channel.{ErrorExt, HC_DATA_ESTABLISHED, HostedCommitments, HostedState}
 import scodec.codecs.{bool, either, listOfN, optional, uint16, uint8, utf8, variableSizeBytes}
 import fr.acinq.eclair.wire.CommonCodecs.{bytes32, publicKey, setCodec, uint64overflow}
-import fr.acinq.eclair.wire.LightningMessageCodecs.{channelUpdateCodec, errorCodec}
 import scodec.Codec
 
 
@@ -32,12 +32,13 @@ object HostedChannelCodecs {
 
   val HC_DATA_ESTABLISHED_Codec: Codec[HC_DATA_ESTABLISHED] = {
     (hostedCommitmentsCodec withContext "commitments") ::
-      (optional(bool, errorExtCodec) withContext "localError") ::
-      (optional(bool, errorExtCodec) withContext "remoteError") ::
-      (optional(bool, stateOverrideCodec) withContext "overrideProposal") ::
-      (optional(bool, refundPendingCodec) withContext "refundPendingInfo") ::
-      (optional(bool, variableSizeBytes(uint16, utf8)) withContext "refundCompleteInfo") ::
-      (variableSizeBytes(uint16, channelUpdateCodec) withContext "localChannelUpdate")
+      (lengthDelimited(channelUpdateCodec) withContext "localChannelUpdate") ::
+      (optional(bool8, errorExtCodec) withContext "localError") ::
+      (optional(bool8, errorExtCodec) withContext "remoteError") ::
+      (optional(bool8, stateOverrideCodec) withContext "overrideProposal") ::
+      (optional(bool8, refundPendingCodec) withContext "refundPendingInfo") ::
+      (optional(bool8, variableSizeBytes(uint16, utf8)) withContext "refundCompleteInfo") ::
+      (optional(bool8, lengthDelimited(channelAnnouncementCodec)) withContext "channelAnnouncement")
   }.as[HC_DATA_ESTABLISHED]
 
   val hostedStateCodec: Codec[HostedState] = {

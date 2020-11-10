@@ -3,13 +3,15 @@ package fr.acinq.hc.app
 import fr.acinq.eclair._
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
-import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol}
-import fr.acinq.eclair.wire.{AnnouncementMessage, Color, HasChannelId, UnknownMessage}
+import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, LexicographicalOrdering, Protocol}
+import fr.acinq.eclair.wire.{AnnouncementMessage, AnnouncementSignatures, ChannelAnnouncement, Color, HasChannelId, UnknownMessage}
 import java.io.{ByteArrayInputStream, File}
 import java.nio.file.{Files, Paths}
 
 import fr.acinq.eclair.channel.Channel.OutgoingMessage
+import fr.acinq.hc.app.channel.HostedCommitments
 import net.ceedubs.ficus.readers.ValueReader
+import fr.acinq.eclair.router.Announcements
 import fr.acinq.bitcoin.Crypto.PublicKey
 import com.typesafe.config.ConfigFactory
 import org.postgresql.util.PSQLException
@@ -18,6 +20,7 @@ import fr.acinq.hc.app.wire.Codecs
 import slick.jdbc.PostgresProfile
 import scodec.bits.ByteVector
 import java.nio.ByteOrder
+
 import scala.util.Try
 
 
@@ -33,6 +36,14 @@ object Tools {
 
     def insert(data: T): Boolean
   }
+
+  def makePHCAnnouncementSignature(nodeParams: NodeParams, cs: HostedCommitments, shortChannelId: ShortChannelId, wantsReply: Boolean): AnnouncementSignature = {
+    val witness = Announcements.generateChannelAnnouncementWitness(nodeParams.chainHash, shortChannelId, nodeParams.nodeId, cs.remoteNodeId, nodeParams.nodeId, cs.remoteNodeId, Features.empty)
+    AnnouncementSignature(nodeParams.nodeKeyManager.signChannelAnnouncement(witness), wantsReply)
+  }
+
+  def makePHCAnnouncement(nodeParams: NodeParams, ls: AnnouncementSignature, rs: AnnouncementSignature, shortChannelId: ShortChannelId, remoteNodeId: PublicKey): ChannelAnnouncement =
+    Announcements.makeChannelAnnouncement(nodeParams.chainHash, shortChannelId, nodeParams.nodeId, remoteNodeId, nodeParams.nodeId, remoteNodeId, ls.nodeSignature, rs.nodeSignature, ls.nodeSignature, rs.nodeSignature)
 
   // HC ids derivation
 

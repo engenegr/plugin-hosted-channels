@@ -83,6 +83,8 @@ case class StateOverride(blockDay: Long, localBalanceMsat: MilliSatoshi, localUp
 
 case class RefundPending(startedAt: Long) extends HostedChannelMessage
 
+case class AnnouncementSignature(nodeSignature: ByteVector64, wantsReply: Boolean) extends HostedChannelMessage
+
 // PHC
 
 case class QueryPublicHostedChannels(chainHash: ByteVector32) extends HostedChannelMessage

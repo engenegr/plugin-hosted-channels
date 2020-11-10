@@ -270,18 +270,23 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
     def processUpdate(update: ChannelUpdate, data: OperationalData, seenFrom: PublicKey): OperationalData
     val tags: Set[Int]
 
+    // IMPORTANT: unknown may have peer=null, connectionInfo=null if announce has been emitted locally
     def process(unknown: UnknownMessageReceived, data: OperationalData): OperationalData = Codecs.decodeAnnounceMessage(unknown.message) match {
       case Attempt.Successful(msg: ChannelAnnouncement) if phcNodeHasEnoughNormalChannels(msg, data) && data.phcNetwork.channels.contains(msg.shortChannelId) && data.phcNetwork.isAnnounceAcceptable(msg) =>
+        if (unknown.nodeId == kit.nodeParams.nodeId) log.info(s"PLGN PHC, HostedSync, updated existing local announce")
         processKnownAnnounce(msg, data, unknown.nodeId)
 
       case Attempt.Successful(msg: ChannelAnnouncement) if phcNodeHasEnoughNormalChannels(msg, data) && data.phcNetwork.isNewAnnounceAcceptable(msg, phcConfig) =>
+        if (unknown.nodeId == kit.nodeParams.nodeId) log.info(s"PLGN PHC, HostedSync, added new local announce")
         processNewAnnounce(msg, data, unknown.nodeId)
 
       case Attempt.Successful(msg: ChannelUpdate) if isUpdateAcceptable(msg, data) =>
+        if (unknown.nodeId == kit.nodeParams.nodeId) log.info(s"PLGN PHC, HostedSync, accepted local update")
         processUpdate(msg, data, unknown.nodeId)
 
       case Attempt.Successful(something) =>
-        log.info(s"PLGN PHC, HostedSync, got unacceptable message=$something, peer=${unknown.nodeId.toString}")
+        if (unknown.nodeId == kit.nodeParams.nodeId) log.info(s"PLGN PHC, HostedSync, local sent unacceptable message=$something")
+        else log.info(s"PLGN PHC, HostedSync, remote sent unacceptable message=$something, peer=${unknown.nodeId.toString}")
         data
 
       case _: Attempt.Failure =>

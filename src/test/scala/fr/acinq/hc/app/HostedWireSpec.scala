@@ -19,7 +19,7 @@ import scala.util.Random
 
 object HostedWireSpec {
   def bin(len: Int, fill: Byte): ByteVector = ByteVector.fill(len)(fill)
-
+  def sig: ByteVector64 = Crypto.sign(randomBytes32, randomKey)
   def bin32(fill: Byte): ByteVector32 = ByteVector32(bin(32, fill))
 
   val add1: UpdateAddHtlc = UpdateAddHtlc(
@@ -72,12 +72,12 @@ object HostedWireSpec {
 
   val data: HC_DATA_ESTABLISHED = HC_DATA_ESTABLISHED(
     hdc,
+    channelUpdate,
     localError = None,
     remoteError = Some(ErrorExt generateFrom error),
     overrideProposal = None,
     refundPendingInfo = Some(RefundPending(System.currentTimeMillis / 1000)),
-    refundCompleteInfo = Some("Has been refunded to address n3RzaNTD8LnBGkREBjSkouy5gmd2dVf7jQ"),
-    channelUpdate)
+    refundCompleteInfo = Some("Has been refunded to address n3RzaNTD8LnBGkREBjSkouy5gmd2dVf7jQ"))
 }
 
 class HostedWireSpec extends AnyFunSuite {
@@ -94,6 +94,13 @@ class HostedWireSpec extends AnyFunSuite {
     val binary = HostedChannelCodecs.HC_DATA_ESTABLISHED_Codec.encode(data).require
     val check = HostedChannelCodecs.HC_DATA_ESTABLISHED_Codec.decodeValue(binary).require
     assert(data === check)
+    val a: Crypto.PrivateKey = randomKey
+    val b: Crypto.PrivateKey = randomKey
+    val channel = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, ShortChannelId(42), a.publicKey, b.publicKey, randomKey.publicKey, randomKey.publicKey, sig, sig, ByteVector64.Zeroes, ByteVector64.Zeroes)
+    val data1 = data.copy(channelAnnouncement = Some(channel))
+    val binary1 = HostedChannelCodecs.HC_DATA_ESTABLISHED_Codec.encode(data1).require
+    val check1 = HostedChannelCodecs.HC_DATA_ESTABLISHED_Codec.decodeValue(binary1).require
+    assert(data1 === check1)
   }
 
   test("Encode and decode commitments") {
@@ -120,7 +127,6 @@ class HostedWireSpec extends AnyFunSuite {
   }
 
   test("Encode and decode routing messages") {
-    def sig: ByteVector64 = Crypto.sign(randomBytes32, randomKey)
     val a: Crypto.PrivateKey = randomKey
     val b: Crypto.PrivateKey = randomKey
 

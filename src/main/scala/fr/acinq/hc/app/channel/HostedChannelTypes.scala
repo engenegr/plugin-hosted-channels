@@ -6,8 +6,8 @@ import fr.acinq.eclair.channel._
 import scala.util.{Failure, Success, Try}
 import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, Satoshi}
-import fr.acinq.hc.app.wire.Codecs.{LocalOrRemoteUpdateWithChannelId, UpdateWithChannelId}
 import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc, OutgoingHtlc}
+import fr.acinq.hc.app.wire.Codecs.{LocalOrRemoteUpdateWithChannelId, UpdateWithChannelId}
 import fr.acinq.eclair.payment.OutgoingPacket
 import fr.acinq.eclair.MilliSatoshi
 import scodec.bits.ByteVector
@@ -31,6 +31,8 @@ case class CMD_FINALIZE_REFUND(remoteNodeId: PublicKey, info: String) extends Ha
 case class CMD_TURN_PUBLIC(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 case class CMD_TURN_PRIVATE(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 
+case class CMDResponseSuccess(cmd: HasRemoteNodeIdHostedCommand)
+
 // Data
 
 sealed trait HostedData
@@ -41,15 +43,16 @@ case class HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE(invoke: InvokeHostedChannel) ex
 
 case class HC_DATA_CLIENT_WAIT_HOST_INIT(refundScriptPubKey: ByteVector) extends HostedData
 
-case class HC_DATA_CLIENT_WAIT_HOST_STATE_UPDATE(commitments: HostedCommitments) extends HostedData with HasAbstractCommitments
+case class HC_DATA_CLIENT_WAIT_HOST_STATE_UPDATE(commitments: HostedCommitments) extends HostedData
 
 case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
+                               localChannelUpdate: wire.ChannelUpdate,
                                localError: Option[ErrorExt] = None,
                                remoteError: Option[ErrorExt] = None,
                                overrideProposal: Option[StateOverride] = None, // CLOSED channel override can be initiated by Host, a new proposed balance should be retained once this happens
                                refundPendingInfo: Option[RefundPending] = None, // Will be present in case if funds should be refunded, but `liabilityDeadlineBlockdays` has not passed yet
                                refundCompleteInfo: Option[String] = None, // Will be present after channel has been manually updated as a refunded one
-                               localChannelUpdate: wire.ChannelUpdate) extends HostedData with HasAbstractCommitments {
+                               channelAnnouncement: Option[wire.ChannelAnnouncement] = None) extends HostedData {
 
   lazy val errorExt: Option[ErrorExt] = localError orElse remoteError
 }

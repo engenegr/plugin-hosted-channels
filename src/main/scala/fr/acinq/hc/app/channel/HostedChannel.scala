@@ -3,31 +3,40 @@ package fr.acinq.hc.app.channel
 import fr.acinq.eclair._
 import fr.acinq.hc.app.wire.Codecs.{LocalOrRemoteUpdateWithChannelId, UpdateWithChannelId}
 import fr.acinq.eclair.channel.{CLOSED, CMD_SIGN, ChannelErrorOccurred, Helpers, HtlcResult, HtlcsTimedoutDownstream, InvalidChainHash, InvalidFinalScript, LocalError, NORMAL, OFFLINE, RES_ADD_SETTLED, SYNCING, State}
-import fr.acinq.hc.app.{HCParams, HostedChannelMessage, InitHostedChannel, InvokeHostedChannel, LastCrossSignedState, PeerConnectedWrap, StateUpdate, Tools, Vals, Worker}
+import fr.acinq.hc.app.{AnnouncementSignature, HCParams, HostedChannelMessage, InitHostedChannel, InvokeHostedChannel, LastCrossSignedState, PeerConnectedWrap, StateUpdate, Tools, Vals, Worker}
 import fr.acinq.eclair.blockchain.CurrentBlockCount
 import fr.acinq.eclair.FSMDiagnosticActorLogging
 import fr.acinq.hc.app.dbo.HostedChannelsDb
 import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.eclair.wire.{HasChannelId, UpdateAddHtlc}
+import fr.acinq.eclair.wire.{AnnouncementMessage, AnnouncementSignatures, ChannelAnnouncement, ChannelUpdate, HasChannelId, UpdateAddHtlc}
 
 import scala.collection.mutable
-import akka.actor.FSM
+import akka.actor.{ActorRef, FSM}
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64}
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
-import fr.acinq.eclair.io.PeerDisconnected
+import fr.acinq.eclair.io.{PeerDisconnected, UnknownMessageReceived}
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.transactions.CommitmentSpec
+import fr.acinq.hc.app.channel.HostedChannel.SendAnnouncements
+import fr.acinq.hc.app.network.PHC
+import fr.acinq.hc.app.wire.Codecs
 import scodec.bits.ByteVector
 
 
+object HostedChannel {
+  case object SendAnnouncements { val label = "SendAnnouncements" }
+}
+
 class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedWrap], remoteNodeId: PublicKey, channelsDb: HostedChannelsDb,
-                    vals: Vals) extends FSM[State, HostedData] with FSMDiagnosticActorLogging[State, HostedData] {
+                    hostedSync: ActorRef, vals: Vals) extends FSM[State, HostedData] with FSMDiagnosticActorLogging[State, HostedData] {
 
   lazy val channelId: ByteVector32 = Tools.hostedChanId(kit.nodeParams.nodeId.value, remoteNodeId.value)
 
   lazy val shortChannelId: ShortChannelId = Tools.hostedShortChanId(kit.nodeParams.nodeId.value, remoteNodeId.value)
 
   lazy val initParams: HCParams = vals.hcOverrideMap.get(remoteNodeId).map(_.params).getOrElse(vals.hcDefaultParams)
+
+  startTimerWithFixedDelay(SendAnnouncements.label, SendAnnouncements, PHC.tickAnnounceThreshold)
 
   context.system.eventStream.subscribe(channel = classOf[CurrentBlockCount], subscriber = self)
 
@@ -59,13 +68,9 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       goto(SYNCING) using HC_DATA_CLIENT_WAIT_HOST_INIT(scriptPubKey) sendingHosted invokeMsg
 
     case Event(remoteInvoke: InvokeHostedChannel, HC_NOTHING) =>
-      if (kit.nodeParams.chainHash != remoteInvoke.chainHash) {
-        stay sendingHasChannelId makeError(InvalidChainHash(channelId, kit.nodeParams.chainHash, remoteInvoke.chainHash).getMessage)
-      } else if (Helpers.Closing isValidFinalScriptPubkey remoteInvoke.refundScriptPubKey) {
-        goto(SYNCING) using HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE(remoteInvoke) sendingHosted initParams.initMsg
-      } else {
-        stay sendingHasChannelId makeError(InvalidFinalScript(channelId).getMessage)
-      }
+      if (kit.nodeParams.chainHash != remoteInvoke.chainHash) stay sendingHasChannelId makeError(InvalidChainHash(channelId, kit.nodeParams.chainHash, remoteInvoke.chainHash).getMessage)
+      else if (Helpers.Closing isValidFinalScriptPubkey remoteInvoke.refundScriptPubKey) goto(SYNCING) using HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE(remoteInvoke) sendingHosted initParams.initMsg
+      else stay sendingHasChannelId makeError(InvalidFinalScript(channelId).getMessage)
 
     case Event(_: InvokeHostedChannel, data: HC_DATA_ESTABLISHED) =>
       if (data.commitments.isHost) {
@@ -169,7 +174,48 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
   }
 
   when(NORMAL) {
-    case _ => stay
+    case Event(HostedChannel.SendAnnouncements, data: HC_DATA_ESTABLISHED) if data.commitments.announceChannel =>
+      // Last update could have been sent way too long ago and other nodes might have removed PHC announcement by now
+      val lastUpdateTooLongAgo = data.localChannelUpdate.timestamp < System.currentTimeMillis - PHC.reAnnounceThreshold
+      val update1 = makeChannelUpdate(localLCSS = data.commitments.lastCrossSignedState, enable = true)
+      val data1 = data.copy(localChannelUpdate = update1)
+
+      data1.channelAnnouncement match {
+        case None => stay sendingHosted Tools.makePHCAnnouncementSignature(kit.nodeParams, data.commitments, shortChannelId, wantsReply = true)
+        case Some(announce) if lastUpdateTooLongAgo => stay storingAndUsing data1 publishing announce publishing data1.localChannelUpdate
+        case _ => stay storingAndUsing data1 publishing data1.localChannelUpdate
+      }
+
+    case Event(remoteSig: AnnouncementSignature, data: HC_DATA_ESTABLISHED) if data.commitments.announceChannel =>
+      val localSig = Tools.makePHCAnnouncementSignature(kit.nodeParams, data.commitments, shortChannelId, wantsReply = false)
+      val announce = Tools.makePHCAnnouncement(kit.nodeParams, localSig, remoteSig, shortChannelId, remoteNodeId)
+      val update1 = makeChannelUpdate(localLCSS = data.commitments.lastCrossSignedState, enable = true)
+      val data1 = data.copy(channelAnnouncement = Some(announce), localChannelUpdate = update1)
+      val isSigOK = Announcements.checkSigs(announce)
+
+      if (isSigOK && remoteSig.wantsReply) {
+        log.info(s"PLGN PHC, announcing PHC and sending sig reply, peer=$remoteNodeId")
+        stay storingAndUsing data1 sendingHosted localSig publishing announce publishing data1.localChannelUpdate
+      } else if (isSigOK) {
+        log.info(s"PLGN PHC, announcing PHC without sig reply, peer=$remoteNodeId")
+        stay storingAndUsing data1 publishing announce publishing data1.localChannelUpdate
+      } else {
+        log.info(s"PLGN PHC, announce sig check failed, peer=$remoteNodeId")
+        stay
+      }
+
+    case Event(cmd: CMD_TURN_PUBLIC, data: HC_DATA_ESTABLISHED) =>
+      val commits1 = data.commitments.copy(announceChannel = true)
+      val data1 = data.copy(commitments = commits1)
+      self ! HostedChannel.SendAnnouncements
+      sender ! CMDResponseSuccess(cmd)
+      stay storingAndUsing data1
+
+    case Event(cmd: CMD_TURN_PRIVATE, data: HC_DATA_ESTABLISHED) =>
+      val commits1 = data.commitments.copy(announceChannel = false)
+      val data1 = data.copy(commitments = commits1)
+      sender ! CMDResponseSuccess(cmd)
+      stay storingAndUsing data1
   }
 
   when(CLOSED) {
@@ -229,6 +275,12 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       state
     }
 
+    def publishing(message: AnnouncementMessage): HostedFsmState = {
+      val unknownMessage = Codecs.toUnknownAnnounceMessage(message, isGossip = true)
+      hostedSync ! UnknownMessageReceived(peer = null, kit.nodeParams.nodeId, unknownMessage, connectionInfo = null)
+      state
+    }
+
     def storingAndUsing(data: HC_DATA_ESTABLISHED): HostedFsmState = {
       channelsDb.updateOrAddNewChannel(data)
       state using data
@@ -251,6 +303,11 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
     localUnsignedLCSS1.withLocalSigOfRemote(kit.nodeParams.privateKey).stateUpdate(isTerminal = false)
   }
 
+  def makeChannelUpdate(localLCSS: LastCrossSignedState, enable: Boolean): ChannelUpdate =
+    Announcements.makeChannelUpdate(kit.nodeParams.chainHash, kit.nodeParams.privateKey, remoteNodeId, shortChannelId,
+      initParams.cltvDelta, initParams.htlcMinimumMsat.msat, initParams.feeBase, initParams.feeProportionalMillionths,
+      localLCSS.initHostedChannel.channelCapacityMsat, enable)
+
   def restoreEmptyCommitments(localLCSS: LastCrossSignedState, isHost: Boolean): HostedCommitments = {
     val localCommitmentSpec = CommitmentSpec(htlcs = Set.empty, feeratePerKw = FeeratePerKw(0L.sat), localLCSS.localBalanceMsat, localLCSS.remoteBalanceMsat)
     HostedCommitments(isHost, kit.nodeParams.nodeId, remoteNodeId, channelId, localCommitmentSpec, originChannels = Map.empty, lastCrossSignedState = localLCSS,
@@ -258,9 +315,9 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
   }
 
   def restoreEmptyData(localLCSS: LastCrossSignedState, isHost: Boolean): HC_DATA_ESTABLISHED = {
-    val channelUpdate = Announcements.makeChannelUpdate(kit.nodeParams.chainHash, kit.nodeParams.privateKey, remoteNodeId, shortChannelId, initParams.cltvDelta,
-      initParams.htlcMinimumMsat.msat, initParams.feeBase, initParams.feeProportionalMillionths, localLCSS.initHostedChannel.channelCapacityMsat)
-    HC_DATA_ESTABLISHED(commitments = restoreEmptyCommitments(localLCSS, isHost), localChannelUpdate = channelUpdate)
+    val localChannelUpdate: ChannelUpdate = makeChannelUpdate(localLCSS, enable = true)
+    val commitments: HostedCommitments = restoreEmptyCommitments(localLCSS, isHost)
+    HC_DATA_ESTABLISHED(commitments, localChannelUpdate = localChannelUpdate)
   }
 
   def restoreMissingChannel(remoteLCSS: LastCrossSignedState, isHost: Boolean): HostedFsmState = {

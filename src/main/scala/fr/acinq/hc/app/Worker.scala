@@ -137,7 +137,7 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
   def channelRefOpt(nodeId: PublicKey): Option[ActorRef] = Option(inMemoryHostedChannels get nodeId)
 
   def spawnChannel(nodeId: PublicKey): ActorRef = {
-    val props = Props(classOf[HostedChannel], kit, remoteNode2Connection, nodeId, channelsDb, vals)
+    val props = Props(classOf[HostedChannel], kit, remoteNode2Connection, nodeId, channelsDb, hostedSync, vals)
     val channelRef = inMemoryHostedChannels.put(nodeId, context actorOf props)
     context watch channelRef
   }
