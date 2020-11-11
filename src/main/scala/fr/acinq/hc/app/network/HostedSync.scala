@@ -268,7 +268,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
         log.info(s"PLGN PHC, gossip update fresh fail, msg=$update")
         false
 
-      case Some(phc) if phc.verifySig(update) =>
+      case Some(phc) if !phc.verifySig(update) =>
         log.info(s"PLGN PHC, gossip update sig fail, msg=$update")
         false
 
