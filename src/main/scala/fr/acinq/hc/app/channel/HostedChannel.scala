@@ -3,7 +3,7 @@ package fr.acinq.hc.app.channel
 import fr.acinq.eclair._
 import fr.acinq.hc.app.wire.Codecs.{LocalOrRemoteUpdateWithChannelId, UpdateWithChannelId}
 import fr.acinq.eclair.channel.{CLOSED, CMD_SIGN, ChannelErrorOccurred, Helpers, HtlcResult, HtlcsTimedoutDownstream, InvalidChainHash, InvalidFinalScript, LocalError, NORMAL, OFFLINE, RES_ADD_SETTLED, SYNCING, State}
-import fr.acinq.hc.app.{AnnouncementSignature, HCParams, HostedChannelMessage, InitHostedChannel, InvokeHostedChannel, LastCrossSignedState, PeerConnectedWrap, StateUpdate, Tools, Vals, Worker}
+import fr.acinq.hc.app.{AnnouncementSignature, HCParams, HostedChannelMessage, InitHostedChannel, InvokeHostedChannel, LastCrossSignedState, PeerConnectedWrap, RefundPending, StateUpdate, Tools, Vals, Worker}
 import fr.acinq.eclair.blockchain.CurrentBlockCount
 import fr.acinq.eclair.FSMDiagnosticActorLogging
 import fr.acinq.hc.app.dbo.HostedChannelsDb
@@ -44,15 +44,15 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
   when(OFFLINE) {
     case Event(data: HC_DATA_ESTABLISHED, HC_NOTHING) =>
-      if (data.errorExt.isDefined) {
+      if (data.errorExt.isDefined || data.refundCompleteInfo.isDefined) {
         goto(CLOSED) using data
       } else {
         stay using data
       }
 
     case Event(Worker.HCPeerConnected, data: HC_DATA_ESTABLISHED) =>
-      // We could have transitioned into OFFLINE from CLOSED
-      if (data.errorExt.isDefined) {
+      // We could have transitioned into OFFLINE from CLOSED, hence check again
+      if (data.errorExt.isDefined || data.refundCompleteInfo.isDefined) {
         goto(CLOSED)
       } else if (data.commitments.isHost) {
         // Host awaits for remote invoke
@@ -73,7 +73,11 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       else stay sendingHasChannelId makeError(InvalidFinalScript(channelId).getMessage)
 
     case Event(_: InvokeHostedChannel, data: HC_DATA_ESTABLISHED) =>
-      if (data.commitments.isHost) {
+      if (data.commitments.isHost && data.refundPendingInfo.isDefined) {
+        // In case when refund has been requested we inform user immediately after connection is established
+        // the reason is this should not be happening if user really has lost their access to this hosted channel
+        goto(SYNCING) sendingHosted data.commitments.lastCrossSignedState sendingHosted data.refundPendingInfo.get
+      } else if (data.commitments.isHost) {
         // Invoke is always expected from client side, never from host
         goto(SYNCING) sendingHosted data.commitments.lastCrossSignedState
       } else {
@@ -174,6 +178,9 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
   }
 
   when(NORMAL) {
+
+    // PHC announcements
+
     case Event(HostedChannel.SendAnnouncements, data: HC_DATA_ESTABLISHED) if data.commitments.announceChannel =>
       // Last update could have been sent way too long ago and other nodes might have removed PHC announcement by now
       val lastUpdateTooLongAgo = data.localChannelUpdate.timestamp < System.currentTimeMillis - PHC.reAnnounceThreshold
@@ -220,12 +227,10 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
   when(CLOSED) {
     case Event(_: InvokeHostedChannel, data: HC_DATA_ESTABLISHED) =>
-      if (data.errorExt.isDefined) {
-        // Other side may have lost a state for a closed channel, in this case send LCSS, then an error
-        stay sendingHosted data.commitments.lastCrossSignedState sendingHasChannelId data.errorExt.get.error
-      } else {
-        stay
-      }
+      if (data.refundCompleteInfo.isDefined) stay sendingHosted data.commitments.lastCrossSignedState sendingHasChannelId makeError(data.refundCompleteInfo.get)
+      else if (data.refundPendingInfo.isDefined) stay sendingHosted data.commitments.lastCrossSignedState sendingHosted data.refundPendingInfo.get
+      else if (data.errorExt.isDefined) stay sendingHosted data.commitments.lastCrossSignedState sendingHasChannelId data.errorExt.get.error
+      else stay
   }
 
   whenUnhandled {
@@ -260,6 +265,29 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       } else {
         stay
       }
+
+    // Refunds
+
+    case Event(cmd: CMD_INIT_PENDING_REFUND, data: HC_DATA_ESTABLISHED) =>
+      val refundPendingOpt = Some(System.currentTimeMillis).map(RefundPending)
+      val data1 = data.copy(refundPendingInfo = refundPendingOpt)
+      sender ! CMDResponseSuccess(cmd)
+      stay storingAndUsing data1
+
+    case Event(finalizeCmd: CMD_FINALIZE_REFUND, data: HC_DATA_ESTABLISHED) =>
+      val enoughBlocksPassed = canFinalizeRefund(data.commitments.lastCrossSignedState)
+
+      if (enoughBlocksPassed) {
+        val refundCompleteInfoOpt = Some(finalizeCmd.info)
+        val data1 = data.copy(refundCompleteInfo = refundCompleteInfoOpt)
+        log.info(s"PLGN PHC, finalized refund for HC with peer=$remoteNodeId")
+        sender ! CMDResponseSuccess(finalizeCmd)
+        goto(CLOSED) storingAndUsing data1
+      } else {
+        val lastSignedDay = data.commitments.lastCrossSignedState.blockDay
+        sender ! FSM.Failure(s"Not enough time have passed since blockDay=$lastSignedDay")
+        stay
+      }
   }
 
   type HostedFsmState = FSM.State[fr.acinq.eclair.channel.State, HostedData]
@@ -292,6 +320,8 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
   }
 
   initialize()
+
+  def canFinalizeRefund(localLCSS: LastCrossSignedState): Boolean = localLCSS.blockDay + localLCSS.initHostedChannel.liabilityDeadlineBlockdays < currentBlockDay
 
   def makeError(content: String): wire.Error = wire.Error(channelId, content)
 
