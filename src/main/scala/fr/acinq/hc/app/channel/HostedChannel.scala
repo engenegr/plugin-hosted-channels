@@ -9,12 +9,13 @@ import fr.acinq.eclair.FSMDiagnosticActorLogging
 import fr.acinq.hc.app.dbo.HostedChannelsDb
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.wire.{AnnouncementMessage, AnnouncementSignatures, ChannelAnnouncement, ChannelUpdate, HasChannelId, UpdateAddHtlc}
+
 import scala.concurrent.duration._
 import scala.collection.mutable
 import akka.actor.{ActorRef, FSM}
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64}
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
-import fr.acinq.eclair.io.{PeerDisconnected, UnknownMessageReceived}
+import fr.acinq.eclair.io.{Peer, PeerDisconnected, UnknownMessageReceived}
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.transactions.CommitmentSpec
 import fr.acinq.hc.app.Tools.{DuplicateHandler, DuplicateShortId}
@@ -99,7 +100,13 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
   }
 
   when(SYNCING, stateTimeout = 5.minutes) {
-    case Event(StateTimeout, _) => stop(FSM.Normal)
+    case Event(StateTimeout, _: HC_DATA_ESTABLISHED) =>
+      log.info(s"PLGN PHC, sync timeout for existing chan, peer=$remoteNodeId")
+      stay.disconnecting
+
+    case Event(StateTimeout, _) =>
+      log.info(s"PLGN PHC, sync timeout for new chan, peer=$remoteNodeId")
+      stop(FSM.Normal)
 
     case Event(hostInit: InitHostedChannel, data: HC_DATA_CLIENT_WAIT_HOST_INIT) =>
       if (hostInit.liabilityDeadlineBlockdays < vals.hcDefaultParams.liabilityDeadlineBlockdays) stop(FSM.Normal) sendingHasChannelId makeError("Proposed liability deadline is too low")
@@ -338,6 +345,12 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
     def sendingHosted(messages: HostedChannelMessage *): HostedFsmState = {
       connections.get(remoteNodeId).foreach(conn => messages foreach conn.sendHostedChannelMsg)
+      state
+    }
+
+    def disconnecting: HostedFsmState = {
+      val message = Peer.Disconnect(remoteNodeId)
+      connections.get(remoteNodeId).foreach(_.info.peer ! message)
       state
     }
 
