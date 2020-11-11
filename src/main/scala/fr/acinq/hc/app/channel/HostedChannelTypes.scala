@@ -31,7 +31,11 @@ case class CMD_FINALIZE_REFUND(remoteNodeId: PublicKey, info: String) extends Ha
 case class CMD_TURN_PUBLIC(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 case class CMD_TURN_PRIVATE(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 
+case class CMD_GET_HC_INFO(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
+
 case class CMDResponseSuccess(cmd: HasRemoteNodeIdHostedCommand)
+
+case class CMDResponseInfo(channelId: ByteVector32, shortChannelId: ShortChannelId, state: State, data: HC_DATA_ESTABLISHED, nextLocalSpec: CommitmentSpec)
 
 // Data
 
@@ -231,37 +235,24 @@ case class HostedCommitments(isHost: Boolean,
       case None => Failure(UnknownHtlcId(channelId, cmd.id))
     }
 
-  def sendFailMalformed(cmd: CMD_FAIL_MALFORMED_HTLC): Try[(HostedCommitments, wire.UpdateFailMalformedHtlc)] = {
-    // BADONION bit must be set in failure_code
-    if ((cmd.failureCode & wire.FailureMessageCodecs.BADONION) == 0) {
-      Failure(InvalidFailureCode(channelId))
-    } else {
-      getIncomingHtlcCrossSigned(cmd.id) match {
-        case Some(_) =>
-          val fail = wire.UpdateFailMalformedHtlc(channelId, cmd.id, cmd.onionHash, cmd.failureCode)
-          Success(addProposal(Left(fail)), fail)
-        case None => Failure(UnknownHtlcId(channelId, cmd.id))
-      }
-    }
-  }
-
-  def receiveFail(fail: wire.UpdateFailHtlc): Try[(HostedCommitments, Origin, wire.UpdateAddHtlc)] =
-    // Unlike Fulfill for Fail/FailMalformed here we make sure they fail our cross-signed outgoing payment
-    getOutgoingHtlcCrossSigned(fail.id) match {
-      case Some(add) => Try((addProposal(Right(fail)), originChannels(fail.id), add))
-      case None => Failure(UnknownHtlcId(channelId, fail.id))
+  def sendFailMalformed(cmd: CMD_FAIL_MALFORMED_HTLC): Try[(HostedCommitments, wire.UpdateFailMalformedHtlc)] =
+    if ((cmd.failureCode & wire.FailureMessageCodecs.BADONION) == 0) Failure(InvalidFailureCode(channelId))
+    else if (getIncomingHtlcCrossSigned(cmd.id).isEmpty) Failure(UnknownHtlcId(channelId, cmd.id))
+    else {
+      val fail = wire.UpdateFailMalformedHtlc(channelId, cmd.id, cmd.onionHash, cmd.failureCode)
+      Success(addProposal(Left(fail)), fail)
     }
 
-  def receiveFailMalformed(fail: wire.UpdateFailMalformedHtlc): Try[(HostedCommitments, Origin, wire.UpdateAddHtlc)] = {
+  def receiveFail(fail: wire.UpdateFailHtlc): Try[HostedCommitments] =
+    // Unlike Fulfill, for Fail/FailMalformed we make sure they fail our cross-signed outgoing payment
+    if (getOutgoingHtlcCrossSigned(fail.id).isEmpty) Failure(UnknownHtlcId(channelId, fail.id))
+    else Success(addProposal(Right(fail)))
+
+  def receiveFailMalformed(fail: wire.UpdateFailMalformedHtlc): Try[HostedCommitments] = {
     // A receiving node MUST fail the channel if the BADONION bit in failure_code is not set for update_fail_malformed_htlc.
-    if ((fail.failureCode & wire.FailureMessageCodecs.BADONION) == 0) {
-      Failure(InvalidFailureCode(channelId))
-    } else {
-      getOutgoingHtlcCrossSigned(fail.id) match {
-        case Some(add) => Try((addProposal(Right(fail)), originChannels(fail.id), add))
-        case None => Failure(UnknownHtlcId(channelId, fail.id))
-      }
-    }
+    if ((fail.failureCode & wire.FailureMessageCodecs.BADONION) == 0) Failure(InvalidFailureCode(channelId))
+    else if (getOutgoingHtlcCrossSigned(fail.id).isEmpty) Failure(UnknownHtlcId(channelId, fail.id))
+    else Success(addProposal(Right(fail)))
   }
 }
 

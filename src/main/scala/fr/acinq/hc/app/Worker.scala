@@ -115,7 +115,7 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
       inMemoryHostedChannels.inverse.remove(channelRef)
 
     case Worker.TickRemoveIdleChannels =>
-      logger.info(s"PLGN PHC, in-memory HC=${inMemoryHostedChannels.size}")
+      logger.info(s"PLGN PHC, in-memory HCs=${inMemoryHostedChannels.size}")
       inMemoryHostedChannels.values.forEach(_ ! Worker.TickRemoveIdleChannels)
 
     case Worker.HotChannels(channels) =>
@@ -132,7 +132,7 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
       logger.info(s"PLGN PHC, no address for HC, peer=${nodeId.toString}")
   }
 
-  def logNoTarget[T](nodeId: String)(msg: T): Unit = logger.debug(s"PLGN PHC, no target chan for msg=${msg.getClass.getName}, peer=$nodeId")
+  def logNoTarget[T](nodeId: String)(msg: T): Unit = logger.debug(s"PLGN PHC, no target chan for msg=${msg.getClass.getSimpleName}, peer=$nodeId")
 
   def channelRefOpt(nodeId: PublicKey): Option[ActorRef] = Option(inMemoryHostedChannels get nodeId)
 

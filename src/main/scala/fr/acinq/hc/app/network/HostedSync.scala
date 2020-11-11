@@ -217,7 +217,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
 
     case Event(msg: UnknownMessage, data: OperationalData)
       if gossipProcessor.tagsOfInterest.contains(msg.tag) =>
-      log.info(s"PLGN PHC, got local gossip message=${msg.getClass.getName}")
+      log.info(s"PLGN PHC, got local gossip message=${msg.getClass.getSimpleName}")
       val data1 = gossipProcessor.process(kit.nodeParams.nodeId, msg, data)
       tryPersistLog(data1.phcNetwork)
       stay using data1
