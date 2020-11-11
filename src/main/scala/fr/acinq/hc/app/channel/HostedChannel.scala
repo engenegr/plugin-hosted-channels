@@ -334,7 +334,9 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
         val completedOutgoingHtlcs = lastStateOutgoingHtlcIds -- stillOutgoingHtlcIds
 
         val commits2 = commits1.copy(originChannels = commits1.originChannels -- completedOutgoingHtlcs)
-        stay StoringAndUsing data.copy(commitments = commits2) SendingHosted commits1.lastCrossSignedState.stateUpdate(isTerminal = true)
+        val refundingResetData = data.copy(commitments = commits2, refundPendingInfo = None)
+        val localSU = commits1.lastCrossSignedState.stateUpdate(isTerminal = true)
+        stay StoringAndUsing refundingResetData SendingHosted localSU
       }
   }
 
@@ -383,7 +385,8 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
     case Event(cmd: CMD_INIT_PENDING_REFUND, data: HC_DATA_ESTABLISHED) =>
       val refundPendingOpt = Some(System.currentTimeMillis).map(RefundPending)
-      stay StoringAndUsing data.copy(refundPendingInfo = refundPendingOpt) AckingHosted cmd
+      val data1 = data.copy(refundPendingInfo = refundPendingOpt)
+      stay StoringAndUsing data1 AckingHosted cmd
 
     case Event(cmd: CMD_FINALIZE_REFUND, data: HC_DATA_ESTABLISHED) =>
       val enoughBlocksPassed = canFinalizeRefund(data.commitments.lastCrossSignedState)
