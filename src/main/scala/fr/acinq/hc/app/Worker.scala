@@ -128,8 +128,8 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
       }
 
     case PeerConnection.ConnectionResult.NoAddressFound(nodeId) =>
-      // We have requested a connection for HC where we are client, but no address was found
-      logger.info(s"PLGN PHC, no address for client HC, peer=${nodeId.toString}")
+      // We have requested a connection for HC, but no address was found
+      logger.info(s"PLGN PHC, no address for HC, peer=${nodeId.toString}")
   }
 
   def logNoTarget[T](nodeId: String)(msg: T): Unit = logger.debug(s"PLGN PHC, no target chan for msg=${msg.getClass.getName}, peer=$nodeId")

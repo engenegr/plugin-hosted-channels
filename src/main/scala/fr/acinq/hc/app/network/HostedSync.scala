@@ -254,10 +254,27 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
     node1HasEnoughIncomingChans && node2HasEnoughIncomingChans
   }
 
-  private def isUpdateAcceptable(update: ChannelUpdate, data: OperationalData): Boolean = data.phcNetwork.channels.get(update.shortChannelId) match {
-    case Some(phc) => update.htlcMaximumMsat.contains(phcConfig.capacity) && phc.isUpdateFresh(update) && phcNodeHasEnoughNormalChannels(phc.channelAnnounce, data) && phc.verifySig(update)
-    case None => false
-  }
+  private def isUpdateAcceptable(update: ChannelUpdate, data: OperationalData): Boolean =
+    data.phcNetwork.channels.get(update.shortChannelId) match {
+      case _ if !update.htlcMaximumMsat.contains(phcConfig.capacity) =>
+        log.info(s"PLGN PHC, gossip update capacity fail, msg=$update")
+        false
+
+      case Some(phc) if !phcNodeHasEnoughNormalChannels(phc.channelAnnounce, data) =>
+        log.info(s"PLGN PHC, gossip update NC fail, msg=$update")
+        false
+
+      case Some(phc) if !phc.isUpdateFresh(update) =>
+        log.info(s"PLGN PHC, gossip update fresh fail, msg=$update")
+        false
+
+      case Some(phc) if phc.verifySig(update) =>
+        log.info(s"PLGN PHC, gossip update sig fail, msg=$update")
+        false
+
+      case None => false
+      case _ => true
+    }
 
   private def tryPersist(phcNetwork: PHCNetwork) = Try {
     Blocking.txWrite(DBIO.sequence(phcNetwork.unsaved.orderedMessages.map {
