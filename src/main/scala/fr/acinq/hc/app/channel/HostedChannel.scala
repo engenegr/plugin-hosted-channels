@@ -9,7 +9,7 @@ import fr.acinq.eclair.FSMDiagnosticActorLogging
 import fr.acinq.hc.app.dbo.HostedChannelsDb
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.wire.{AnnouncementMessage, AnnouncementSignatures, ChannelAnnouncement, ChannelUpdate, HasChannelId, UpdateAddHtlc}
-
+import scala.concurrent.duration._
 import scala.collection.mutable
 import akka.actor.{ActorRef, FSM}
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64}
@@ -98,7 +98,9 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       }
   }
 
-  when(SYNCING) {
+  when(SYNCING, stateTimeout = 5.minutes) {
+    case Event(StateTimeout, _) => stop(FSM.Normal)
+
     case Event(hostInit: InitHostedChannel, data: HC_DATA_CLIENT_WAIT_HOST_INIT) =>
       if (hostInit.liabilityDeadlineBlockdays < vals.hcDefaultParams.liabilityDeadlineBlockdays) stop(FSM.Normal) sendingHasChannelId makeError("Proposed liability deadline is too low")
       else if (hostInit.minimalOnchainRefundAmountSatoshis > vals.hcDefaultParams.initMsg.minimalOnchainRefundAmountSatoshis) stop(FSM.Normal) sendingHasChannelId makeError("Proposed minimal refund is too high")
@@ -120,11 +122,11 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
         outgoingHtlcs = Nil, remoteSigOfLocal = clientSU.localSigOfRemoteLCSS, localSigOfRemote = ByteVector64.Zeroes).withLocalSigOfRemote(kit.nodeParams.privateKey)
 
       val data = restoreEmptyData(fullySignedLCSS, isHost = true)
-      val theirSigIsWrong = !fullySignedLCSS.verifyRemoteSig(remoteNodeId)
-      val blockDayIsWrong = isBlockDayOutOfSync(clientSU)
+      val isLocalSigOk = !fullySignedLCSS.verifyRemoteSig(remoteNodeId)
+      val isBlockDayWrong = isBlockDayOutOfSync(clientSU)
 
-      if (blockDayIsWrong) stop(FSM.Normal) sendingHasChannelId makeError(InvalidBlockDay(channelId, currentBlockDay, clientSU.blockDay).getMessage)
-      else if (theirSigIsWrong) stop(FSM.Normal) sendingHasChannelId makeError(InvalidRemoteStateSignature(channelId).getMessage)
+      if (isBlockDayWrong) stop(FSM.Normal) sendingHasChannelId makeError(InvalidBlockDay(channelId, currentBlockDay, clientSU.blockDay).getMessage)
+      else if (!isLocalSigOk) stop(FSM.Normal) sendingHasChannelId makeError(InvalidRemoteStateSignature(channelId).getMessage)
       else {
         handler.execute(data) match {
           case Failure(DuplicateShortId) =>
@@ -328,7 +330,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
   type HostedFsmState = FSM.State[fr.acinq.eclair.channel.State, HostedData]
 
-  implicit class MyState(state: HostedFsmState) {
+  implicit class FsmStateExt(state: HostedFsmState) {
     def sendingHasChannelId(messages: HasChannelId *): HostedFsmState = {
       connections.get(remoteNodeId).foreach(conn => messages foreach conn.sendHasChannelIdMsg)
       state
