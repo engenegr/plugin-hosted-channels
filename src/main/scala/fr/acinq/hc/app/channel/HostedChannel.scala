@@ -17,10 +17,13 @@ import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.io.{PeerDisconnected, UnknownMessageReceived}
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.transactions.CommitmentSpec
+import fr.acinq.hc.app.Tools.{DuplicateHandler, DuplicateShortId}
 import fr.acinq.hc.app.channel.HostedChannel.SendAnnouncements
 import fr.acinq.hc.app.network.PHC
 import fr.acinq.hc.app.wire.Codecs
 import scodec.bits.ByteVector
+
+import scala.util.{Failure, Success}
 
 
 object HostedChannel {
@@ -110,19 +113,39 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
         stay using HC_DATA_CLIENT_WAIT_HOST_STATE_UPDATE(commitments) sendingHosted localSU
       }
 
-    case Event(clientSU: StateUpdate, data: HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE) =>
-      val fullySignedLCSS = LastCrossSignedState(data.invoke.refundScriptPubKey, initHostedChannel = initParams.initMsg, blockDay = clientSU.blockDay,
+    case Event(clientSU: StateUpdate, wait: HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE) =>
+      val handler = new DuplicateHandler[HC_DATA_ESTABLISHED] { def insert(data: HC_DATA_ESTABLISHED): Boolean = channelsDb addNewChannel data }
+      val fullySignedLCSS = LastCrossSignedState(wait.invoke.refundScriptPubKey, initHostedChannel = initParams.initMsg, blockDay = clientSU.blockDay,
         localBalanceMsat = initParams.initMsg.channelCapacityMsat, remoteBalanceMsat = MilliSatoshi(0L), localUpdates = 0L, remoteUpdates = 0L, incomingHtlcs = Nil,
         outgoingHtlcs = Nil, remoteSigOfLocal = clientSU.localSigOfRemoteLCSS, localSigOfRemote = ByteVector64.Zeroes).withLocalSigOfRemote(kit.nodeParams.privateKey)
 
-      if (!fullySignedLCSS.verifyRemoteSig(remoteNodeId)) stop(FSM.Normal) sendingHasChannelId makeError(InvalidRemoteStateSignature(channelId).getMessage)
-      else if (math.abs(clientSU.blockDay - currentBlockDay) > 1) stop(FSM.Normal) sendingHasChannelId makeError(InvalidBlockDay(channelId, currentBlockDay, clientSU.blockDay).getMessage)
-      else goto(NORMAL) storingAndUsing restoreEmptyData(fullySignedLCSS, isHost = true) storingSecret data.invoke.finalSecret sendingHosted fullySignedLCSS.stateUpdate(isTerminal = true)
+      val data = restoreEmptyData(fullySignedLCSS, isHost = true)
+      val theirSigIsWrong = !fullySignedLCSS.verifyRemoteSig(remoteNodeId)
+      val blockDayIsWrong = isBlockDayOutOfSync(clientSU)
+
+      if (blockDayIsWrong) stop(FSM.Normal) sendingHasChannelId makeError(InvalidBlockDay(channelId, currentBlockDay, clientSU.blockDay).getMessage)
+      else if (theirSigIsWrong) stop(FSM.Normal) sendingHasChannelId makeError(InvalidRemoteStateSignature(channelId).getMessage)
+      else {
+        handler.execute(data) match {
+          case Failure(DuplicateShortId) =>
+            log.info(s"PLGN PHC, DuplicateShortId when storing new HC, peer=$remoteNodeId")
+            stop(FSM.Normal) sendingHasChannelId makeError(ErrorCodes.ERR_HOSTED_CHANNEL_DENIED)
+
+          case Success(true) =>
+            val localSU = fullySignedLCSS.stateUpdate(isTerminal = true)
+            log.info(s"PLGN PHC, stored new HC with peer=$remoteNodeId, shortId=$shortChannelId")
+            goto(NORMAL) storingAndUsing data storingSecret wait.invoke.finalSecret sendingHosted localSU
+
+          case _ =>
+            log.info(s"PLGN PHC, database error when storing new HC, peer=$remoteNodeId")
+            stop(FSM.Normal) sendingHasChannelId makeError(ErrorCodes.ERR_HOSTED_CHANNEL_DENIED)
+        }
+      }
 
     case Event(hostSU: StateUpdate, data: HC_DATA_CLIENT_WAIT_HOST_STATE_UPDATE) =>
       val fullySignedLCSS = data.commitments.lastCrossSignedState.copy(remoteSigOfLocal = hostSU.localSigOfRemoteLCSS)
       if (!fullySignedLCSS.verifyRemoteSig(remoteNodeId)) stop(FSM.Normal) sendingHasChannelId makeError(InvalidRemoteStateSignature(channelId).getMessage)
-      else if (math.abs(hostSU.blockDay - currentBlockDay) > 1) stop(FSM.Normal) sendingHasChannelId makeError(InvalidBlockDay(channelId, currentBlockDay, hostSU.blockDay).getMessage)
+      else if (isBlockDayOutOfSync(hostSU)) stop(FSM.Normal) sendingHasChannelId makeError(InvalidBlockDay(channelId, currentBlockDay, hostSU.blockDay).getMessage)
       else if (data.commitments.lastCrossSignedState.remoteUpdates != hostSU.localUpdates) stop(FSM.Normal) sendingHasChannelId makeError("Proposed remote/local update number mismatch")
       else if (data.commitments.lastCrossSignedState.localUpdates != hostSU.remoteUpdates) stop(FSM.Normal) sendingHasChannelId makeError("Proposed local/remote update number mismatch")
       else goto(NORMAL) storingAndUsing restoreEmptyData(fullySignedLCSS, isHost = false)
@@ -223,6 +246,19 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       val data1 = data.copy(channelAnnouncement = None, commitments = commitments1)
       sender ! CMDResponseSuccess(cmd)
       stay storingAndUsing data1
+
+    // Payments
+
+    case Event(CMD_SIGN, data: HC_DATA_ESTABLISHED)
+      if data.commitments.futureUpdates.nonEmpty =>
+      stay sendingHosted makeStateUpdate(data)
+
+    case Event(remoteSU: StateUpdate, data: HC_DATA_ESTABLISHED)
+      if remoteSU.localSigOfRemoteLCSS == data.commitments.lastCrossSignedState.remoteSigOfLocal =>
+      // Do nothing if we get a duplicate for new cross-signed state, this can often happen normally
+      stay
+
+
   }
 
   when(CLOSED) {
@@ -321,16 +357,15 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
   initialize()
 
-  def canFinalizeRefund(localLCSS: LastCrossSignedState): Boolean = localLCSS.blockDay + localLCSS.initHostedChannel.liabilityDeadlineBlockdays < currentBlockDay
+  def currentBlockDay: Long = kit.nodeParams.currentBlockHeight / 144
 
   def makeError(content: String): wire.Error = wire.Error(channelId, content)
 
-  def currentBlockDay: Long = kit.nodeParams.currentBlockHeight / 144
+  def isBlockDayOutOfSync(remoteSU: StateUpdate): Boolean = math.abs(remoteSU.blockDay - currentBlockDay) > 1
 
-  def makeStateUpdate(data: HC_DATA_ESTABLISHED): StateUpdate = {
-    val localUnsignedLCSS1 = data.commitments.nextLocalUnsignedLCSS(currentBlockDay)
-    localUnsignedLCSS1.withLocalSigOfRemote(kit.nodeParams.privateKey).stateUpdate(isTerminal = false)
-  }
+  def canFinalizeRefund(localLCSS: LastCrossSignedState): Boolean = localLCSS.blockDay + localLCSS.initHostedChannel.liabilityDeadlineBlockdays < currentBlockDay
+
+  def makeStateUpdate(data: HC_DATA_ESTABLISHED): StateUpdate = data.commitments.nextLocalUnsignedLCSS(currentBlockDay).withLocalSigOfRemote(kit.nodeParams.privateKey).stateUpdate(isTerminal = false)
 
   def makeChannelUpdate(localLCSS: LastCrossSignedState, enable: Boolean): ChannelUpdate =
     Announcements.makeChannelUpdate(kit.nodeParams.chainHash, kit.nodeParams.privateKey, remoteNodeId, shortChannelId,
