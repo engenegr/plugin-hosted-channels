@@ -23,7 +23,8 @@ case class HC_CMD_LOCAL_INVOKE(remoteNodeId: PublicKey, refundScriptPubKey: Byte
 
 case class HC_CMD_EXTERNAL_FULFILL(remoteNodeId: PublicKey, htlcId: Long, paymentPreimage: ByteVector32) extends HasRemoteNodeIdHostedCommand // TODO
 
-case class HC_CMD_OVERRIDE(remoteNodeId: PublicKey, newLocalBalance: MilliSatoshi) extends HasRemoteNodeIdHostedCommand // TODO
+case class HC_CMD_OVERRIDE_PROPOSE(remoteNodeId: PublicKey, newLocalBalance: MilliSatoshi) extends HasRemoteNodeIdHostedCommand
+case class HC_CMD_OVERRIDE_ACCEPT(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 
 case class HC_CMD_INIT_PENDING_REFUND(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 case class HC_CMD_FINALIZE_REFUND(remoteNodeId: PublicKey, info: String) extends HasRemoteNodeIdHostedCommand
@@ -93,10 +94,6 @@ case class HostedCommitments(isHost: Boolean,
   val availableBalanceForReceive: MilliSatoshi = nextLocalSpec.toRemote
 
   val capacity: Satoshi = lastCrossSignedState.initHostedChannel.channelCapacityMsat.truncateToSatoshi
-
-  // Represent incoming cross-signed HTLCs as outgoing from peer's point of view
-  // no need to look at next incoming HTLCs here because they are not cross-signed so there was no relay attempt
-  def htlcsRemoteCommit: Set[DirectedHtlc] = localSpec.htlcs.collect(DirectedHtlc.incoming).map(OutgoingHtlc)
 
   def addProposal(update: LocalOrRemoteUpdateWithChannelId): HostedCommitments = copy(futureUpdates = futureUpdates :+ update)
 

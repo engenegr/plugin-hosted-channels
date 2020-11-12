@@ -133,7 +133,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
         outgoingHtlcs = Nil, remoteSigOfLocal = clientSU.localSigOfRemoteLCSS, localSigOfRemote = ByteVector64.Zeroes).withLocalSigOfRemote(kit.nodeParams.privateKey)
 
       val data = restoreEmptyData(fullySignedLCSS, isHost = true)
-      val isLocalSigOk = !fullySignedLCSS.verifyRemoteSig(remoteNodeId)
+      val isLocalSigOk = fullySignedLCSS.verifyRemoteSig(remoteNodeId)
       val isBlockDayWrong = isBlockDayOutOfSync(clientSU)
 
       if (isBlockDayWrong) stop(FSM.Normal) SendingHasChannelId makeError(InvalidBlockDay(channelId, currentBlockDay, clientSU.blockDay).getMessage)
@@ -157,7 +157,9 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
     case Event(hostSU: StateUpdate, data: HC_DATA_CLIENT_WAIT_HOST_STATE_UPDATE) =>
       val fullySignedLCSS = data.commitments.lastCrossSignedState.copy(remoteSigOfLocal = hostSU.localSigOfRemoteLCSS)
-      if (!fullySignedLCSS.verifyRemoteSig(remoteNodeId)) stop(FSM.Normal) SendingHasChannelId makeError(InvalidRemoteStateSignature(channelId).getMessage)
+      val isLocalSigOk = fullySignedLCSS.verifyRemoteSig(remoteNodeId)
+
+      if (!isLocalSigOk) stop(FSM.Normal) SendingHasChannelId makeError(InvalidRemoteStateSignature(channelId).getMessage)
       else if (isBlockDayOutOfSync(hostSU)) stop(FSM.Normal) SendingHasChannelId makeError(InvalidBlockDay(channelId, currentBlockDay, hostSU.blockDay).getMessage)
       else if (data.commitments.lastCrossSignedState.remoteUpdates != hostSU.localUpdates) stop(FSM.Normal) SendingHasChannelId makeError("Proposed remote/local update number mismatch")
       else if (data.commitments.lastCrossSignedState.localUpdates != hostSU.remoteUpdates) stop(FSM.Normal) SendingHasChannelId makeError("Proposed local/remote update number mismatch")
@@ -265,7 +267,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       data.commitments.sendAdd(cmd, kit.nodeParams.currentBlockHeight) match {
         case Right((commits1, add)) if cmd.commit => stay StoringAndUsing data.copy(commitments = commits1) AckingAddSuccess cmd SendingHasChannelId add Receiving CMD_SIGN
         case Right((commits1, add)) => stay StoringAndUsing data.copy(commitments = commits1) AckingAddSuccess cmd SendingHasChannelId add
-        case Left(cause) => ackAddFailed(cmd, cause, data.localChannelUpdate)
+        case Left(cause) => ackAddFail(cmd, cause, data.localChannelUpdate)
       }
 
     // Peer adding and failing HTLCs is only accepted in NORMAL state
@@ -351,6 +353,54 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       else if (data.refundPendingInfo.isDefined) stay SendingHosted data.commitments.lastCrossSignedState SendingHosted data.refundPendingInfo.get
       else if (data.errorExt.isDefined) stay SendingHosted data.commitments.lastCrossSignedState SendingHasChannelId data.errorExt.get.error
       else stay
+
+    // Store provided override, but applying it requires explicit action from node operator
+    case Event(remoteSO: StateOverride, data: HC_DATA_ESTABLISHED) if !data.commitments.isHost =>
+      val data1 = data.copy(overrideProposal = Some(remoteSO), refundPendingInfo = None)
+      stay StoringAndUsing data1
+
+    case Event(cmd: HC_CMD_OVERRIDE_ACCEPT, data: HC_DATA_ESTABLISHED) =>
+      if (data.errorExt.isEmpty) stay replying FSM.Failure("Overriding declined: channel is in normal state")
+      else if (data.commitments.isHost) stay replying FSM.Failure("Overriding declined: only client side can accept override")
+      else if (data.overrideProposal.isEmpty) stay replying FSM.Failure("Overriding declined: no override proposal from host is found")
+      else {
+        val remoteSO: StateOverride = data.overrideProposal.get
+        val newLocalBalance = data.commitments.lastCrossSignedState.initHostedChannel.channelCapacityMsat - remoteSO.localBalanceMsat
+        val completeLocalLCSS = data.commitments.lastCrossSignedState.copy(incomingHtlcs = Nil, outgoingHtlcs = Nil, localBalanceMsat = newLocalBalance,
+          remoteBalanceMsat = remoteSO.localBalanceMsat, localUpdates = remoteSO.remoteUpdates, remoteUpdates = remoteSO.localUpdates, blockDay = remoteSO.blockDay,
+          remoteSigOfLocal = remoteSO.localSigOfRemoteLCSS).withLocalSigOfRemote(kit.nodeParams.privateKey)
+        val isRemoteSigOk = completeLocalLCSS.verifyRemoteSig(remoteNodeId)
+
+        if (completeLocalLCSS.localBalanceMsat < 0.msat) stay replying FSM.Failure("Overridden local balance is larger than capacity")
+        else if (remoteSO.localUpdates < data.commitments.lastCrossSignedState.remoteUpdates) stay replying FSM.Failure("Overridden local update number is less than remote")
+        else if (remoteSO.remoteUpdates < data.commitments.lastCrossSignedState.localUpdates) stay replying FSM.Failure("Overridden remote update number is less than local")
+        else if (remoteSO.blockDay < data.commitments.lastCrossSignedState.blockDay) stay replying FSM.Failure("Overridden remote blockday is less than local")
+        else if (!isRemoteSigOk) stay replying FSM.Failure("Remote override signature is wrong")
+        else {
+          failTimedoutOutgoing(blockHeight = Long.MaxValue, data)
+          val localSU = completeLocalLCSS.stateUpdate(isTerminal = true)
+          val data1 = restoreEmptyData(completeLocalLCSS, isHost = false)
+          goto(NORMAL) StoringAndUsing data1 replying CMDResponseSuccess(cmd) SendingHosted localSU
+        }
+      }
+
+    case Event(remoteSU: StateUpdate, data: HC_DATA_ESTABLISHED) if data.commitments.isHost =>
+      data.overrideProposal map { case StateOverride(blockDay, localBalanceMsat, localUpdates, remoteUpdates, localSigOfRemoteLCSS) =>
+        val completeOverridingLCSS = makeOverridingLocallySignedLCSS(data.commitments, localBalanceMsat, blockDay).copy(remoteSigOfLocal = remoteSU.localSigOfRemoteLCSS)
+        val isRemoteSigOk = completeOverridingLCSS.verifyRemoteSig(remoteNodeId)
+
+        if (remoteSU.blockDay != blockDay) stay SendingHasChannelId makeError("Override blockday is not acceptable")
+        if (remoteSU.remoteUpdates != completeOverridingLCSS.localUpdates) stay SendingHasChannelId makeError("Override remote update number is wrong")
+        if (remoteSU.localUpdates != completeOverridingLCSS.remoteUpdates) stay SendingHasChannelId makeError("Override local update number is wrong")
+        if (!isRemoteSigOk) stay SendingHasChannelId makeError("Override signature is wrong")
+        else {
+          failTimedoutOutgoing(blockHeight = Long.MaxValue, data)
+          val data1 = restoreEmptyData(completeOverridingLCSS, isHost = true)
+          goto(NORMAL) StoringAndUsing data1
+        }
+      } getOrElse {
+        stay
+      }
   }
 
   whenUnhandled {
@@ -377,21 +427,16 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       log.info(s"PLGN PHC, HC establish remote error, error=$description")
       stop(FSM.Normal)
 
-    case Event(c: CurrentBlockCount, data: HC_DATA_ESTABLISHED) =>
-      val failedIds: Set[Long] = for {
-        add <- data.commitments.timedOutOutgoingHtlcs(c.blockCount)
-        originChannel <- data.commitments.originChannels.get(add.id)
-        reasonChain = HtlcResult OnChainFail HtlcsTimedoutDownstream(htlcs = Set(add), channelId = channelId)
-        _ = log.info(s"PLGN PHC, failing htlc with hash=${add.paymentHash} origin=$originChannel: htlc timed out")
-        _ = kit.relayer ! RES_ADD_SETTLED(originChannel, add, reasonChain)
-      } yield add.id
-
+    case Event(cmd: CurrentBlockCount, data: HC_DATA_ESTABLISHED) =>
+      val failedIds = failTimedoutOutgoing(cmd.blockCount, data)
       if (failedIds.nonEmpty) {
         val commits1 = data.commitments.copy(timedOutToPeerHtlcLeftOverIds = data.commitments.timedOutToPeerHtlcLeftOverIds ++ failedIds)
         localSuspend(data.copy(commitments = commits1), ErrorCodes.ERR_HOSTED_TIMED_OUT_OUTGOING_HTLC)
       } else {
         stay
       }
+
+    // Payments
 
     case Event(fulfill: UpdateFulfillHtlc, data: HC_DATA_ESTABLISHED) =>
       data.commitments.receiveFulfill(fulfill) match {
@@ -427,7 +472,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       }
 
     case Event(cmd: CMD_ADD_HTLC, data: HC_DATA_ESTABLISHED) =>
-      ackAddFailed(cmd, ChannelUnavailable(channelId), data.localChannelUpdate)
+      ackAddFail(cmd, ChannelUnavailable(channelId), data.localChannelUpdate)
       val isUpdateEnabled = Announcements.isEnabled(data.localChannelUpdate.channelFlags)
       log.info(s"PLGN PHC, rejecting htlc request in state=$stateName, peer=$remoteNodeId")
 
@@ -460,11 +505,30 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
         stay replying FSM.Failure(s"Not enough days passed since=$lastSignedDay")
       }
 
+    // Scheduling override
+
+    case Event(cmd: HC_CMD_OVERRIDE_PROPOSE, data: HC_DATA_ESTABLISHED) =>
+      if (data.errorExt.isEmpty) stay replying FSM.Failure("Overriding declined: channel is in normal state")
+      else if (!data.commitments.isHost) stay replying FSM.Failure("Overriding declined: only host side can initiate override")
+      else if (data.refundCompleteInfo.isDefined) stay replying FSM.Failure("Overriding declined: target channel has been refunded")
+      else {
+        log.info(s"PLGN PHC, scheduling override proposal for peer=$remoteNodeId")
+        val overridingLocallySignedLCSS = makeOverridingLocallySignedLCSS(data.commitments, cmd.newLocalBalance, overrideBlockDay = currentBlockDay)
+        val localSO = StateOverride(blockDay = overridingLocallySignedLCSS.blockDay, localBalanceMsat = overridingLocallySignedLCSS.localBalanceMsat,
+          localUpdates = overridingLocallySignedLCSS.localUpdates, remoteUpdates = overridingLocallySignedLCSS.remoteUpdates,
+          localSigOfRemoteLCSS = overridingLocallySignedLCSS.localSigOfRemote)
+        val data1 = data.copy(overrideProposal = Some(localSO), refundPendingInfo = None)
+        stay StoringAndUsing data1 replying CMDResponseSuccess(cmd) SendingHosted localSO
+      }
+
+    // Misc
+
     case Event(HC_CMD_GET_INFO, data: HC_DATA_ESTABLISHED) =>
-      stay replying CMDResponseInfo(channelId, shortChannelId, stateName, data, data.commitments.nextLocalSpec)
+      val response = CMDResponseInfo(channelId, shortChannelId, stateName, data, data.commitments.nextLocalSpec)
+      stay replying response
 
     case Event(any, _) =>
-      log.info(s"PLGN PHC, failed to handle ${any.getClass.getSimpleName} in state=$stateName, data=${stateData.getClass.getSimpleName}, remoteNodeId=$remoteNodeId")
+      log.info(s"PLGN PHC, failed to handle ${any.getClass.getSimpleName}, remoteNodeId=$remoteNodeId")
       stay
   }
 
@@ -569,6 +633,11 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       initParams.cltvDelta, initParams.htlcMinimumMsat.msat, initParams.feeBase, initParams.feeProportionalMillionths,
       localLCSS.initHostedChannel.channelCapacityMsat, enable)
 
+  def makeOverridingLocallySignedLCSS(commits: HostedCommitments, newLocalBalance: MilliSatoshi, overrideBlockDay: Long): LastCrossSignedState =
+    commits.lastCrossSignedState.copy(incomingHtlcs = Nil, outgoingHtlcs = Nil, localBalanceMsat = newLocalBalance, remoteBalanceMsat = commits.lastCrossSignedState.initHostedChannel.channelCapacityMsat - newLocalBalance,
+      localUpdates = commits.lastCrossSignedState.localUpdates + commits.nextLocalUpdates.size + 1, remoteUpdates = commits.lastCrossSignedState.remoteUpdates + commits.nextRemoteUpdates.size + 1,
+      blockDay = overrideBlockDay, remoteSigOfLocal = ByteVector64.Zeroes).withLocalSigOfRemote(kit.nodeParams.privateKey)
+
   def restoreEmptyCommitments(localLCSS: LastCrossSignedState, isHost: Boolean): HostedCommitments = {
     val localCommitmentSpec = CommitmentSpec(htlcs = Set.empty, feeratePerKw = FeeratePerKw(0L.sat), localLCSS.localBalanceMsat, localLCSS.remoteBalanceMsat)
     HostedCommitments(isHost, kit.nodeParams.nodeId, remoteNodeId, channelId, localCommitmentSpec, originChannels = Map.empty, lastCrossSignedState = localLCSS,
@@ -606,9 +675,18 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
     goto(CLOSED) StoringAndUsing data1 SendingHasChannelId errorExtOpt.get.error
   }
 
-  def ackAddFailed(cmd: CMD_ADD_HTLC, cause: ChannelException, channelUpdate: wire.ChannelUpdate): HostedFsmState = {
+  def ackAddFail(cmd: CMD_ADD_HTLC, cause: ChannelException, channelUpdate: wire.ChannelUpdate): HostedFsmState = {
     log.warning(s"PLGN PHC, ${cause.getMessage} while processing cmd=${cmd.getClass.getSimpleName} in state=$stateName")
     replyToCommand(RES_ADD_FAILED(channelUpdate = Some(channelUpdate), t = cause, c = cmd), cmd)
     stay
   }
+
+  def failTimedoutOutgoing(blockHeight: Long, data: HC_DATA_ESTABLISHED): Set[Long] =
+    for {
+      add <- data.commitments.timedOutOutgoingHtlcs(blockHeight)
+      originChannel <- data.commitments.originChannels.get(add.id)
+      reasonChain = HtlcResult OnChainFail HtlcsTimedoutDownstream(htlcs = Set(add), channelId = channelId)
+      _ = log.info(s"PLGN PHC, failing htlc with hash=${add.paymentHash} origin=$originChannel: htlc timed out")
+      _ = kit.relayer ! RES_ADD_SETTLED(originChannel, add, reasonChain)
+    } yield add.id
 }
