@@ -19,19 +19,19 @@ sealed trait HasRemoteNodeIdHostedCommand {
   def remoteNodeId: PublicKey
 }
 
-case class CMD_HOSTED_LOCAL_INVOKE(remoteNodeId: PublicKey, refundScriptPubKey: ByteVector, secret: ByteVector) extends HasRemoteNodeIdHostedCommand
+case class HC_CMD_LOCAL_INVOKE(remoteNodeId: PublicKey, refundScriptPubKey: ByteVector, secret: ByteVector) extends HasRemoteNodeIdHostedCommand
 
-case class CMD_HOSTED_EXTERNAL_FULFILL(remoteNodeId: PublicKey, htlcId: Long, paymentPreimage: ByteVector32) extends HasRemoteNodeIdHostedCommand
+case class HC_CMD_EXTERNAL_FULFILL(remoteNodeId: PublicKey, htlcId: Long, paymentPreimage: ByteVector32) extends HasRemoteNodeIdHostedCommand // TODO
 
-case class CMD_HOSTED_OVERRIDE(remoteNodeId: PublicKey, newLocalBalance: MilliSatoshi) extends HasRemoteNodeIdHostedCommand
+case class HC_CMD_OVERRIDE(remoteNodeId: PublicKey, newLocalBalance: MilliSatoshi) extends HasRemoteNodeIdHostedCommand // TODO
 
-case class CMD_INIT_PENDING_REFUND(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
-case class CMD_FINALIZE_REFUND(remoteNodeId: PublicKey, info: String) extends HasRemoteNodeIdHostedCommand
+case class HC_CMD_INIT_PENDING_REFUND(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
+case class HC_CMD_FINALIZE_REFUND(remoteNodeId: PublicKey, info: String) extends HasRemoteNodeIdHostedCommand
 
-case class CMD_TURN_PUBLIC(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
-case class CMD_TURN_PRIVATE(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
+case class HC_CMD_PUBLIC(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
+case class HC_CMD_PRIVATE(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 
-case class CMD_GET_HC_INFO(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
+case class HC_CMD_GET_INFO(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 
 case class CMDResponseSuccess(cmd: HasRemoteNodeIdHostedCommand)
 
@@ -223,8 +223,8 @@ case class HostedCommitments(isHost: Boolean,
     // Technically peer may send a preimage at any moment, even if new LCSS has not been reached yet so do our best and always resolve on getting it
     nextLocalSpec.findOutgoingHtlcById(fulfill.id) match {
       // We do not accept fulfills after payment to peer has been failed (due to timeout so we failed in upstream already)
-      case _ if timedOutToPeerHtlcLeftOverIds.contains(fulfill.id) || fulfilledByPeerHtlcLeftOverIds.contains(fulfill.id) => throw UnknownHtlcId(channelId, fulfill.id)
-      case Some(htlc) if htlc.add.paymentHash == Crypto.sha256(fulfill.paymentPreimage) => Try((addProposal(Right(fulfill)), originChannels(fulfill.id), htlc.add))
+      case _ if timedOutToPeerHtlcLeftOverIds.contains(fulfill.id) || fulfilledByPeerHtlcLeftOverIds.contains(fulfill.id) => Failure(UnknownHtlcId(channelId, fulfill.id))
+      case Some(htlc) if htlc.add.paymentHash == Crypto.sha256(fulfill.paymentPreimage) => Success((addProposal(Right(fulfill)), originChannels(fulfill.id), htlc.add))
       case Some(_) => Failure(InvalidHtlcPreimage(channelId, fulfill.id))
       case None => Failure(UnknownHtlcId(channelId, fulfill.id))
     }
