@@ -9,7 +9,7 @@ import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc}
 import fr.acinq.hc.app.Tools.{DuplicateHandler, DuplicateShortId}
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64}
 import fr.acinq.eclair.io.{Peer, PeerDisconnected}
-import fr.acinq.eclair.{wire, channel}
+import fr.acinq.eclair.{channel, wire}
 import scala.util.{Failure, Success}
 import akka.actor.{ActorRef, FSM}
 
@@ -20,6 +20,7 @@ import fr.acinq.eclair.FSMDiagnosticActorLogging
 import fr.acinq.eclair.payment.relay.Relayer
 import fr.acinq.hc.app.dbo.HostedChannelsDb
 import fr.acinq.eclair.router.Announcements
+import fr.acinq.eclair.wire.ChannelUpdate
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.hc.app.network.PHC
 import fr.acinq.hc.app.wire.Codecs
@@ -266,6 +267,8 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
         case Left(cause) => replyAddFailed(cmd, cause, data.localChannelUpdate)
       }
 
+    // Peer adding and failing HTLCs is only accepted in NORMAL state
+
     case Event(add: wire.UpdateAddHtlc, data: HC_DATA_ESTABLISHED) =>
       data.commitments.receiveAdd(add) match {
         case Success(commits1) => stay using data.copy(commitments = commits1)
@@ -381,6 +384,20 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
         stay
       }
 
+    case Event(cmd: CMD_ADD_HTLC, data: HC_DATA_ESTABLISHED) =>
+      replyAddFailed(cmd, ChannelUnavailable(channelId), data.localChannelUpdate)
+      val isUpdateEnabled = Announcements.isEnabled(data.localChannelUpdate.channelFlags)
+      log.info(s"PLGN PHC, rejecting htlc request in state=$stateName, peer=$remoteNodeId")
+
+      if (data.commitments.announceChannel && isUpdateEnabled) {
+        // In order to reduce gossip spam, we don't disable the channel right away when disconnected
+        // we will only emit a new ChannelUpdate with the disable flag set if someone tries to use it
+        val disabledUpdate = makeChannelUpdate(data.commitments.lastCrossSignedState, enable = false)
+        stay StoringAndUsing data.copy(localChannelUpdate = disabledUpdate) Publishing disabledUpdate
+      } else {
+        stay
+      }
+
     // Refunds
 
     case Event(cmd: CMD_INIT_PENDING_REFUND, data: HC_DATA_ESTABLISHED) =>
@@ -408,6 +425,16 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
     case Event(any, _) =>
       log.debug(s"PLGN PHC, failed to handle ${any.getClass.getSimpleName} in state=$stateName, data=${stateData.getClass.getSimpleName}, remoteNodeId=$remoteNodeId")
       stay
+  }
+
+  onTransition {
+    case (SYNCING | CLOSED) -> NORMAL =>
+      Tuple2(stateData, nextStateData) match {
+        case (_, d1: HC_DATA_ESTABLISHED) if d1.commitments.announceChannel && !Announcements.isEnabled(d1.localChannelUpdate.channelFlags) => self ! HostedChannel.SendAnnouncements
+        case (d0: HC_DATA_ESTABLISHED, d1: HC_DATA_ESTABLISHED) if !d1.commitments.announceChannel && d0.localChannelUpdate != d1.localChannelUpdate => sendUpdateToPeer(d1.localChannelUpdate)
+        case (_, d1: HC_DATA_ESTABLISHED) if !d1.commitments.announceChannel => sendUpdateToPeer(d1.localChannelUpdate)
+        case _ => log.debug(s"PLGN PHC, entered NORMAL state with wrong Data, peer=$remoteNodeId")
+      }
   }
 
   type HostedFsmState = FSM.State[fr.acinq.eclair.channel.State, HostedData]
@@ -475,6 +502,8 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
   def makeError(content: String): wire.Error = wire.Error(channelId, content)
 
   def isBlockDayOutOfSync(remoteSU: StateUpdate): Boolean = math.abs(remoteSU.blockDay - currentBlockDay) > 1
+
+  def sendUpdateToPeer(update: ChannelUpdate): Unit = connections.get(remoteNodeId).foreach(_ sendRoutingMsg update)
 
   def canFinalizeRefund(localLCSS: LastCrossSignedState): Boolean = localLCSS.blockDay + localLCSS.initHostedChannel.liabilityDeadlineBlockdays < currentBlockDay
 
