@@ -487,8 +487,8 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
     // Refunds
 
     case Event(cmd: HC_CMD_INIT_PENDING_REFUND, data: HC_DATA_ESTABLISHED) =>
-      val refundPendingOpt = Some(System.currentTimeMillis).map(RefundPending)
-      val data1: HC_DATA_ESTABLISHED = data.copy(refundPendingInfo = refundPendingOpt)
+      val refundPending: RefundPending = RefundPending(System.currentTimeMillis)
+      val data1 = data.copy(refundPendingInfo = Some(refundPending), overrideProposal = None)
       stay StoringAndUsing data1 replying CMDResponseSuccess(cmd)
 
     case Event(cmd: HC_CMD_FINALIZE_REFUND, data: HC_DATA_ESTABLISHED) =>
