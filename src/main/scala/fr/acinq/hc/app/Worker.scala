@@ -75,7 +75,7 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
       // Messages with channel id presume a target channel exists, do not spawn a new one if not actually found
       Tuple3(Codecs decodeHasChanIdMessage message, remoteNode2Connection get nodeId, inMemoryHostedChannels get nodeId) match {
         case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, decoding fail, tag=${message.tag}, peer=${nodeId.toString}")
-        case (Attempt.Successful(_), None, _) => logger.info(s"PLGN PHC, peerless message, tag=${message.tag}, peer=${nodeId.toString}")
+        case (_, None, _) => logger.info(s"PLGN PHC, peerless message=${message.getClass.getSimpleName}, peer=${nodeId.toString}")
         case (Attempt.Successful(msg), _, null) => restoreOrElse(msg, nodeId)(me logNoTarget nodeId.toString)
         case (Attempt.Successful(msg), _, channelRef) => channelRef ! msg
       }
@@ -84,7 +84,7 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
       // Order matters here: routing messages should be sent to sync actor, invoke should be checked for anti-spam
       Tuple3(Codecs decodeHostedMessage message, remoteNode2Connection get nodeId, inMemoryHostedChannels get nodeId) match {
         case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, decoding fail, tag=${message.tag}, peer=${nodeId.toString}")
-        case (Attempt.Successful(_), None, _) => logger.info(s"PLGN PHC, peerless message, tag=${message.tag}, peer=${nodeId.toString}")
+        case (_, None, _) => logger.info(s"PLGN PHC, peerless message=${message.getClass.getSimpleName}, peer=${nodeId.toString}")
         case (Attempt.Successful(_: ReplyPublicHostedChannelsEnd), Some(wrap), _) => hostedSync ! HostedSync.GotAllSyncFrom(wrap)
         case (Attempt.Successful(_: QueryPublicHostedChannels), Some(wrap), _) => hostedSync ! HostedSync.SendSyncTo(wrap)
 

@@ -289,7 +289,8 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
     case Event(CMD_SIGN, data: HC_DATA_ESTABLISHED) if data.commitments.futureUpdates.nonEmpty =>
       // Peer may stay online and send other messages without sending of remote StateUpdate due to a bug, make sure we disconnect then
       startSingleTimer(HostedChannel.RemoteUpdateTimeout.label, HostedChannel.RemoteUpdateTimeout, kit.nodeParams.revocationTimeout)
-      stay SendingHosted makeStateUpdate(data.commitments)
+      val localLCSS = data.commitments.nextLocalUnsignedLCSS(currentBlockDay).withLocalSigOfRemote(kit.nodeParams.privateKey)
+      stay SendingHosted localLCSS.stateUpdate(isTerminal = false)
 
     case Event(remoteSU: StateUpdate, data: HC_DATA_ESTABLISHED) if remoteSU.localSigOfRemoteLCSS == data.commitments.lastCrossSignedState.remoteSigOfLocal =>
       // Do nothing if we get a duplicate for new cross-signed state, this can often happen normally
@@ -439,7 +440,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
     case Event(fulfill: UpdateFulfillHtlc, data: HC_DATA_ESTABLISHED) =>
       data.commitments.receiveFulfill(fulfill) match {
-        case Success(Tuple3(commits1, origin, htlc)) =>
+        case Success((commits1, origin, htlc)) =>
           kit.relayer ! RES_ADD_SETTLED(origin, htlc, HtlcResult RemoteFulfill fulfill)
           // Channel in error state needs fulfills to be separately recorded because cross-signing is not possible
           val commits2 = commits1.copy(fulfilledByPeerHtlcLeftOverIds = commits1.fulfilledByPeerHtlcLeftOverIds + htlc.id)
@@ -492,7 +493,8 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       stay StoringAndUsing data1 replying CMDResponseSuccess(cmd)
 
     case Event(cmd: HC_CMD_FINALIZE_REFUND, data: HC_DATA_ESTABLISHED) =>
-      val enoughBlocksPassed = canFinalizeRefund(data.commitments.lastCrossSignedState)
+      val liabilityBlockdays = data.commitments.lastCrossSignedState.initHostedChannel.liabilityDeadlineBlockdays
+      val enoughBlocksPassed = data.commitments.lastCrossSignedState.blockDay + liabilityBlockdays < currentBlockDay
       if (enoughBlocksPassed) {
         val data1 = data.copy(refundCompleteInfo = Some(cmd.info), refundPendingInfo = None)
         log.info(s"PLGN PHC, finalized refund for HC with info=${cmd.info}, peer=$remoteNodeId")
@@ -641,19 +643,14 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
   def isBlockDayOutOfSync(remoteSU: StateUpdate): Boolean = math.abs(remoteSU.blockDay - currentBlockDay) > 1
 
-  def sendUpdateToPeer(update: ChannelUpdate): Unit = connections.get(remoteNodeId).foreach(_ sendRoutingMsg update)
-
-  def canFinalizeRefund(localLCSS: LastCrossSignedState): Boolean = localLCSS.blockDay + localLCSS.initHostedChannel.liabilityDeadlineBlockdays < currentBlockDay
-
-  def makeStateUpdate(commits: HostedCommitments): StateUpdate = commits.nextLocalUnsignedLCSS(currentBlockDay).withLocalSigOfRemote(kit.nodeParams.privateKey).stateUpdate(isTerminal = false)
+  def sendUpdateToPeer(update: ChannelUpdate): Unit = connections.get(remoteNodeId).foreach(_ sendRoutingMsg update) // TODO
 
   def makeStateChanged(hostedCommitsOpt: Option[HostedCommitments], state: fr.acinq.eclair.channel.State, nextState: fr.acinq.eclair.channel.State): ChannelStateChanged =
     ChannelStateChanged(self, channelId, peer = null, remoteNodeId, state, nextState, hostedCommitsOpt)
 
   def makeChannelUpdate(localLCSS: LastCrossSignedState, enable: Boolean): wire.ChannelUpdate =
-    Announcements.makeChannelUpdate(kit.nodeParams.chainHash, kit.nodeParams.privateKey, remoteNodeId, shortChannelId,
-      initParams.cltvDelta, initParams.htlcMinimumMsat.msat, initParams.feeBase, initParams.feeProportionalMillionths,
-      localLCSS.initHostedChannel.channelCapacityMsat, enable)
+    Announcements.makeChannelUpdate(kit.nodeParams.chainHash, kit.nodeParams.privateKey, remoteNodeId, shortChannelId, initParams.cltvDelta,
+      initParams.htlcMinimumMsat.msat, initParams.feeBase, initParams.feeProportionalMillionths, localLCSS.initHostedChannel.channelCapacityMsat, enable)
 
   def makeOverridingLocallySignedLCSS(commits: HostedCommitments, newLocalBalance: MilliSatoshi, newRemoteUpdates: Long, newLocalUpdates: Long, overrideBlockDay: Long): LastCrossSignedState =
     commits.lastCrossSignedState.copy(localBalanceMsat = newLocalBalance, remoteBalanceMsat = commits.lastCrossSignedState.initHostedChannel.channelCapacityMsat - newLocalBalance,
