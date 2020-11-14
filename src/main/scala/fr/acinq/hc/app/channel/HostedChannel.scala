@@ -4,10 +4,8 @@ import fr.acinq.eclair._
 import fr.acinq.hc.app._
 import fr.acinq.eclair.channel._
 import scala.concurrent.duration._
-
 import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc}
 import fr.acinq.hc.app.Tools.{DuplicateHandler, DuplicateShortId}
-import fr.acinq.eclair.wire.{ChannelUpdate, UpdateFulfillHtlc}
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64}
 import fr.acinq.eclair.io.{Peer, PeerDisconnected}
 import scala.util.{Failure, Success}
@@ -17,6 +15,7 @@ import fr.acinq.hc.app.wire.Codecs.LocalOrRemoteUpdateWithChannelId
 import fr.acinq.eclair.blockchain.CurrentBlockCount
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.FSMDiagnosticActorLogging
+import fr.acinq.eclair.wire.UpdateFulfillHtlc
 import fr.acinq.eclair.payment.relay.Relayer
 import fr.acinq.hc.app.dbo.HostedChannelsDb
 import fr.acinq.eclair.router.Announcements
@@ -92,7 +91,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
     case Event(Worker.TickRemoveIdleChannels, data: HC_DATA_ESTABLISHED) =>
       // Client channels are never idle, instead they always try to reconnect on becoming OFFLINE
-      if (data.commitments.isHost && data.commitments.timedOutOutgoingHtlcs(Long.MaxValue).isEmpty) {
+      if (data.commitments.isHost && data.commitments.currentAndNextInFlightHtlcs.isEmpty) {
         stop(FSM.Normal)
       } else {
         stay
@@ -527,6 +526,11 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
     // Misc
 
+    case Event(cmd: HC_CMD_EXTERNAL_FULFILL, _: HC_DATA_ESTABLISHED) =>
+      val fulfill = UpdateFulfillHtlc(channelId, cmd.htlcId, cmd.paymentPreimage)
+      val localError = makeError(s"External fulfill attempt, peer=$remoteNodeId")
+      stay replying CMDResponseSuccess(cmd) Receiving localError Receiving fulfill
+
     case Event(HC_CMD_GET_INFO, data: HC_DATA_ESTABLISHED) =>
       val response = CMDResponseInfo(channelId, shortChannelId, stateName, data, data.commitments.nextLocalSpec)
       stay replying response
@@ -540,8 +544,8 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
     case (SYNCING | CLOSED) -> NORMAL =>
       Tuple2(stateData, nextStateData) match {
         case (_, d1: HC_DATA_ESTABLISHED) if d1.commitments.announceChannel && !Announcements.isEnabled(d1.localChannelUpdate.channelFlags) => self ! HostedChannel.SendAnnouncements
-        case (d0: HC_DATA_ESTABLISHED, d1: HC_DATA_ESTABLISHED) if !d1.commitments.announceChannel && d0.localChannelUpdate != d1.localChannelUpdate => sendUpdateToPeer(d1.localChannelUpdate)
-        case (_, d1: HC_DATA_ESTABLISHED) if !d1.commitments.announceChannel => sendUpdateToPeer(d1.localChannelUpdate)
+        case (d0: HC_DATA_ESTABLISHED, d1: HC_DATA_ESTABLISHED) if !d1.commitments.announceChannel && d0.localChannelUpdate != d1.localChannelUpdate => connections.get(remoteNodeId).foreach(_ sendRoutingMsg d1.localChannelUpdate)
+        case (_, d1: HC_DATA_ESTABLISHED) if !d1.commitments.announceChannel => connections.get(remoteNodeId).foreach(_ sendRoutingMsg d1.localChannelUpdate)
         case _ =>
       }
   }
@@ -644,8 +648,6 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
   def makeError(content: String): wire.Error = wire.Error(channelId, content)
 
   def isBlockDayOutOfSync(remoteSU: StateUpdate): Boolean = math.abs(remoteSU.blockDay - currentBlockDay) > 1
-
-  def sendUpdateToPeer(update: ChannelUpdate): Unit = connections.get(remoteNodeId).foreach(_ sendRoutingMsg update) // TODO
 
   def makeStateChanged(hostedCommitsOpt: Option[HostedCommitments], state: fr.acinq.eclair.channel.State, nextState: fr.acinq.eclair.channel.State): ChannelStateChanged =
     ChannelStateChanged(self, channelId, peer = null, remoteNodeId, state, nextState, hostedCommitsOpt)
