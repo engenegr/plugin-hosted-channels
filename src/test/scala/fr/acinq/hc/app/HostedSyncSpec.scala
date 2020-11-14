@@ -63,8 +63,8 @@ class HostedSyncSpec extends BaseRouterSpec {
     val shortId = Tools.hostedShortChanId(a.value, b.value)
     val randomSig: ByteVector64 = Crypto.sign(randomBytes32, randomKey)
     val announce = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, shortId, a, b, a, b, randomSig, randomSig, randomSig, randomSig)
-    val update1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_a, b, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.capacity, enable = true)
-    val update2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_b, a, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.capacity, enable = true)
+    val update1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_a, b, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.minCapacity, enable = true)
+    val update2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_b, a, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.minCapacity, enable = true)
 
     syncActor ! UnknownMessageReceived(null, null, Codecs.toUnknownAnnounceMessage(announce, isGossip = false), null)
     syncActor ! UnknownMessageReceived(null, null, Codecs.toUnknownAnnounceMessage(update1, isGossip = false), null)
@@ -90,8 +90,8 @@ class HostedSyncSpec extends BaseRouterSpec {
       val shortId = Tools.hostedShortChanId(c.value, a.value)
       val randomSig: ByteVector64 = Crypto.sign(randomBytes32, randomKey)
       val announce = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, shortId, c, a, b, d, randomSig, randomSig, randomSig, randomSig) // nodeId != bitcoinKey
-      val update1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_c, a, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.capacity, enable = true)
-      val update2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_a, c, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.capacity, enable = true)
+      val update1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_c, a, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.minCapacity, enable = true)
+      val update2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_a, c, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.minCapacity, enable = true)
 
       syncActor ! UnknownMessageReceived(null, secondPublicNode, Codecs.toUnknownAnnounceMessage(announce, isGossip = true), null)
       syncActor ! UnknownMessageReceived(null, secondPublicNode, Codecs.toUnknownAnnounceMessage(update1, isGossip = true), null)
@@ -103,8 +103,8 @@ class HostedSyncSpec extends BaseRouterSpec {
       val shortId = Tools.hostedShortChanId(c.value, d.value)
       val randomSig: ByteVector64 = Crypto.sign(randomBytes32, randomKey)
       val announce = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, shortId, c, d, c, d, randomSig, randomSig, randomSig, randomSig)
-      val update1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_c, d, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.capacity, enable = true)
-      val update2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_d, c, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.capacity, enable = true)
+      val update1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_c, d, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.minCapacity, enable = true)
+      val update2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_d, c, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.minCapacity, enable = true)
 
       syncActor ! UnknownMessageReceived(null, secondPublicNode, Codecs.toUnknownAnnounceMessage(announce, isGossip = true), null)
       syncActor ! UnknownMessageReceived(null, secondPublicNode, Codecs.toUnknownAnnounceMessage(update1, isGossip = true), null)
@@ -116,8 +116,8 @@ class HostedSyncSpec extends BaseRouterSpec {
       val shortId = Tools.hostedShortChanId(c.value, d.value)
       val randomSig: ByteVector64 = Crypto.sign(randomBytes32, randomKey)
       val announce = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, shortId, c, a, c, a, randomSig, randomSig, randomSig, randomSig)
-      val update1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_a, c, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.capacity, enable = true)
-      val update2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_c, a, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.capacity, enable = true)
+      val update1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_a, c, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.minCapacity, enable = true)
+      val update2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_c, a, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.minCapacity, enable = true)
 
       syncActor ! UnknownMessageReceived(null, secondPublicNode, Codecs.toUnknownAnnounceMessage(announce, isGossip = true), null)
       syncActor ! UnknownMessageReceived(null, secondPublicNode, Codecs.toUnknownAnnounceMessage(update1, isGossip = true), null)

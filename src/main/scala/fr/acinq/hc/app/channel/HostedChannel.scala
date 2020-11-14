@@ -248,9 +248,11 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       }
 
     case Event(cmd: HC_CMD_PUBLIC, data: HC_DATA_ESTABLISHED) =>
-      val commitments1 = data.commitments.copy(announceChannel = true)
-      val data1 = data.copy(channelAnnouncement = None, commitments = commitments1)
-      stay StoringAndUsing data1 replying CMDResponseSuccess(cmd) Receiving HostedChannel.SendAnnouncements
+      if (vals.phcConfig.minCapacity <= data.commitments.capacity) {
+        val commitments1 = data.commitments.copy(announceChannel = true)
+        val data1 = data.copy(channelAnnouncement = None, commitments = commitments1)
+        stay StoringAndUsing data1 replying CMDResponseSuccess(cmd) Receiving HostedChannel.SendAnnouncements
+      } else stay replying FSM.Failure(s"Channel capacity is below minimum ${vals.phcConfig.minCapacity} for PHC")
 
     case Event(cmd: HC_CMD_PRIVATE, data: HC_DATA_ESTABLISHED) =>
       val commitments1 = data.commitments.copy(announceChannel = false)

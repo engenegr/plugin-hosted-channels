@@ -249,14 +249,14 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
 
   // These checks require router and graph data
   private def phcNodeHasEnoughNormalChannels(announce: ChannelAnnouncement, data: OperationalData): Boolean = {
-    val node1HasEnoughIncomingChans = data.normalGraph.getIncomingEdgesOf(announce.nodeId1).count(_.desc.a != announce.nodeId2) >= phcConfig.minNormalChans
-    val node2HasEnoughIncomingChans = data.normalGraph.getIncomingEdgesOf(announce.nodeId2).count(_.desc.a != announce.nodeId1) >= phcConfig.minNormalChans
+    val node1HasEnoughIncomingChans = data.normalGraph.getIncomingEdgesOf(announce.nodeId1).size >= phcConfig.minNormalChans
+    val node2HasEnoughIncomingChans = data.normalGraph.getIncomingEdgesOf(announce.nodeId2).size >= phcConfig.minNormalChans
     node1HasEnoughIncomingChans && node2HasEnoughIncomingChans
   }
 
   private def isUpdateAcceptable(update: ChannelUpdate, data: OperationalData): Boolean =
     data.phcNetwork.channels.get(update.shortChannelId) match {
-      case _ if !update.htlcMaximumMsat.contains(phcConfig.capacity) =>
+      case _ if !update.htlcMaximumMsat.exists(_ >= phcConfig.minCapacity) =>
         log.info(s"PLGN PHC, gossip update capacity fail, msg=$update")
         false
 
