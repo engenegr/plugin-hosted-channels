@@ -66,8 +66,6 @@ object HostedWireSpec {
       15000L -> Origin.ChannelRelayedCold(ByteVector32(ByteVector.fill(32)(42)), 43, MilliSatoshi(11000000L), MilliSatoshi(10000000L))),
     lcss1,
     futureUpdates = List(Right(add1), Left(add2)),
-    timedOutToPeerHtlcLeftOverIds = Set.empty,
-    fulfilledByPeerHtlcLeftOverIds = Set.empty,
     announceChannel = false)
 
   val data: HC_DATA_ESTABLISHED = HC_DATA_ESTABLISHED(

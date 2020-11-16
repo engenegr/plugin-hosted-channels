@@ -60,6 +60,20 @@ case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
                                channelAnnouncement: Option[wire.ChannelAnnouncement] = None) extends HostedData {
 
   lazy val errorExt: Option[ErrorExt] = localError orElse remoteError
+
+  lazy val pendingHtlcs: Set[DirectedHtlc] = if (errorExt.isEmpty) {
+    // In operational state a peer may send FAIL or we may send (and sign) ADD without subsequent state update
+    // so we must always look at both localSpec and nextLocalSpec to always see an entire pending HTLC set
+    commitments.localSpec.htlcs ++ commitments.nextLocalSpec.htlcs
+  } else {
+    // Clearing of HTLCs in localSpec is impossible when error is present
+    // OTOH fails and fulfills from remote peer are not accepted in such state either
+    // pending HTLCs in nextLocalSpec can be cleared by our fake FAIL on timeout or by FULFILL from peer
+    commitments.nextLocalSpec.htlcs
+  }
+
+  def timedOutOutgoingHtlcs(blockHeight: Long): Set[wire.UpdateAddHtlc] =
+    pendingHtlcs.collect(DirectedHtlc.outgoing).filter(blockHeight > _.cltvExpiry.toLong)
 }
 
 case class HostedCommitments(isHost: Boolean,
@@ -69,9 +83,7 @@ case class HostedCommitments(isHost: Boolean,
                              localSpec: CommitmentSpec,
                              originChannels: Map[Long, Origin],
                              lastCrossSignedState: LastCrossSignedState,
-                             futureUpdates: List[LocalOrRemoteUpdateWithChannelId], // For CLOSED channel we need to look here for UpdateFail/Fulfill messages from network for in-flight (client -> we -> network) payments
-                             timedOutToPeerHtlcLeftOverIds: Set[Long], // CLOSED channel may have in-flight HTLCs (network -> we -> client), we don't accept peer failure for those and only fail them on timeout
-                             fulfilledByPeerHtlcLeftOverIds: Set[Long], // CLOSED channel may have in-flight HTLCs (network -> we -> client) which can later be fulfilled, collect their IDs here
+                             futureUpdates: List[LocalOrRemoteUpdateWithChannelId],
                              announceChannel: Boolean) extends AbstractCommitments {
 
   val (nextLocalUpdates, nextRemoteUpdates, nextTotalLocal, nextTotalRemote) =
@@ -81,13 +93,6 @@ case class HostedCommitments(isHost: Boolean,
     }
 
   val nextLocalSpec: CommitmentSpec = CommitmentSpec.reduce(localSpec, nextLocalUpdates, nextRemoteUpdates)
-
-  val currentAndNextInFlightHtlcs: Set[DirectedHtlc] = {
-    // Failed channel may have HTLCs in current/next commit which are resolved post-closing
-    // that is, either they time out and get failed or peer sends a preimage and they get fulfilled
-    val postCloseResolvedHtlcIds = timedOutToPeerHtlcLeftOverIds ++ fulfilledByPeerHtlcLeftOverIds
-    (localSpec.htlcs ++ nextLocalSpec.htlcs).filterNot(postCloseResolvedHtlcIds contains _.add.id)
-  }
 
   val availableBalanceForSend: MilliSatoshi = nextLocalSpec.toLocal
 
@@ -116,22 +121,10 @@ case class HostedCommitments(isHost: Boolean,
       localSigned.add
     }
 
-  // Meaning sent from us to peer, including the ones yet unsigned by them
-  // look into next AND current commit since they may send fail and disconnect
-  def timedOutOutgoingHtlcs(blockHeight: Long): Set[wire.UpdateAddHtlc] =
-    for {
-      OutgoingHtlc(add) <- currentAndNextInFlightHtlcs
-      if blockHeight > add.cltvExpiry.toLong
-    } yield add
-
-  def nextLocalUnsignedLCSS(blockDay: Long): LastCrossSignedState = {
-    val incomingAdds = nextLocalSpec.htlcs.collect(DirectedHtlc.incoming).toList
-    val outgoingAdds = nextLocalSpec.htlcs.collect(DirectedHtlc.outgoing).toList
-
-    LastCrossSignedState(lastCrossSignedState.refundScriptPubKey, lastCrossSignedState.initHostedChannel, blockDay,
-      nextLocalSpec.toLocal, nextLocalSpec.toRemote, nextTotalLocal, nextTotalRemote, incomingAdds, outgoingAdds,
-      localSigOfRemote = ByteVector64.Zeroes, remoteSigOfLocal = ByteVector64.Zeroes)
-  }
+  def nextLocalUnsignedLCSS(blockDay: Long): LastCrossSignedState = LastCrossSignedState(lastCrossSignedState.refundScriptPubKey,
+    lastCrossSignedState.initHostedChannel, blockDay, nextLocalSpec.toLocal, nextLocalSpec.toRemote, nextTotalLocal, nextTotalRemote,
+    nextLocalSpec.htlcs.collect(DirectedHtlc.incoming).toList, nextLocalSpec.htlcs.collect(DirectedHtlc.outgoing).toList,
+    localSigOfRemote = ByteVector64.Zeroes, remoteSigOfLocal = ByteVector64.Zeroes)
 
   // Rebuild all messaging and state history starting from local LCSS,
   // then try to find a future state with same update numbers as remote LCSS
@@ -218,9 +211,8 @@ case class HostedCommitments(isHost: Boolean,
 
   def receiveFulfill(fulfill: wire.UpdateFulfillHtlc): Try[(HostedCommitments, Origin, wire.UpdateAddHtlc)] =
     // Technically peer may send a preimage at any moment, even if new LCSS has not been reached yet so do our best and always resolve on getting it
+    // this is why for fulfills we look at `nextLocalSpec` only which may contain our not-yet-cross-signed Add which they may fulfill right away
     nextLocalSpec.findOutgoingHtlcById(fulfill.id) match {
-      // We do not accept fulfills after payment to peer has been failed (due to timeout so we failed in upstream already)
-      case _ if timedOutToPeerHtlcLeftOverIds.contains(fulfill.id) || fulfilledByPeerHtlcLeftOverIds.contains(fulfill.id) => Failure(UnknownHtlcId(channelId, fulfill.id))
       case Some(htlc) if htlc.add.paymentHash == Crypto.sha256(fulfill.paymentPreimage) => Success((addProposal(Right(fulfill)), originChannels(fulfill.id), htlc.add))
       case Some(_) => Failure(InvalidHtlcPreimage(channelId, fulfill.id))
       case None => Failure(UnknownHtlcId(channelId, fulfill.id))

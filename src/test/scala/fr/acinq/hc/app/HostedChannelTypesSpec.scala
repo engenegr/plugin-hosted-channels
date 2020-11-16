@@ -12,8 +12,9 @@ import fr.acinq.eclair.router.Router.ChannelHop
 import fr.acinq.eclair.transactions.CommitmentSpec
 import fr.acinq.eclair.wire.Onion.FinalLegacyPayload
 import fr.acinq.eclair.wire.{ChannelUpdate, UpdateAddHtlc, UpdateFulfillHtlc}
-import fr.acinq.hc.app.channel.HostedCommitments
+import fr.acinq.hc.app.channel.{HC_DATA_ESTABLISHED, HostedCommitments}
 import org.scalatest.funsuite.AnyFunSuite
+
 import scala.util.Success
 
 
@@ -88,8 +89,8 @@ class HostedChannelTypesSpec extends AnyFunSuite {
     (payment_preimage, cmd)
   }
 
-  private val hdc = HostedCommitments(isHost = true, randomKey.publicKey, randomKey.publicKey, channelId, localCommitmentSpec, originChannels = Map.empty,
-    lcss1, futureUpdates = Nil, timedOutToPeerHtlcLeftOverIds = Set.empty, fulfilledByPeerHtlcLeftOverIds = Set.empty, announceChannel = true)
+  private val hdc = HostedCommitments(isHost = true, randomKey.publicKey, randomKey.publicKey, channelId,
+    localCommitmentSpec, originChannels = Map.empty, lcss1, futureUpdates = Nil, announceChannel = true)
 
   test("Processing HTLCs") {
     val (_, cmdAdd1) = makeCmdAdd(5.msat, randomKey.publicKey, currentBlockHeight = 100)
@@ -121,8 +122,9 @@ class HostedChannelTypesSpec extends AnyFunSuite {
     assert(hdc7.nextLocalSpec.toRemote === (hdc.localSpec.toRemote - updateAddHtlc1.amountMsat - updateAddHtlc2.amountMsat))
     assert(hdc7.nextLocalUnsignedLCSS(blockDay = 100).remoteUpdates === 103)
     assert(hdc7.nextLocalUnsignedLCSS(blockDay = 100).localUpdates === 204)
-    assert(hdc7.timedOutOutgoingHtlcs(244).isEmpty)
-    assert(hdc7.timedOutOutgoingHtlcs(245).size === 3)
+    val data = HC_DATA_ESTABLISHED(hdc7, channelUpdate)
+    assert(data.timedOutOutgoingHtlcs(244).isEmpty)
+    assert(data.timedOutOutgoingHtlcs(245).size === 3)
 
     val bobHdc6LCSS: LastCrossSignedState = hdc6.nextLocalUnsignedLCSS(200).reverse.withLocalSigOfRemote(bobPrivKey) // Bob falls behind by one update and has an hdc6 LCSS
     assert(hdc7.futureUpdates.diff(hdc7.findState(bobHdc6LCSS).head.futureUpdates) == List(Right(updateAddHtlc2))) // Alice has hdc7 with all updates and hdc LCSS, finds future state and rest of updates

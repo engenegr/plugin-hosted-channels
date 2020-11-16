@@ -19,8 +19,6 @@ object HostedChannelCodecs {
       (originsMapCodec withContext "originChannels") ::
       (lastCrossSignedStateCodec withContext "lastCrossSignedState") ::
       (listOfN(uint8, either(bool, updateWithChannelIdCodec, updateWithChannelIdCodec)) withContext "futureUpdates") ::
-      (setCodec(uint64overflow) withContext "timedOutToPeerHtlcLeftOverIds") ::
-      (setCodec(uint64overflow) withContext "fulfilledByPeerHtlcLeftOverIds") ::
       (bool withContext "announceChannel")
   }.as[HostedCommitments]
 

@@ -36,9 +36,6 @@ class HostedChannelsDbSpec extends AnyFunSuite {
 
     assert(cdb.getChannelByRemoteNodeId(data2.commitments.remoteNodeId).isEmpty) // Such a channel could not be found
     assert(Failure(DuplicateShortId) === insertOrFail.execute(data2)) // New channel could not be created because of existing shortId
-
-    for (n <- 0 to 10) cdb.updateOrAddNewChannel(data1.copy(commitments = data1.commitments.copy(timedOutToPeerHtlcLeftOverIds = Set(n))))
-    assert(cdb.getChannelByRemoteNodeId(data1.commitments.remoteNodeId).get.commitments.timedOutToPeerHtlcLeftOverIds === Set(10L)) // Ten updates in a row
   }
 
   test("Update secret") {
@@ -47,7 +44,7 @@ class HostedChannelsDbSpec extends AnyFunSuite {
     val cdb = new HostedChannelsDb(Config.db, localNodeId)
     val secret = ByteVector32.Zeroes.bytes
 
-    val hdc1 = hdc.copy(futureUpdates = Nil, originChannels = Map.empty, fulfilledByPeerHtlcLeftOverIds = Set.empty)
+    val hdc1 = hdc.copy(futureUpdates = Nil, originChannels = Map.empty)
     val data1 = data.copy(commitments = hdc1, remoteError = None, refundPendingInfo = None, refundCompleteInfo = None)
 
     cdb.updateOrAddNewChannel(data1)
