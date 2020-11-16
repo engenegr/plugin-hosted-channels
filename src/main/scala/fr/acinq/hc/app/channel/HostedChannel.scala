@@ -581,12 +581,6 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
   type HostedFsmState = FSM.State[fr.acinq.eclair.channel.State, HostedData]
 
-  private def replyToCommand(reply: Any, cmd: Command): Unit = cmd match {
-    case cmd1: HasOptionalReplyToCommand => cmd1.replyTo_opt.foreach(_ ! reply)
-    case cmd1: HasReplyToCommand if cmd1.replyTo == ActorRef.noSender => sender ! reply
-    case cmd1: HasReplyToCommand => cmd1.replyTo ! reply
-  }
-
   implicit class FsmStateExt(state: HostedFsmState) {
     def SendingHasChannelId(messages: wire.HasChannelId *): HostedFsmState = {
       connections.get(remoteNodeId).foreach(messages foreach _.sendHasChannelIdMsg)
@@ -606,18 +600,18 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
     def AckingSuccess(cmd: HtlcSettlementCommand): HostedFsmState = {
       PendingRelayDb.ackCommand(kit.nodeParams.db.pendingRelay, channelId, cmd)
-      replyToCommand(RES_SUCCESS(cmd, channelId), cmd)
+      Channel.replyToCommand(self, RES_SUCCESS(cmd, channelId), cmd)
       state
     }
 
     def AckingFail(cause: Throwable, cmd: HtlcSettlementCommand): HostedFsmState = {
       PendingRelayDb.ackCommand(kit.nodeParams.db.pendingRelay, channelId, cmd)
-      replyToCommand(RES_FAILURE(cmd, cause), cmd)
+      Channel.replyToCommand(self, RES_FAILURE(cmd, cause), cmd)
       state
     }
 
     def AckingAddSuccess(cmd: CMD_ADD_HTLC): HostedFsmState = {
-      replyToCommand(RES_SUCCESS(cmd, channelId), cmd)
+      Channel.replyToCommand(self, RES_SUCCESS(cmd, channelId), cmd)
       state
     }
 
@@ -683,7 +677,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
   }
 
   def syncAndResend(commitments: HostedCommitments, leftOvers: List[LocalOrRemoteUpdateWithChannelId], lcss: LastCrossSignedState, spec: CommitmentSpec): HostedCommitments = {
-    val commits1 = commitments.copy(futureUpdates = leftOvers.filter(_.isLeft) /* remote remote updates, retail local ones */, lastCrossSignedState = lcss, localSpec = spec)
+    val commits1 = commitments.copy(futureUpdates = leftOvers.filter(_.isLeft) /* remove remote updates, retail local ones */, lastCrossSignedState = lcss, localSpec = spec)
     stay.SendingHosted(commits1.lastCrossSignedState).SendingHasChannelId(commits1.nextLocalUpdates:_*)
     if (commits1.nextLocalUpdates.nonEmpty) self ! CMD_SIGN
     commits1
@@ -697,7 +691,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
   def ackAddFail(cmd: CMD_ADD_HTLC, cause: ChannelException, channelUpdate: wire.ChannelUpdate): HostedFsmState = {
     log.warning(s"PLGN PHC, ${cause.getMessage} while processing cmd=${cmd.getClass.getSimpleName} in state=$stateName")
-    replyToCommand(RES_ADD_FAILED(channelUpdate = Some(channelUpdate), t = cause, c = cmd), cmd)
+    Channel.replyToCommand(self, RES_ADD_FAILED(channelUpdate = Some(channelUpdate), t = cause, c = cmd), cmd)
     stay
   }
 
