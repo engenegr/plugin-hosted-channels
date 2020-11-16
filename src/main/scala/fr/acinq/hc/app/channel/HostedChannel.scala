@@ -223,12 +223,13 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
     case Event(HostedChannel.SendAnnouncements, data: HC_DATA_ESTABLISHED) if data.commitments.announceChannel =>
       val lastUpdateTooLongAgo = data.localChannelUpdate.timestamp < System.currentTimeMillis - PHC.reAnnounceThreshold
       val update1 = makeChannelUpdate(localLCSS = data.commitments.lastCrossSignedState, enable = true)
-      val data1 = data.copy(localChannelUpdate = update1)
+      val data1: HC_DATA_ESTABLISHED = data.copy(localChannelUpdate = update1)
+      context.system.eventStream publish makeLocalUpdateEvent(data1)
 
       data1.channelAnnouncement match {
         case None => stay SendingHosted Tools.makePHCAnnouncementSignature(kit.nodeParams, data.commitments, shortChannelId, wantsReply = true)
-        case Some(announce) if lastUpdateTooLongAgo => stay StoringAndUsing data1 Publishing announce Publishing data1.localChannelUpdate
-        case _ => stay StoringAndUsing data1 Publishing data1.localChannelUpdate
+        case Some(announce) if lastUpdateTooLongAgo => stay StoringAndUsing data1 Announcing announce Announcing data1.localChannelUpdate
+        case _ => stay StoringAndUsing data1 Announcing data1.localChannelUpdate
       }
 
     case Event(remoteSig: AnnouncementSignature, data: HC_DATA_ESTABLISHED) if data.commitments.announceChannel =>
@@ -240,10 +241,10 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
       if (isSigOK && remoteSig.wantsReply) {
         log.info(s"PLGN PHC, announcing PHC and sending sig reply, peer=$remoteNodeId")
-        stay StoringAndUsing data1 SendingHosted localSig Publishing announce Publishing data1.localChannelUpdate
+        stay StoringAndUsing data1 SendingHosted localSig Announcing announce Announcing data1.localChannelUpdate
       } else if (isSigOK) {
         log.info(s"PLGN PHC, announcing PHC without sig reply, peer=$remoteNodeId")
-        stay StoringAndUsing data1 Publishing announce Publishing data1.localChannelUpdate
+        stay StoringAndUsing data1 Announcing announce Announcing data1.localChannelUpdate
       } else {
         log.info(s"PLGN PHC, announce sig check failed, peer=$remoteNodeId")
         stay
@@ -484,8 +485,8 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       if (data.commitments.announceChannel && isUpdateEnabled) {
         // In order to reduce gossip spam, we don't disable the channel right away when disconnected
         // we will only emit a new ChannelUpdate with the disable flag set if someone tries to use it
-        val disabledUpdate = makeChannelUpdate(data.commitments.lastCrossSignedState, enable = false)
-        stay StoringAndUsing data.copy(localChannelUpdate = disabledUpdate) Publishing disabledUpdate
+        val disableUpdate = makeChannelUpdate(data.commitments.lastCrossSignedState, enable = false)
+        stay StoringAndUsing data.copy(localChannelUpdate = disableUpdate) Announcing disableUpdate
       } else {
         stay
       }
@@ -545,41 +546,42 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
   }
 
   onTransition {
-    case (SYNCING | CLOSED) -> NORMAL =>
-      val data: HC_DATA_ESTABLISHED = nextStateData.asInstanceOf[HC_DATA_ESTABLISHED]
-      context.system.eventStream publish ChannelRestored(self, channelId, peer = null, remoteNodeId, isFunder = false, data.commitments)
-      context.system.eventStream publish ChannelIdAssigned(self, remoteNodeId, temporaryChannelId = ByteVector32.Zeroes, channelId)
-      context.system.eventStream publish ShortChannelIdAssigned(self, channelId, shortChannelId, previousShortChannelId = None)
-      context.system.eventStream publish LocalChannelUpdate(self, channelId, shortChannelId, remoteNodeId, None, data.localChannelUpdate, data.commitments) // TODO: what if update is disabled?
-    case NORMAL -> (OFFLINE | CLOSED) =>
-      context.system.eventStream publish LocalChannelDown(self, channelId, shortChannelId, remoteNodeId)
+    case state -> nextState =>
+      (state, nextState, nextStateData) match {
+        case (SYNCING | CLOSED, NORMAL, data: HC_DATA_ESTABLISHED) =>
+          context.system.eventStream publish ChannelRestored(self, channelId, peer = null, remoteNodeId, isFunder = false, data.commitments)
+          context.system.eventStream publish ChannelIdAssigned(self, remoteNodeId, temporaryChannelId = ByteVector32.Zeroes, channelId)
+          context.system.eventStream publish ShortChannelIdAssigned(self, channelId, shortChannelId, previousShortChannelId = None)
+          context.system.eventStream publish makeLocalUpdateEvent(data)
+        case (NORMAL, OFFLINE | CLOSED, _) =>
+          context.system.eventStream publish LocalChannelDown(self, channelId, shortChannelId, remoteNodeId)
+        case _ =>
+      }
   }
 
   onTransition {
     case state -> nextState =>
-      Tuple3(state, nextState, nextStateData) match {
-        case (OFFLINE | SYNCING, NORMAL | CLOSED, data: HC_DATA_ESTABLISHED) =>
-          context.system.eventStream publish ChannelStateChanged(self, channelId, peer = null, remoteNodeId, state, nextState, Some(data.commitments))
-          connections.get(remoteNodeId).foreach(connection => data.refundPendingInfo foreach connection.sendHostedChannelMsg)
-          connections.get(remoteNodeId).foreach(connection => data.overrideProposal foreach connection.sendHostedChannelMsg)
+      (connections.get(remoteNodeId), state, nextState, nextStateData) match {
+        case (Some(conn), OFFLINE | SYNCING, NORMAL | CLOSED, data: HC_DATA_ESTABLISHED) =>
+          context.system.eventStream publish makeStateChangedEvent(Some(data.commitments), state, nextState)
+          data.refundPendingInfo.foreach(conn.sendHostedChannelMsg)
+          data.overrideProposal.foreach(conn.sendHostedChannelMsg)
         case _ =>
       }
   }
 
   onTransition {
     case (SYNCING | CLOSED) -> NORMAL =>
-      Tuple2(stateData, nextStateData) match {
-        case (_, d1: HC_DATA_ESTABLISHED) if d1.commitments.announceChannel && !Announcements.isEnabled(d1.localChannelUpdate.channelFlags) =>
-          self ! HostedChannel.SendAnnouncements
-        case (d0: HC_DATA_ESTABLISHED, d1: HC_DATA_ESTABLISHED) if !d1.commitments.announceChannel && d0.localChannelUpdate != d1.localChannelUpdate =>
-          connections.get(remoteNodeId).foreach(_ sendRoutingMsg d1.localChannelUpdate)
-        case (_, d1: HC_DATA_ESTABLISHED) if !d1.commitments.announceChannel =>
-          connections.get(remoteNodeId).foreach(_ sendRoutingMsg d1.localChannelUpdate)
+      (connections.get(remoteNodeId), stateData, nextStateData) match {
+        case (_, _, d1: HC_DATA_ESTABLISHED) if d1.commitments.announceChannel && !Announcements.isEnabled(d1.localChannelUpdate.channelFlags) => self ! HostedChannel.SendAnnouncements
+        case (Some(conn), d0: HC_DATA_ESTABLISHED, d1: HC_DATA_ESTABLISHED) if !d1.commitments.announceChannel && d0.localChannelUpdate != d1.localChannelUpdate => conn sendRoutingMsg d1.localChannelUpdate
+        case (Some(conn), _, d1: HC_DATA_ESTABLISHED) if !d1.commitments.announceChannel => conn sendRoutingMsg d1.localChannelUpdate
         case _ =>
       }
   }
 
-  type HostedFsmState = FSM.State[fr.acinq.eclair.channel.State, HostedData]
+  type ChanState = fr.acinq.eclair.channel.State
+  type HostedFsmState = FSM.State[ChanState, HostedData]
 
   implicit class FsmStateExt(state: HostedFsmState) {
     def SendingHasChannelId(messages: wire.HasChannelId *): HostedFsmState = {
@@ -615,7 +617,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       state
     }
 
-    def Publishing(message: wire.AnnouncementMessage): HostedFsmState = {
+    def Announcing(message: wire.AnnouncementMessage): HostedFsmState = {
       hostedSync ! Codecs.toUnknownAnnounceMessage(message, isGossip = true)
       state
     }
@@ -643,6 +645,10 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
   def makeError(content: String): wire.Error = wire.Error(channelId, content)
 
   def isBlockDayOutOfSync(remoteSU: StateUpdate): Boolean = math.abs(remoteSU.blockDay - currentBlockDay) > 1
+
+  def makeStateChangedEvent(csOpt: Option[HostedCommitments], s0: ChanState, s1: ChanState): ChannelStateChanged = ChannelStateChanged(self, channelId, peer = null, remoteNodeId, s0, s1, csOpt)
+
+  def makeLocalUpdateEvent(data: HC_DATA_ESTABLISHED): LocalChannelUpdate = LocalChannelUpdate(self, channelId, shortChannelId, remoteNodeId, None, data.localChannelUpdate, data.commitments)
 
   def makeChannelUpdate(localLCSS: LastCrossSignedState, enable: Boolean): wire.ChannelUpdate =
     Announcements.makeChannelUpdate(kit.nodeParams.chainHash, kit.nodeParams.privateKey, remoteNodeId, shortChannelId, initParams.cltvDelta,
