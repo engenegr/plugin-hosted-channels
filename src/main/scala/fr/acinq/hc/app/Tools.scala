@@ -102,13 +102,13 @@ case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDelt
 
 case class HCOverrideParams(nodeId: String, params: HCParams)
 
-case class Branding(logo: String, color: Color) {
+case class Branding(logo: String, color: Color, contactInfo: String) {
   var brandingMessageOpt: Option[HostedChannelBranding] = None
 
   Try {
     val pngBytes = ByteVector view Files.readAllBytes(Paths get logo)
-    val message = HostedChannelBranding(color, pngBytes)
-    brandingMessageOpt = Some(message)
+    val msg = HostedChannelBranding(color, pngBytes, contactInfo)
+    brandingMessageOpt = Some(msg)
   }
 }
 

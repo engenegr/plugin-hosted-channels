@@ -114,9 +114,8 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
         val localUnsignedLCSS = LastCrossSignedState(data.refundScriptPubKey, initHostedChannel = hostInit, blockDay = currentBlockDay,
           localBalanceMsat = hostInit.initialClientBalanceMsat, remoteBalanceMsat = hostInit.channelCapacityMsat - hostInit.initialClientBalanceMsat,
           localUpdates = 0L, remoteUpdates = 0L, incomingHtlcs = Nil, outgoingHtlcs = Nil, localSigOfRemote = ByteVector64.Zeroes, remoteSigOfLocal = ByteVector64.Zeroes)
-        val commitments = restoreEmptyCommitments(localUnsignedLCSS.withLocalSigOfRemote(kit.nodeParams.privateKey), isHost = false)
-        val localSU: StateUpdate = commitments.lastCrossSignedState.stateUpdate(isTerminal = true)
-        stay using HC_DATA_CLIENT_WAIT_HOST_STATE_UPDATE(commitments) SendingHosted localSU
+        val commitments: HostedCommitments = restoreEmptyData(localUnsignedLCSS.withLocalSigOfRemote(kit.nodeParams.privateKey), isHost = false).commitments
+        stay using HC_DATA_CLIENT_WAIT_HOST_STATE_UPDATE(commitments) SendingHosted commitments.lastCrossSignedState.stateUpdate(isTerminal = true)
       }
 
     case Event(clientSU: StateUpdate, wait: HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE) =>
@@ -575,24 +574,30 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
   onTransition {
     case state -> nextState =>
-      (state, nextState, nextStateData) match {
-        case (SYNCING | CLOSED, NORMAL, d1: HC_DATA_ESTABLISHED) =>
+      Tuple3(state, nextState, nextStateData) match {
+        case Tuple3(SYNCING | CLOSED, NORMAL, d1: HC_DATA_ESTABLISHED) =>
           context.system.eventStream publish ChannelRestored(self, channelId, peer = null, remoteNodeId, isFunder = false, d1.commitments)
           context.system.eventStream publish ChannelIdAssigned(self, remoteNodeId, temporaryChannelId = ByteVector32.Zeroes, channelId)
           context.system.eventStream publish ShortChannelIdAssigned(self, channelId, shortChannelId, previousShortChannelId = None)
           context.system.eventStream publish makeLocalUpdateEvent(d1)
-        case (NORMAL, OFFLINE | CLOSED, _) =>
+        case Tuple3(NORMAL, OFFLINE | CLOSED, _) =>
           context.system.eventStream publish LocalChannelDown(self, channelId, shortChannelId, remoteNodeId)
         case _ =>
       }
-  }
 
-  onTransition {
-    case state -> nextState =>
-      (connections.get(remoteNodeId), state, nextState, nextStateData) match {
-        case (Some(conn), OFFLINE | SYNCING, NORMAL | CLOSED, data: HC_DATA_ESTABLISHED) =>
-          context.system.eventStream publish makeStateChangedEvent(Some(data.commitments), state, nextState)
-          (data.refundPendingInfo ++ data.overrideProposal).foreach(conn.sendHostedChannelMsg)
+      Tuple4(connections.get(remoteNodeId), state, nextState, nextStateData) match {
+        case Tuple4(Some(conn), OFFLINE | SYNCING, NORMAL | CLOSED, d1: HC_DATA_ESTABLISHED) =>
+          context.system.eventStream publish ChannelStateChanged(self, channelId, conn.info.peer, remoteNodeId, state, nextState, d1.commitmentsOpt)
+          d1.refundPendingInfo.foreach(conn.sendHostedChannelMsg)
+          d1.overrideProposal.foreach(conn.sendHostedChannelMsg)
+        case _ =>
+      }
+
+      Tuple3(state, nextState, nextStateData) match {
+        case Tuple3(OFFLINE, CLOSED, d1: HC_DATA_ESTABLISHED) =>
+          // We may get fulfills for peer payments while offline when channel is in error state, resend them
+          val fulfills = d1.commitments.nextLocalUpdates.collect { case fulfill: UpdateFulfillHtlc => fulfill }
+          connections.get(remoteNodeId).foreach(con => fulfills foreach con.sendHasChannelIdMsg)
         case _ =>
       }
   }
@@ -603,17 +608,6 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
         case (_, _, d1: HC_DATA_ESTABLISHED) if d1.commitments.announceChannel && !Announcements.isEnabled(d1.localChannelUpdate.channelFlags) => self ! HostedChannel.SendAnnouncements
         case (Some(conn), d0: HC_DATA_ESTABLISHED, d1: HC_DATA_ESTABLISHED) if !d1.commitments.announceChannel && d0.localChannelUpdate != d1.localChannelUpdate => conn sendRoutingMsg d1.localChannelUpdate
         case (Some(conn), _, d1: HC_DATA_ESTABLISHED) if !d1.commitments.announceChannel => conn sendRoutingMsg d1.localChannelUpdate
-        case _ =>
-      }
-  }
-
-  onTransition {
-    case state -> nextState =>
-      (state, nextState, nextStateData) match {
-        case (OFFLINE, CLOSED, d1: HC_DATA_ESTABLISHED) =>
-          // We may get fulfills for peer payments while offline when channel is in error state, resend them on reconnect
-          val fulfills = d1.commitments.nextLocalUpdates.collect { case Left(fulfill: UpdateFulfillHtlc) => fulfill }
-          connections.get(remoteNodeId).foreach(con => fulfills foreach con.sendHasChannelIdMsg)
         case _ =>
       }
   }
@@ -684,8 +678,6 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
   def isBlockDayOutOfSync(remoteSU: StateUpdate): Boolean = math.abs(remoteSU.blockDay - currentBlockDay) > 1
 
-  def makeStateChangedEvent(csOpt: Option[HostedCommitments], s0: ChanState, s1: ChanState): ChannelStateChanged = ChannelStateChanged(self, channelId, peer = null, remoteNodeId, s0, s1, csOpt)
-
   def makeLocalUpdateEvent(data: HC_DATA_ESTABLISHED): LocalChannelUpdate = LocalChannelUpdate(self, channelId, shortChannelId, remoteNodeId, None, data.localChannelUpdate, data.commitments)
 
   def makeChannelUpdate(localLCSS: LastCrossSignedState, enable: Boolean): wire.ChannelUpdate =
@@ -697,16 +689,11 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       incomingHtlcs = Nil, outgoingHtlcs = Nil, localUpdates = newLocalUpdates, remoteUpdates = newRemoteUpdates, blockDay = overrideBlockDay,
       remoteSigOfLocal = ByteVector64.Zeroes).withLocalSigOfRemote(kit.nodeParams.privateKey)
 
-  def restoreEmptyCommitments(localLCSS: LastCrossSignedState, isHost: Boolean): HostedCommitments =
-    HostedCommitments(isHost, localNodeId = kit.nodeParams.nodeId, remoteNodeId = remoteNodeId, channelId,
+  def restoreEmptyData(localLCSS: LastCrossSignedState, isHost: Boolean): HC_DATA_ESTABLISHED =
+    HC_DATA_ESTABLISHED(HostedCommitments(isHost, localNodeId = kit.nodeParams.nodeId, remoteNodeId = remoteNodeId, channelId,
       CommitmentSpec(htlcs = Set.empty, FeeratePerKw(0L.sat), localLCSS.localBalanceMsat, localLCSS.remoteBalanceMsat),
-      originChannels = Map.empty, lastCrossSignedState = localLCSS, futureUpdates = Nil, announceChannel = false)
-
-  def restoreEmptyData(localLCSS: LastCrossSignedState, isHost: Boolean): HC_DATA_ESTABLISHED = {
-    val localChannelUpdate: wire.ChannelUpdate = makeChannelUpdate(localLCSS, enable = true)
-    val commitments: HostedCommitments = restoreEmptyCommitments(localLCSS, isHost)
-    HC_DATA_ESTABLISHED(commitments, localChannelUpdate = localChannelUpdate)
-  }
+      originChannels = Map.empty, lastCrossSignedState = localLCSS, futureUpdates = Nil, announceChannel = false),
+      makeChannelUpdate(localLCSS, enable = true), localError = None)
 
   def restoreMissingChannel(remoteLCSS: LastCrossSignedState, isHost: Boolean): HostedFsmState = {
     log.info(s"restoring missing hosted channel with peer=${remoteNodeId.toString}")

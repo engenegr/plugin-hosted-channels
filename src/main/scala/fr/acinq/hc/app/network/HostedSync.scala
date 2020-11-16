@@ -256,7 +256,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
 
   private def isUpdateAcceptable(update: ChannelUpdate, data: OperationalData): Boolean =
     data.phcNetwork.channels.get(update.shortChannelId) match {
-      case _ if !update.htlcMaximumMsat.exists(_ >= phcConfig.minCapacity) =>
+      case _ if update.htlcMaximumMsat.forall(_ < phcConfig.minCapacity) =>
         log.info(s"PLGN PHC, gossip update capacity fail, msg=$update")
         false
 

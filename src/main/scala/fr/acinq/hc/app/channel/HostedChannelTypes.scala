@@ -60,6 +60,8 @@ case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
                                refundCompleteInfo: Option[String] = None, // Will be present after channel has been manually updated as a refunded one
                                channelAnnouncement: Option[wire.ChannelAnnouncement] = None) extends HostedData {
 
+  lazy val commitmentsOpt: Option[HostedCommitments] = Some(commitments)
+
   lazy val errorExt: Option[ErrorExt] = localError orElse remoteError
 
   lazy val pendingHtlcs: Set[DirectedHtlc] = if (errorExt.isEmpty) {
