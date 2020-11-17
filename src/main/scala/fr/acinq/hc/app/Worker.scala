@@ -73,34 +73,32 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
       // Gossip and sync messages are handled by sync actor
       hostedSync ! peerMessage
 
-    // Getting remote message assumes peer is connected already, but channel may not be present in map
-    // If channel is absent in map then revive it and notify about connected peer before relaying a message
-
-    case UnknownMessageReceived(_, nodeId, message, _) if chanIdMessageTags.contains(message.tag) =>
-      Tuple2(Codecs decodeHasChanIdMessage message, inMemoryHostedChannels get nodeId) match {
-        case (_: Attempt.Failure, _) => logger.info(s"PLGN PHC, HasChannelId message decoding fail, tag=${message.tag}, peer=$nodeId")
-        case (Attempt.Successful(msg), null) => restore(nodeId)(_ !> Worker.HCPeerConnected !> msg)(logger info s"PLGN PHC, no target, tag=${message.tag}")
-        case (Attempt.Successful(msg), channelRef) => channelRef ! msg
-      }
-
     case UnknownMessageReceived(_, nodeId, message, _) if hostedMessageTags.contains(message.tag) =>
       Tuple3(Codecs decodeHostedMessage message, remoteNode2Connection get nodeId, inMemoryHostedChannels get nodeId) match {
         case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, Hosted message decoding fail, tag=${message.tag}, peer=$nodeId")
-        case (_, None, _) => logger.info(s"PLGN PHC, no peer found for message=${message.getClass.getSimpleName}, peer=$nodeId")
+        case (_, None, _) => logger.info(s"PLGN PHC, no connection found for message=${message.getClass.getSimpleName}, peer=$nodeId")
         case (Attempt.Successful(_: ReplyPublicHostedChannelsEnd), Some(wrap), _) => hostedSync ! HostedSync.GotAllSyncFrom(wrap)
         case (Attempt.Successful(_: QueryPublicHostedChannels), Some(wrap), _) => hostedSync ! HostedSync.SendSyncTo(wrap)
 
         // Special anti-spam handling for InvokeHostedChannel
         case (Attempt.Successful(_: InvokeHostedChannel), Some(wrap), null) if ipAntiSpam(wrap.remoteIp) > vals.maxNewChansPerIpPerHour => wrap sendHasChannelIdMsg Worker.chanDenied
         case (Attempt.Successful(invoke: InvokeHostedChannel), _, null) => restore(nodeId)(_ !> Worker.HCPeerConnected !> invoke)(spawnChannel(nodeId) !> Worker.HCPeerConnected !> invoke)
-        case (Attempt.Successful(hosted: HostedChannelMessage), _, null) => logger.info(s"PLGN PHC, no target for HasChannelId message, tag=${message.tag}, peer=$nodeId")
+        case (Attempt.Successful(_: HostedChannelMessage), _, null) => logger.info(s"PLGN PHC, no target for HostedMessage, tag=${message.tag}, peer=$nodeId")
         case (Attempt.Successful(hosted: HostedChannelMessage), _, channelRef) => channelRef ! hosted
+      }
+
+    case UnknownMessageReceived(_, nodeId, message, _) if chanIdMessageTags.contains(message.tag) =>
+      Tuple3(Codecs decodeHasChanIdMessage message, remoteNode2Connection get nodeId, inMemoryHostedChannels get nodeId) match {
+        case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, HasChannelId message decoding fail, tag=${message.tag}, peer=$nodeId")
+        case (_, None, _) => logger.info(s"PLGN PHC, no connection found for message=${message.getClass.getSimpleName}, peer=$nodeId")
+        case (_, _, null) => logger.info(s"PLGN PHC, no target for HasChannelIdMessage, tag=${message.tag}, peer=$nodeId")
+        case (Attempt.Successful(msg), _, channelRef) => channelRef ! msg
       }
 
     case cmd: HC_CMD_LOCAL_INVOKE =>
       val isConnected = remoteNode2Connection.contains(cmd.remoteNodeId)
-      val isInDb = channelsDb.getChannelByRemoteNodeId(cmd.remoteNodeId).isEmpty
-      val isInMemory = Option(inMemoryHostedChannels get cmd.remoteNodeId).isEmpty
+      val isInDb = channelsDb.getChannelByRemoteNodeId(cmd.remoteNodeId).nonEmpty
+      val isInMemory = Option(inMemoryHostedChannels get cmd.remoteNodeId).nonEmpty
       if (isInMemory || isInDb) sender ! FSM.Failure("HC with remote node already exists")
       else if (!isConnected) sender ! FSM.Failure("Not yet connected to remote peer")
       else spawnChannel(cmd.remoteNodeId) !> Worker.HCPeerConnected !> cmd
