@@ -35,9 +35,9 @@ case class HC_CMD_PRIVATE(remoteNodeId: PublicKey) extends HasRemoteNodeIdHosted
 
 case class HC_CMD_GET_INFO(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 
-case class CMDResponseSuccess(cmd: HasRemoteNodeIdHostedCommand)
+case class CMDResSuccess(cmd: HasRemoteNodeIdHostedCommand)
 
-case class CMDResponseInfo(channelId: ByteVector32, shortChannelId: ShortChannelId, state: State, data: HC_DATA_ESTABLISHED, nextLocalSpec: CommitmentSpec)
+case class CMDResponseInfo(state: State, data: HC_DATA_ESTABLISHED, nextLocalSpec: CommitmentSpec)
 
 // Data
 
@@ -71,7 +71,7 @@ case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
   } else {
     // Clearing of HTLCs in localSpec is impossible when error is present
     // OTOH fails and fulfills from remote peer are not accepted in such state either
-    // pending HTLCs in nextLocalSpec can be cleared by our fake FAIL on timeout or by FULFILL from peer
+    // pending HTLCs can be cleared by our fake FAIL on timeout or by FULFILL from peer
     commitments.nextLocalSpec.htlcs
   }
 

@@ -27,7 +27,7 @@ object Worker {
 
   case object TickRemoveIdleChannels { val label = "TickRemoveIdleChannels" }
 
-  case class HotChannels(channels: Seq[HC_DATA_ESTABLISHED] = Nil)
+  val notFound: FSM.Failure = FSM.Failure("HC with remote node is not found")
 
   val chanDenied: eclair.wire.Error = eclair.wire.Error(ByteVector32.Zeroes, ErrorCodes.ERR_HOSTED_CHANNEL_DENIED)
 }
@@ -50,13 +50,15 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
   val ipAntiSpam: mutable.Map[Array[Byte], Int] = mutable.Map.empty withDefaultValue 0
 
   override def receive: Receive = {
-    case systemMessage: PeerDisconnected =>
-      remoteNode2Connection.remove(systemMessage.nodeId)
-      channelRefOpt(systemMessage.nodeId).foreach(_ ! systemMessage)
-
     case systemMessage: PeerConnected if systemMessage.connectionInfo.remoteInit.features.hasPluginFeature(HCFeature.plugin) =>
       remoteNode2Connection(systemMessage.nodeId) = PeerConnectedWrap(systemMessage)
-      channelRefOpt(systemMessage.nodeId).foreach(_ ! Worker.HCPeerConnected)
+      val refOpt = Option(inMemoryHostedChannels get systemMessage.nodeId)
+      refOpt.foreach(_ ! Worker.HCPeerConnected)
+
+    case systemMessage: PeerDisconnected =>
+      remoteNode2Connection.remove(systemMessage.nodeId)
+      val refOpt = Option(inMemoryHostedChannels get systemMessage.nodeId)
+      refOpt.foreach(_ ! systemMessage)
 
     case Worker.TickClearIpAntiSpam =>
       ipAntiSpam.clear
@@ -71,44 +73,45 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
       // Gossip and sync messages are handled by sync actor
       hostedSync ! peerMessage
 
+    // Getting remote message assumes peer is connected already, but channel may not be present in map
+    // If channel is absent in map then revive it and notify about connected peer before relaying a message
+
     case UnknownMessageReceived(_, nodeId, message, _) if chanIdMessageTags.contains(message.tag) =>
-      // Messages with channel id presume a target channel exists, do not spawn a new one if not actually found
-      Tuple3(Codecs decodeHasChanIdMessage message, remoteNode2Connection get nodeId, inMemoryHostedChannels get nodeId) match {
-        case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, decoding fail, tag=${message.tag}, peer=${nodeId.toString}")
-        case (_, None, _) => logger.info(s"PLGN PHC, peerless message=${message.getClass.getSimpleName}, peer=${nodeId.toString}")
-        case (Attempt.Successful(msg), _, null) => restoreOrElse(msg, nodeId)(me logNoTarget nodeId.toString)
-        case (Attempt.Successful(msg), _, channelRef) => channelRef ! msg
+      Tuple2(Codecs decodeHasChanIdMessage message, inMemoryHostedChannels get nodeId) match {
+        case (_: Attempt.Failure, _) => logger.info(s"PLGN PHC, HasChannelId message decoding fail, tag=${message.tag}, peer=$nodeId")
+        case (Attempt.Successful(msg), null) => restore(nodeId)(_ !> Worker.HCPeerConnected !> msg)(logger info s"PLGN PHC, no target, tag=${message.tag}")
+        case (Attempt.Successful(msg), channelRef) => channelRef ! msg
       }
 
     case UnknownMessageReceived(_, nodeId, message, _) if hostedMessageTags.contains(message.tag) =>
-      // Order matters here: routing messages should be sent to sync actor, invoke should be checked for anti-spam
       Tuple3(Codecs decodeHostedMessage message, remoteNode2Connection get nodeId, inMemoryHostedChannels get nodeId) match {
-        case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, decoding fail, tag=${message.tag}, peer=${nodeId.toString}")
-        case (_, None, _) => logger.info(s"PLGN PHC, peerless message=${message.getClass.getSimpleName}, peer=${nodeId.toString}")
+        case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, Hosted message decoding fail, tag=${message.tag}, peer=$nodeId")
+        case (_, None, _) => logger.info(s"PLGN PHC, no peer found for message=${message.getClass.getSimpleName}, peer=$nodeId")
         case (Attempt.Successful(_: ReplyPublicHostedChannelsEnd), Some(wrap), _) => hostedSync ! HostedSync.GotAllSyncFrom(wrap)
         case (Attempt.Successful(_: QueryPublicHostedChannels), Some(wrap), _) => hostedSync ! HostedSync.SendSyncTo(wrap)
 
         // Special anti-spam handling for InvokeHostedChannel
         case (Attempt.Successful(_: InvokeHostedChannel), Some(wrap), null) if ipAntiSpam(wrap.remoteIp) > vals.maxNewChansPerIpPerHour => wrap sendHasChannelIdMsg Worker.chanDenied
-        case (Attempt.Successful(msg: InvokeHostedChannel), _, null) => restoreOrElse(msg, nodeId)(newChannelInvoke => spawnChannel(nodeId) ! newChannelInvoke)
-        case (Attempt.Successful(msg: InvokeHostedChannel), _, channelRef) => channelRef ! msg
-
-        case (Attempt.Successful(msg: HostedChannelMessage), _, null) => restoreOrElse(msg, nodeId)(me logNoTarget nodeId.toString)
-        case (Attempt.Successful(msg: HostedChannelMessage), _, channelRef) => channelRef ! msg
+        case (Attempt.Successful(invoke: InvokeHostedChannel), _, null) => restore(nodeId)(_ !> Worker.HCPeerConnected !> invoke)(spawnChannel(nodeId) !> Worker.HCPeerConnected !> invoke)
+        case (Attempt.Successful(hosted: HostedChannelMessage), _, null) => restore(nodeId)(_ !> Worker.HCPeerConnected !> hosted)(logger info s"PLGN PHC, no target, tag=${message.tag}")
+        case (Attempt.Successful(hosted: HostedChannelMessage), _, channelRef) => channelRef ! hosted
       }
 
     case cmd: HC_CMD_LOCAL_INVOKE =>
-      val isInMemory = channelRefOpt(cmd.remoteNodeId).isEmpty
+      val isConnected = remoteNode2Connection.contains(cmd.remoteNodeId)
       val isInDb = channelsDb.getChannelByRemoteNodeId(cmd.remoteNodeId).isEmpty
-      val hasConnection: Boolean = remoteNode2Connection.contains(cmd.remoteNodeId)
+      val isInMemory = Option(inMemoryHostedChannels get cmd.remoteNodeId).isEmpty
       if (isInMemory || isInDb) sender ! FSM.Failure("HC with remote node already exists")
-      else if (!hasConnection) sender ! FSM.Failure("Not connected to remote node")
-      else spawnChannel(cmd.remoteNodeId) forward cmd
+      else if (!isConnected) sender ! FSM.Failure("Not yet connected to remote peer")
+      else spawnChannel(cmd.remoteNodeId) !> Worker.HCPeerConnected !> cmd
+
+    // Peer may be disconnected when commands are issued
+    // Channel must be able to handle command in any state
 
     case cmd: HasRemoteNodeIdHostedCommand =>
-      channelRefOpt(cmd.remoteNodeId).map(_ forward cmd) getOrElse {
-        val notFoundFailure = FSM.Failure("HC with remote node is not found")
-        restoreOrElse(cmd, cmd.remoteNodeId)(_ => sender ! notFoundFailure)
+      Option(inMemoryHostedChannels get cmd.remoteNodeId) match {
+        case None => restore(cmd.remoteNodeId)(_ forward cmd)(sender ! Worker.notFound)
+        case Some(channelRef) => channelRef forward cmd
       }
 
     case Terminated(channelRef) =>
@@ -117,24 +120,7 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
     case Worker.TickRemoveIdleChannels =>
       logger.info(s"PLGN PHC, in-memory HCs=${inMemoryHostedChannels.size}")
       inMemoryHostedChannels.values.forEach(_ ! Worker.TickRemoveIdleChannels)
-
-    case Worker.HotChannels(channels) =>
-      // Client channels and those with HTLCs
-
-      for (channelData <- channels) {
-        spawnPreparedChannel(channelData)
-        val nodeId = channelData.commitments.remoteNodeId
-        kit.switchboard ! Peer.Connect(nodeId, None)
-      }
-
-    case PeerConnection.ConnectionResult.NoAddressFound(nodeId) =>
-      // We have requested a connection for HC, but no address was found
-      logger.info(s"PLGN PHC, no address for HC, peer=${nodeId.toString}")
   }
-
-  def logNoTarget[T](nodeId: String)(msg: T): Unit = logger.info(s"PLGN PHC, no target chan for msg=${msg.getClass.getSimpleName}, peer=$nodeId")
-
-  def channelRefOpt(nodeId: PublicKey): Option[ActorRef] = Option(inMemoryHostedChannels get nodeId)
 
   def spawnChannel(nodeId: PublicKey): ActorRef = {
     val props = Props(classOf[HostedChannel], kit, remoteNode2Connection, nodeId, channelsDb, hostedSync, vals)
@@ -148,9 +134,16 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
     channel
   }
 
-  def restoreOrElse[T](message: T, nodeId: PublicKey)(orElse: T => Unit): Unit =
+  def restore(nodeId: PublicKey)(onFound: ActorRef => Unit)(onNotFound: => Unit): Unit =
     channelsDb.getChannelByRemoteNodeId(remoteNodeId = nodeId) match {
-      case Some(data) => spawnPreparedChannel(data) forward message
-      case None => orElse(message)
+      case Some(data) => onFound(me spawnPreparedChannel data)
+      case None => onNotFound
     }
+
+  implicit class MultiSender(channel: ActorRef) {
+    def !>(message: Any): MultiSender = {
+      channel forward message
+      this
+    }
+  }
 }

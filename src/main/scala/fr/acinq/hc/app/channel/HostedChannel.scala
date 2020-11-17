@@ -5,6 +5,7 @@ import fr.acinq.hc.app._
 import fr.acinq.eclair.channel._
 import scala.concurrent.duration._
 
+import fr.acinq.eclair.db.PendingRelayDb.{ackCommand, getPendingFailsAndFulfills}
 import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc}
 import fr.acinq.hc.app.Tools.{DuplicateHandler, DuplicateShortId}
 import fr.acinq.eclair.wire.{UpdateFailHtlc, UpdateFulfillHtlc}
@@ -21,7 +22,6 @@ import fr.acinq.eclair.payment.relay.Relayer
 import fr.acinq.hc.app.dbo.HostedChannelsDb
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.eclair.db.PendingRelayDb
 import fr.acinq.hc.app.network.PHC
 import fr.acinq.hc.app.wire.Codecs
 import scala.collection.mutable
@@ -51,41 +51,20 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
   startWith(OFFLINE, HC_NOTHING)
 
   when(OFFLINE) {
-    case Event(data: HC_DATA_ESTABLISHED, HC_NOTHING) =>
-      if (data.errorExt.isDefined || data.refundCompleteInfo.isDefined) {
-        goto(CLOSED) using data
-      } else {
-        stay using data
-      }
+    case Event(data: HC_DATA_ESTABLISHED, HC_NOTHING) => stay using data
+
+    case Event(Worker.HCPeerConnected, HC_NOTHING) => goto(SYNCING)
+
+    case Event(Worker.HCPeerConnected, data: HC_DATA_ESTABLISHED) if data.commitments.isHost =>
+      if (data.refundCompleteInfo.isDefined) goto(CLOSED)
+      else if (data.errorExt.isDefined) goto(CLOSED)
+      else goto(SYNCING)
 
     case Event(Worker.HCPeerConnected, data: HC_DATA_ESTABLISHED) =>
-      // We could have transitioned into OFFLINE from CLOSED, hence check again
-      if (data.errorExt.isDefined || data.refundCompleteInfo.isDefined) {
-        goto(CLOSED)
-      } else if (!data.commitments.isHost) {
-        // Client is the one who tries to invoke a channel on reconnect
-        val refundKey = data.commitments.lastCrossSignedState.refundScriptPubKey
-        goto(SYNCING) SendingHosted InvokeHostedChannel(kit.nodeParams.chainHash, refundKey)
-      } else {
-        stay
-      }
-
-    case Event(HC_CMD_LOCAL_INVOKE(_, scriptPubKey, secret), HC_NOTHING) =>
-      val invokeMsg = InvokeHostedChannel(kit.nodeParams.chainHash, scriptPubKey, secret)
-      goto(SYNCING) using HC_DATA_CLIENT_WAIT_HOST_INIT(scriptPubKey) SendingHosted invokeMsg
-
-    case Event(remoteInvoke: InvokeHostedChannel, HC_NOTHING) =>
-      if (kit.nodeParams.chainHash != remoteInvoke.chainHash) stay SendingHasChannelId makeError(InvalidChainHash(channelId, kit.nodeParams.chainHash, remoteInvoke.chainHash).getMessage)
-      else if (Helpers.Closing isValidFinalScriptPubkey remoteInvoke.refundScriptPubKey) goto(SYNCING) using HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE(remoteInvoke) SendingHosted initParams.initMsg
-      else stay SendingHasChannelId makeError(InvalidFinalScript(channelId).getMessage)
-
-    case Event(_: InvokeHostedChannel, data: HC_DATA_ESTABLISHED) =>
-      if (data.commitments.isHost) {
-        // Invoke is always expected from client side, never from host
-        goto(SYNCING) SendingHosted data.commitments.lastCrossSignedState
-      } else {
-        stay
-      }
+      // Client is the one who sends either an Error or InvokeHostedChannel on reconnect
+      if (data.localError.isDefined) goto(CLOSED) SendingHasChannelId data.localError.get.error
+      else if (data.remoteError.isDefined) goto(CLOSED) SendingHasChannelId makeError(ErrorCodes.ERR_HOSTED_CLOSED_BY_REMOTE_PEER)
+      else goto(SYNCING) SendingHosted InvokeHostedChannel(kit.nodeParams.chainHash, data.commitments.lastCrossSignedState.refundScriptPubKey)
 
     case Event(Worker.TickRemoveIdleChannels, HC_NOTHING) => stop(FSM.Normal)
 
@@ -93,17 +72,27 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       // Client channels are never idle, instead they always try to reconnect on becoming OFFLINE
       // Host channel with outgoing HTLCs is kept because peer may technically send fulfill while OFFLINE
       // It's OK to remove a channel with pending incoming HTLCs, but it must be treated as hot on restart
-      if (data.commitments.isHost && data.timedOutOutgoingHtlcs(Long.MaxValue).isEmpty) {
-        stop(FSM.Normal)
-      } else {
-        stay
-      }
+      val canStop = data.commitments.isHost && data.timedOutOutgoingHtlcs(Long.MaxValue).isEmpty
+      if (canStop) stop(FSM.Normal) else stay
   }
 
   when(SYNCING, stateTimeout = 5.minutes) {
     case Event(StateTimeout, _: HC_DATA_ESTABLISHED) => stay.Disconnecting
 
     case Event(StateTimeout, _) => stop(FSM.Normal)
+
+    case Event(HC_CMD_LOCAL_INVOKE(_, scriptPubKey, secret), HC_NOTHING) =>
+      val invokeMsg = InvokeHostedChannel(kit.nodeParams.chainHash, scriptPubKey, secret)
+      stay using HC_DATA_CLIENT_WAIT_HOST_INIT(scriptPubKey) SendingHosted invokeMsg
+
+    case Event(remoteInvoke: InvokeHostedChannel, HC_NOTHING) =>
+      if (kit.nodeParams.chainHash != remoteInvoke.chainHash) stay SendingHasChannelId makeError(InvalidChainHash(channelId, kit.nodeParams.chainHash, remoteInvoke.chainHash).getMessage)
+      else if (Helpers.Closing isValidFinalScriptPubkey remoteInvoke.refundScriptPubKey) stay using HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE(remoteInvoke) SendingHosted initParams.initMsg
+      else stay SendingHasChannelId makeError(InvalidFinalScript(channelId).getMessage)
+
+    case Event(_: InvokeHostedChannel, data: HC_DATA_ESTABLISHED) if data.commitments.isHost =>
+      // Invoke is always expected to come from client side, never from host side
+      stay SendingHosted data.commitments.lastCrossSignedState
 
     case Event(hostInit: InitHostedChannel, data: HC_DATA_CLIENT_WAIT_HOST_INIT) =>
       if (hostInit.liabilityDeadlineBlockdays < vals.hcDefaultParams.liabilityDeadlineBlockdays) stop(FSM.Normal) SendingHasChannelId makeError("Proposed liability deadline is too low")
@@ -119,7 +108,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       }
 
     case Event(clientSU: StateUpdate, wait: HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE) =>
-      val handler = new DuplicateHandler[HC_DATA_ESTABLISHED] { def insert(data: HC_DATA_ESTABLISHED): Boolean = channelsDb addNewChannel data }
+      val handle = new DuplicateHandler[HC_DATA_ESTABLISHED] { def insert(data: HC_DATA_ESTABLISHED): Boolean = channelsDb addNewChannel data }
       val fullySignedLCSS = LastCrossSignedState(wait.invoke.refundScriptPubKey, initHostedChannel = initParams.initMsg, blockDay = clientSU.blockDay,
         localBalanceMsat = initParams.initMsg.channelCapacityMsat, remoteBalanceMsat = MilliSatoshi(0L), localUpdates = 0L, remoteUpdates = 0L, incomingHtlcs = Nil,
         outgoingHtlcs = Nil, remoteSigOfLocal = clientSU.localSigOfRemoteLCSS, localSigOfRemote = ByteVector64.Zeroes).withLocalSigOfRemote(kit.nodeParams.privateKey)
@@ -130,21 +119,19 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
       if (isBlockDayWrong) stop(FSM.Normal) SendingHasChannelId makeError(InvalidBlockDay(channelId, currentBlockDay, clientSU.blockDay).getMessage)
       else if (!isLocalSigOk) stop(FSM.Normal) SendingHasChannelId makeError(InvalidRemoteStateSignature(channelId).getMessage)
-      else {
-        handler.execute(data) match {
-          case Failure(DuplicateShortId) =>
-            log.info(s"PLGN PHC, DuplicateShortId when storing new HC, peer=$remoteNodeId")
-            stop(FSM.Normal) SendingHasChannelId makeError(ErrorCodes.ERR_HOSTED_CHANNEL_DENIED)
+      else handle.execute(data) match {
+        case Failure(DuplicateShortId) =>
+          log.info(s"PLGN PHC, DuplicateShortId when storing new HC, peer=$remoteNodeId")
+          stop(FSM.Normal) SendingHasChannelId makeError(ErrorCodes.ERR_HOSTED_CHANNEL_DENIED)
 
-          case Success(true) =>
-            val localSU = fullySignedLCSS.stateUpdate(isTerminal = true)
-            log.info(s"PLGN PHC, stored new HC with peer=$remoteNodeId, shortId=$shortChannelId")
-            goto(NORMAL) StoringAndUsing data StoringSecret wait.invoke.finalSecret SendingHosted localSU
+        case Success(true) =>
+          val localSU = fullySignedLCSS.stateUpdate(isTerminal = true)
+          log.info(s"PLGN PHC, stored new HC with peer=$remoteNodeId, shortId=$shortChannelId")
+          goto(NORMAL) StoringAndUsing data StoringSecret wait.invoke.finalSecret SendingHosted localSU
 
-          case _ =>
-            log.info(s"PLGN PHC, database error when storing new HC, peer=$remoteNodeId")
-            stop(FSM.Normal) SendingHasChannelId makeError(ErrorCodes.ERR_HOSTED_CHANNEL_DENIED)
-        }
+        case _ =>
+          log.info(s"PLGN PHC, database error when storing new HC, peer=$remoteNodeId")
+          stop(FSM.Normal) SendingHasChannelId makeError(ErrorCodes.ERR_HOSTED_CHANNEL_DENIED)
       }
 
     case Event(hostSU: StateUpdate, data: HC_DATA_CLIENT_WAIT_HOST_STATE_UPDATE) =>
@@ -162,11 +149,11 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
     case Event(remoteLCSS: LastCrossSignedState, _: HC_DATA_CLIENT_WAIT_HOST_INIT) =>
       // Client has sent InvokeHostedChannel and was expecting for InitHostedChannel from host
-      restoreMissingChannel(remoteLCSS: LastCrossSignedState, isHost = false)
+      restoreMissingChannel(remoteLCSS, isHost = false)
 
     case Event(remoteLCSS: LastCrossSignedState, _: HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE) =>
-      // Host sent InitHostedChannel and was expecting for StateUpdate from host
-      restoreMissingChannel(remoteLCSS: LastCrossSignedState, isHost = true)
+      // Host sent InitHostedChannel and was expecting for StateUpdate from client
+      restoreMissingChannel(remoteLCSS, isHost = true)
 
     // REMOTE HOST MISSES CHANNEL
 
@@ -199,14 +186,9 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
           val commits2 = syncAndResend(commits1, leftOvers, remoteLCSS.reverse, commits1.nextLocalSpec)
           goto(NORMAL) StoringAndUsing data.copy(commitments = commits2)
         } getOrElse {
-          // The history is disconnected, looks like we have lost a channel state
-          if (remoteLCSS.incomingHtlcs.nonEmpty || remoteLCSS.outgoingHtlcs.nonEmpty) {
-            val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_IN_FLIGHT_HTLC_IN_SYNC)
-            goto(CLOSED) StoringAndUsing data1 SendingHasChannelId error
-          } else {
-            val data1 = restoreEmptyData(remoteLCSS.reverse, data.commitments.isHost)
-            goto(NORMAL) StoringAndUsing data1 SendingHosted data1.commitments.lastCrossSignedState
-          }
+          // We are disconnected from our own future state, fail and resolve manually
+          val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_STATE_DISCONNECTED)
+          goto(CLOSED) StoringAndUsing data1 SendingHasChannelId error
         }
       }
   }
@@ -249,27 +231,25 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       }
 
     case Event(cmd: HC_CMD_PUBLIC, data: HC_DATA_ESTABLISHED) =>
-      if (vals.phcConfig.minCapacity <= data.commitments.capacity) {
-        val commitments1 = data.commitments.copy(announceChannel = true)
-        val data1 = data.copy(channelAnnouncement = None, commitments = commitments1)
-        stay StoringAndUsing data1 replying CMDResponseSuccess(cmd) Receiving HostedChannel.SendAnnouncements
-      } else stay replying FSM.Failure(s"Channel capacity is below minimum ${vals.phcConfig.minCapacity} for PHC")
+      val commitments1 = data.commitments.copy(announceChannel = true)
+      val data1 = data.copy(channelAnnouncement = None, commitments = commitments1)
+      stay StoringAndUsing data1 replying CMDResSuccess(cmd) Receiving HostedChannel.SendAnnouncements
 
     case Event(cmd: HC_CMD_PRIVATE, data: HC_DATA_ESTABLISHED) =>
       val commitments1 = data.commitments.copy(announceChannel = false)
       val data1 = data.copy(channelAnnouncement = None, commitments = commitments1)
-      stay StoringAndUsing data1 replying CMDResponseSuccess(cmd)
+      stay StoringAndUsing data1 replying CMDResSuccess(cmd)
 
     // Payments
 
     case Event(cmd: CMD_ADD_HTLC, data: HC_DATA_ESTABLISHED) =>
       data.commitments.sendAdd(cmd, kit.nodeParams.currentBlockHeight) match {
-        case Right((commits1, add)) if cmd.commit => stay StoringAndUsing data.copy(commitments = commits1) AckingAddSuccess cmd SendingHasChannelId add Receiving CMD_SIGN
+        case Right((commits1, add)) if cmd.commit => stay StoringAndUsing data.copy(commitments = commits1) AckingAddSuccess cmd SendingHasChannelId add Receiving CMD_SIGN()
         case Right((commits1, add)) => stay StoringAndUsing data.copy(commitments = commits1) AckingAddSuccess cmd SendingHasChannelId add
         case Left(cause) => ackAddFail(cmd, cause, data.localChannelUpdate)
       }
 
-    // Peer adding and failing HTLCs is only accepted in NORMAL state
+    // Peer adding and failing HTLCs is only accepted in NORMAL
 
     case Event(add: wire.UpdateAddHtlc, data: HC_DATA_ESTABLISHED) =>
       data.commitments.receiveAdd(add) match {
@@ -295,14 +275,14 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
           goto(CLOSED) StoringAndUsing data1 SendingHasChannelId error
       }
 
-    case Event(CMD_SIGN, data: HC_DATA_ESTABLISHED) if data.commitments.futureUpdates.nonEmpty =>
+    case Event(_: CMD_SIGN, data: HC_DATA_ESTABLISHED) if data.commitments.futureUpdates.nonEmpty =>
       // Peer may stay online and send other messages without sending of remote StateUpdate due to a bug, make sure we disconnect then
       startSingleTimer(HostedChannel.RemoteUpdateTimeout.label, HostedChannel.RemoteUpdateTimeout, kit.nodeParams.revocationTimeout)
       val localLCSS = data.commitments.nextLocalUnsignedLCSS(currentBlockDay).withLocalSigOfRemote(kit.nodeParams.privateKey)
       stay SendingHosted localLCSS.stateUpdate(isTerminal = false)
 
     case Event(remoteSU: StateUpdate, data: HC_DATA_ESTABLISHED) if remoteSU.localSigOfRemoteLCSS == data.commitments.lastCrossSignedState.remoteSigOfLocal =>
-      // Do nothing if we get a duplicate for new cross-signed state, this can often happen normally
+      // Do nothing if we get a duplicate for new cross-signed state, this can often happen normally (in particular on reconnect sync)
       cancelTimer(HostedChannel.RemoteUpdateTimeout.label)
       stay
 
@@ -343,50 +323,22 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
             kit.relayer ! Relayer.RelayForward(add)
         }
 
-        val lastStateOutgoingHtlcIds = data.commitments.localSpec.htlcs.collect(DirectedHtlc.outgoing).map(_.id)
-        val stillOutgoingHtlcIds = commits1.localSpec.htlcs.collect(DirectedHtlc.outgoing).map(_.id)
-        val completedOutgoingHtlcs = lastStateOutgoingHtlcIds -- stillOutgoingHtlcIds
-
-        val commits2 = commits1.copy(originChannels = commits1.originChannels -- completedOutgoingHtlcs)
-        val refundingResetData = data.copy(commitments = commits2, refundPendingInfo = None)
-
-        context.system.eventStream publish AvailableBalanceChanged(self, channelId, shortChannelId, commits2)
+        val completedOutgoingHtlcs = data.commitments.localSpec.htlcs.collect(DirectedHtlc.outgoing).map(_.id) -- commits1.localSpec.htlcs.collect(DirectedHtlc.outgoing).map(_.id)
+        val refundingResetData = data.copy(commitments = commits1.copy(originChannels = commits1.originChannels -- completedOutgoingHtlcs), refundPendingInfo = None)
+        context.system.eventStream publish AvailableBalanceChanged(self, channelId, shortChannelId, refundingResetData.commitments)
         stay StoringAndUsing refundingResetData SendingHosted commits1.lastCrossSignedState.stateUpdate(isTerminal = true)
       }
   }
 
   when(CLOSED) {
-    case Event(_: InvokeHostedChannel, data: HC_DATA_ESTABLISHED) =>
+    case Event(_: InvokeHostedChannel, data: HC_DATA_ESTABLISHED) if data.commitments.isHost =>
       if (data.localError.isDefined) stay SendingHosted data.commitments.lastCrossSignedState SendingHasChannelId data.localError.get.error
-      else if (data.remoteError.isDefined) stay SendingHosted data.commitments.lastCrossSignedState SendingHasChannelId makeError(ErrorCodes.ERR_HOSTED_CLOSED_BY_INVOKER)
+      else if (data.remoteError.isDefined) stay SendingHosted data.commitments.lastCrossSignedState SendingHasChannelId makeError(ErrorCodes.ERR_HOSTED_CLOSED_BY_REMOTE_PEER)
       else if (data.refundCompleteInfo.isDefined) stay SendingHosted data.commitments.lastCrossSignedState SendingHasChannelId makeError(data.refundCompleteInfo.get)
       else stay
 
-    case Event(cmd: CurrentBlockCount, data: HC_DATA_ESTABLISHED) =>
-      val failed = data.timedOutOutgoingHtlcs(cmd.blockCount)
-      if (failed.nonEmpty) {
-        failTimedoutOutgoing(localAdds = failed, data)
-        // We simulate remote fail by adding FAIL messages such as if they have come from our peer
-        // also put channel into error state to make sure failed ADDs won't get taken into account again
-        val fakeFailsForOutgoingAdds = failed.map(add => UpdateFailHtlc(channelId, add.id, ByteVector32.Zeroes))
-        val commits1 = fakeFailsForOutgoingAdds.map(Right.apply).foldLeft(data.commitments)(_ addProposal _)
-        stay StoringAndUsing data.copy(commitments = commits1)
-      } else {
-        stay
-      }
-
-    case Event(fulfill: UpdateFulfillHtlc, data: HC_DATA_ESTABLISHED) =>
-      data.commitments.receiveFulfill(fulfill) match {
-        case Success((commits1, origin, htlc)) =>
-          kit.relayer ! RES_ADD_SETTLED(origin, htlc, HtlcResult RemoteFulfill fulfill)
-          stay StoringAndUsing data.copy(commitments = commits1)
-        case _ =>
-          stay
-      }
-
     // OVERRIDING
 
-    // Store provided override, but applying it requires explicit action from node operator
     case Event(remoteSO: StateOverride, data: HC_DATA_ESTABLISHED) if !data.commitments.isHost =>
       val data1 = data.copy(overrideProposal = Some(remoteSO), refundPendingInfo = None)
       stay StoringAndUsing data1
@@ -413,7 +365,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
           val localSU = completeLocalLCSS.stateUpdate(isTerminal = true)
           val data1 = restoreEmptyData(completeLocalLCSS, isHost = false)
           failTimedoutOutgoing(localAdds = data.timedOutOutgoingHtlcs(Long.MaxValue), data)
-          goto(NORMAL) StoringAndUsing data1 replying CMDResponseSuccess(cmd) SendingHosted localSU
+          goto(NORMAL) StoringAndUsing data1 replying CMDResSuccess(cmd) SendingHosted localSU
         }
       }
 
@@ -452,12 +404,11 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
         val errorExtOpt = Some(remoteError).map(ErrorExt.generateFrom)
         goto(CLOSED) StoringAndUsing data.copy(remoteError = errorExtOpt)
       } else {
-        goto(CLOSED)
+        stay
       }
 
     case Event(remoteError: wire.Error, _) =>
-      // Channel is not persisted so it was in establishing state
-      val description: String = ErrorExt extractDescription remoteError
+      val description = ErrorExt.extractDescription(remoteError)
       log.info(s"PLGN PHC, HC establish remote error, error=$description")
       stop(FSM.Normal)
 
@@ -467,43 +418,48 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
         failTimedoutOutgoing(localAdds = failed, data)
         // We simulate remote fail by adding FAIL messages such as if they have come from our peer
         // also put channel into error state to make sure failed ADDs won't get taken into account again
-        val fakeFailsForOutgoingAdds = failed.map(add => UpdateFailHtlc(channelId, add.id, ByteVector32.Zeroes))
+        val fakeFailsForOutgoingAdds = for (add <- failed) yield UpdateFailHtlc(channelId, add.id, ByteVector32.Zeroes)
         val commits1 = fakeFailsForOutgoingAdds.map(Right.apply).foldLeft(data.commitments)(_ addProposal _)
-        val Tuple2(data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_TIMED_OUT_OUTGOING_HTLC)
-        goto(CLOSED) StoringAndUsing data1.copy(commitments = commits1) SendingHasChannelId error
+        // Only inform peer if channel is not closed yet
+        if (CLOSED != stateName) {
+          val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_TIMED_OUT_OUTGOING_HTLC)
+          goto(CLOSED) StoringAndUsing data1.copy(commitments = commits1) SendingHasChannelId error
+        } else {
+          stay StoringAndUsing data.copy(commitments = commits1)
+        }
       } else {
         stay
       }
-
-    // Payments
 
     case Event(fulfill: UpdateFulfillHtlc, data: HC_DATA_ESTABLISHED) =>
       data.commitments.receiveFulfill(fulfill) match {
         case Success((commits1, origin, htlc)) =>
           kit.relayer ! RES_ADD_SETTLED(origin, htlc, HtlcResult RemoteFulfill fulfill)
           stay StoringAndUsing data.copy(commitments = commits1)
-        case Failure(cause) =>
+        case Failure(cause) if CLOSED != stateName =>
           val (data1, error) = withLocalError(data, cause.getMessage)
           goto(CLOSED) StoringAndUsing data1 SendingHasChannelId error
+        case _ =>
+          stay
       }
 
     case Event(cmd: CMD_FULFILL_HTLC, data: HC_DATA_ESTABLISHED) =>
       data.commitments.sendFulfill(cmd) match {
-        case Success((commits1, fulfill)) if cmd.commit => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fulfill Receiving CMD_SIGN
+        case Success((commits1, fulfill)) if cmd.commit => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fulfill Receiving CMD_SIGN()
         case Success((commits1, fulfill)) => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fulfill
         case Failure(cause) => stay.AckingFail(cause, cmd)
       }
 
     case Event(cmd: CMD_FAIL_HTLC, data: HC_DATA_ESTABLISHED) =>
       data.commitments.sendFail(cmd, kit.nodeParams.privateKey) match {
-        case Success((commits1, fail)) if cmd.commit => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fail Receiving CMD_SIGN
+        case Success((commits1, fail)) if cmd.commit => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fail Receiving CMD_SIGN()
         case Success((commits1, fail)) => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fail
         case Failure(cause) => stay.AckingFail(cause, cmd)
       }
 
     case Event(cmd: CMD_FAIL_MALFORMED_HTLC, data: HC_DATA_ESTABLISHED) =>
       data.commitments.sendFailMalformed(cmd) match {
-        case Success((commits1, fail)) if cmd.commit => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fail Receiving CMD_SIGN
+        case Success((commits1, fail)) if cmd.commit => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fail Receiving CMD_SIGN()
         case Success((commits1, fail)) => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fail
         case Failure(cause) => stay.AckingFail(cause, cmd)
       }
@@ -527,7 +483,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
     case Event(cmd: HC_CMD_INIT_PENDING_REFUND, data: HC_DATA_ESTABLISHED) =>
       val refundPending: RefundPending = RefundPending(System.currentTimeMillis)
       val data1 = data.copy(refundPendingInfo = Some(refundPending), overrideProposal = None)
-      stay StoringAndUsing data1 replying CMDResponseSuccess(cmd)
+      stay StoringAndUsing data1 replying CMDResSuccess(cmd)
 
     case Event(cmd: HC_CMD_FINALIZE_REFUND, data: HC_DATA_ESTABLISHED) =>
       val liabilityBlockdays = data.commitments.lastCrossSignedState.initHostedChannel.liabilityDeadlineBlockdays
@@ -535,7 +491,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       if (enoughBlocksPassed) {
         val data1 = data.copy(refundCompleteInfo = Some(cmd.info), refundPendingInfo = None)
         log.info(s"PLGN PHC, finalized refund for HC with info=${cmd.info}, peer=$remoteNodeId")
-        goto(CLOSED) StoringAndUsing data1 replying CMDResponseSuccess(cmd)
+        goto(CLOSED) StoringAndUsing data1 replying CMDResSuccess(cmd)
       } else {
         val lastSignedDay = data.commitments.lastCrossSignedState.blockDay
         stay replying FSM.Failure(s"Not enough days passed since=$lastSignedDay")
@@ -557,19 +513,22 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
         val localSO = StateOverride(overridingLocallySignedLCSS.blockDay, overridingLocallySignedLCSS.localBalanceMsat, overridingLocallySignedLCSS.localUpdates,
           overridingLocallySignedLCSS.remoteUpdates, overridingLocallySignedLCSS.localSigOfRemote)
         val data1 = data.copy(overrideProposal = Some(localSO), refundPendingInfo = None)
-        stay StoringAndUsing data1 replying CMDResponseSuccess(cmd) SendingHosted localSO
+        stay StoringAndUsing data1 replying CMDResSuccess(cmd) SendingHosted localSO
       }
 
     // Misc
 
     case Event(cmd: HC_CMD_EXTERNAL_FULFILL, _: HC_DATA_ESTABLISHED) =>
-      val fulfill = UpdateFulfillHtlc(channelId, cmd.htlcId, cmd.paymentPreimage)
+      val fakeFulfill = UpdateFulfillHtlc(channelId, cmd.htlcId, cmd.paymentPreimage)
       val localError = makeError(s"External fulfill attempt, peer=$remoteNodeId")
-      stay replying CMDResponseSuccess(cmd) Receiving localError Receiving fulfill
+      stay replying CMDResSuccess(cmd) Receiving localError Receiving fakeFulfill
 
     case Event(HC_CMD_GET_INFO, data: HC_DATA_ESTABLISHED) =>
-      val response = CMDResponseInfo(channelId, shortChannelId, stateName, data, data.commitments.nextLocalSpec)
+      val response = CMDResponseInfo(stateName, data, data.commitments.nextLocalSpec)
       stay replying response
+
+    case Event(cmd: HasRemoteNodeIdHostedCommand, data) =>
+      stay replying FSM.Failure(s"Can't process cmd=${cmd.getClass.getSimpleName}, data=${data.getClass.getSimpleName}, state=$stateName")
   }
 
   onTransition {
@@ -585,16 +544,24 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
         case _ =>
       }
 
-      Tuple4(connections.get(remoteNodeId), state, nextState, nextStateData) match {
-        case Tuple4(Some(conn), OFFLINE | SYNCING, NORMAL | CLOSED, d1: HC_DATA_ESTABLISHED) =>
-          context.system.eventStream publish ChannelStateChanged(self, channelId, conn.info.peer, remoteNodeId, state, nextState, d1.commitmentsOpt)
-          d1.refundPendingInfo.foreach(conn.sendHostedChannelMsg)
-          d1.overrideProposal.foreach(conn.sendHostedChannelMsg)
+      Tuple3(state, nextState, nextStateData) match {
+        case Tuple3(OFFLINE | SYNCING, NORMAL | CLOSED, d1: HC_DATA_ESTABLISHED) if d1.pendingHtlcs.nonEmpty =>
+          val pending = getPendingFailsAndFulfills(kit.nodeParams.db.pendingRelay, channelId)(log)
+          for (failOrFulfillCmd <- pending) self ! failOrFulfillCmd
+          if (pending.nonEmpty) self ! CMD_SIGN()
         case _ =>
       }
 
       Tuple3(state, nextState, nextStateData) match {
-        case Tuple3(OFFLINE, CLOSED, d1: HC_DATA_ESTABLISHED) =>
+        case Tuple3(OFFLINE | SYNCING, NORMAL | CLOSED, d1: HC_DATA_ESTABLISHED) =>
+          context.system.eventStream publish ChannelStateChanged(self, channelId, peer = null, remoteNodeId, state, nextState, d1.commitmentsOpt)
+          connections.get(remoteNodeId).foreach(conn => d1.refundPendingInfo foreach conn.sendHostedChannelMsg)
+          connections.get(remoteNodeId).foreach(conn => d1.overrideProposal foreach conn.sendHostedChannelMsg)
+        case _ =>
+      }
+
+      Tuple3(state, nextState, nextStateData) match {
+        case Tuple3(OFFLINE | SYNCING, CLOSED, d1: HC_DATA_ESTABLISHED) =>
           // We may get fulfills for peer payments while offline when channel is in error state, resend them
           val fulfills = d1.commitments.nextLocalUpdates.collect { case fulfill: UpdateFulfillHtlc => fulfill }
           connections.get(remoteNodeId).foreach(con => fulfills foreach con.sendHasChannelIdMsg)
@@ -633,19 +600,19 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
     }
 
     def AckingSuccess(cmd: HtlcSettlementCommand): HostedFsmState = {
-      PendingRelayDb.ackCommand(kit.nodeParams.db.pendingRelay, channelId, cmd)
-      Channel.replyToCommand(self, RES_SUCCESS(cmd, channelId), cmd)
+      Channel.replyToCommand(self, reply = RES_SUCCESS(cmd, channelId), cmd)
+      ackCommand(kit.nodeParams.db.pendingRelay, channelId, cmd)
       state
     }
 
     def AckingFail(cause: Throwable, cmd: HtlcSettlementCommand): HostedFsmState = {
-      PendingRelayDb.ackCommand(kit.nodeParams.db.pendingRelay, channelId, cmd)
-      Channel.replyToCommand(self, RES_FAILURE(cmd, cause), cmd)
+      Channel.replyToCommand(self, reply = RES_FAILURE(cmd, cause), cmd)
+      ackCommand(kit.nodeParams.db.pendingRelay, channelId, cmd)
       state
     }
 
     def AckingAddSuccess(cmd: CMD_ADD_HTLC): HostedFsmState = {
-      Channel.replyToCommand(self, RES_SUCCESS(cmd, channelId), cmd)
+      Channel.replyToCommand(self, reply = RES_SUCCESS(cmd, channelId), cmd)
       state
     }
 
@@ -710,13 +677,13 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
   def syncAndResend(commitments: HostedCommitments, leftOvers: List[LocalOrRemoteUpdateWithChannelId], lcss: LastCrossSignedState, spec: CommitmentSpec): HostedCommitments = {
     val commits1 = commitments.copy(futureUpdates = leftOvers.filter(_.isLeft) /* remove remote updates, retain local ones */, lastCrossSignedState = lcss, localSpec = spec)
     stay.SendingHosted(commits1.lastCrossSignedState).SendingHasChannelId(commits1.nextLocalUpdates:_*)
-    if (commits1.nextLocalUpdates.nonEmpty) self ! CMD_SIGN
+    if (commits1.nextLocalUpdates.nonEmpty) self ! CMD_SIGN()
     commits1
   }
 
   def withLocalError(data: HC_DATA_ESTABLISHED, errorCode: String): (HC_DATA_ESTABLISHED, wire.Error) = {
-    val errorExtOpt = Some(errorCode).map(makeError).map(ErrorExt.generateFrom)
-    (data.copy(localError = errorExtOpt), errorExtOpt.get.error)
+    val errorExtOpt: Option[ErrorExt] = Some(errorCode).map(makeError).map(ErrorExt.generateFrom)
+    Tuple2(data.copy(localError = errorExtOpt), errorExtOpt.get.error)
   }
 
   def ackAddFail(cmd: CMD_ADD_HTLC, cause: ChannelException, channelUpdate: wire.ChannelUpdate): HostedFsmState = {
