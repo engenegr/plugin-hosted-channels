@@ -504,17 +504,11 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
     // Misc
 
-    case Event(cmd: HC_CMD_EXTERNAL_FULFILL, _: HC_DATA_ESTABLISHED) =>
-      val fakeFulfill = UpdateFulfillHtlc(channelId, cmd.htlcId, cmd.paymentPreimage)
-      val localError = makeError(s"External fulfill attempt, peer=$remoteNodeId")
-      stay replying CMDResSuccess(cmd) Receiving localError Receiving fakeFulfill
+    case Event(HC_CMD_GET_INFO, data: HC_DATA_ESTABLISHED) => stay replying CMDResponseInfo(stateName, data, data.commitments.nextLocalSpec)
 
-    case Event(HC_CMD_GET_INFO, data: HC_DATA_ESTABLISHED) =>
-      val response = CMDResponseInfo(stateName, data, data.commitments.nextLocalSpec)
-      stay replying response
+    case Event(cmd: HC_CMD_EXTERNAL_FULFILL, _: HC_DATA_ESTABLISHED) => stay replying CMDResSuccess(cmd) Receiving UpdateFulfillHtlc(channelId, cmd.htlcId, cmd.paymentPreimage)
 
-    case Event(cmd: HasRemoteNodeIdHostedCommand, data) =>
-      stay replying FSM.Failure(s"Can't process cmd=${cmd.getClass.getSimpleName}, data=${data.getClass.getSimpleName}, state=$stateName")
+    case Event(cmd: HasRemoteNodeIdHostedCommand, data) => stay replying FSM.Failure(s"Can't process, data=${data.getClass.getSimpleName}, state=$stateName")
   }
 
   onTransition {
@@ -533,24 +527,24 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       Tuple3(state, nextState, nextStateData) match {
         case Tuple3(OFFLINE | SYNCING, NORMAL | CLOSED, d1: HC_DATA_ESTABLISHED) if d1.pendingHtlcs.nonEmpty =>
           val pending = getPendingFailsAndFulfills(kit.nodeParams.db.pendingRelay, channelId)(log)
-          for (failOrFulfillCmd <- pending) self ! failOrFulfillCmd
+          for (failOrFulfillCommand <- pending) self ! failOrFulfillCommand
           if (pending.nonEmpty) self ! CMD_SIGN(None)
         case _ =>
       }
 
       Tuple4(connections.get(remoteNodeId), state, nextState, nextStateData) match {
-        case Tuple4(Some(conn), OFFLINE | SYNCING, NORMAL | CLOSED, d1: HC_DATA_ESTABLISHED) =>
+        case Tuple4(Some(connection), OFFLINE | SYNCING, NORMAL | CLOSED, d1: HC_DATA_ESTABLISHED) =>
           context.system.eventStream publish ChannelStateChanged(self, channelId, peer = null, remoteNodeId, state, nextState, d1.commitmentsOpt)
-          d1.refundPendingInfo.foreach(conn.sendHostedChannelMsg)
-          d1.overrideProposal.foreach(conn.sendHostedChannelMsg)
+          d1.refundPendingInfo.foreach(connection.sendHostedChannelMsg)
+          d1.overrideProposal.foreach(connection.sendHostedChannelMsg)
         case _ =>
       }
 
       Tuple4(connections.get(remoteNodeId), state, nextState, nextStateData) match {
-        case Tuple4(Some(conn), OFFLINE | SYNCING, CLOSED, d1: HC_DATA_ESTABLISHED) =>
+        case Tuple4(Some(connection), OFFLINE | SYNCING, CLOSED, d1: HC_DATA_ESTABLISHED) =>
           // We may get fulfills for peer payments while offline when channel is in error state, resend them
           val fulfills = d1.commitments.nextLocalUpdates.collect { case fulfill: UpdateFulfillHtlc => fulfill }
-          fulfills.foreach(conn.sendHasChannelIdMsg)
+          fulfills.foreach(connection.sendHasChannelIdMsg)
         case _ =>
       }
   }
@@ -681,8 +675,8 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
   def failTimedoutOutgoing(localAdds: Set[wire.UpdateAddHtlc], data: HC_DATA_ESTABLISHED): Unit =
     for {
       add <- localAdds
-      originChannel <- data.commitments.originChannels.get(add.id)
-      reasonChain = HtlcResult OnChainFail HtlcsTimedoutDownstream(htlcs = Set(add), channelId = channelId)
-      _ = log.info(s"PLGN PHC, failing timed out outgoing htlc, hash=${add.paymentHash} origin=$originChannel")
-    } kit.relayer ! RES_ADD_SETTLED(originChannel, add, result = reasonChain)
+      originChan <- data.commitments.originChannels.get(add.id)
+      reasonChain = HtlcResult OnChainFail HtlcsTimedoutDownstream(channelId, Set apply add)
+      _ = log.info(s"PLGN PHC, failing timed out outgoing htlc, hash=${add.paymentHash} origin=$originChan")
+    } kit.relayer ! RES_ADD_SETTLED(originChan, add, result = reasonChain)
 }
