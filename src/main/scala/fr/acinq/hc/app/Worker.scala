@@ -93,7 +93,7 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
         // Special anti-spam handling for InvokeHostedChannel
         case (Attempt.Successful(_: InvokeHostedChannel), Some(wrap), null) if ipAntiSpam(wrap.remoteIp) > vals.maxNewChansPerIpPerHour => wrap sendHasChannelIdMsg Worker.chanDenied
         case (Attempt.Successful(invoke: InvokeHostedChannel), _, null) => restore(nodeId)(_ !> Worker.HCPeerConnected !> invoke)(spawnChannel(nodeId) !> Worker.HCPeerConnected !> invoke)
-        case (Attempt.Successful(hosted: HostedChannelMessage), _, null) => restore(nodeId)(_ !> Worker.HCPeerConnected !> hosted)(logger info s"PLGN PHC, no target, tag=${message.tag}")
+        case (Attempt.Successful(hosted: HostedChannelMessage), _, null) => logger.info(s"PLGN PHC, no target for HasChannelId message, tag=${message.tag}, peer=$nodeId")
         case (Attempt.Successful(hosted: HostedChannelMessage), _, channelRef) => channelRef ! hosted
       }
 
