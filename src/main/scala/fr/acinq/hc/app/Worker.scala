@@ -51,7 +51,7 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
 
   override def receive: Receive = {
     case systemMessage: PeerConnected if systemMessage.connectionInfo.remoteInit.features.hasPluginFeature(HCFeature.plugin) =>
-      remoteNode2Connection(systemMessage.nodeId) = PeerConnectedWrap(systemMessage)
+      remoteNode2Connection(systemMessage.nodeId) = PeerConnectedWrapNormal(systemMessage)
       val refOpt = Option(inMemoryHostedChannels get systemMessage.nodeId)
       refOpt.foreach(_ ! Worker.HCPeerConnected)
 

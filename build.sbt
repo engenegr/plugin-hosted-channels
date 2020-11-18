@@ -21,11 +21,11 @@ libraryDependencies += "com.typesafe.akka" % "akka-testkit_2.13" % "2.6.10" // S
 
 libraryDependencies += "com.iheart" % "ficus_2.13" % "1.5.0"
 
-libraryDependencies += "com.typesafe.slick" %% "slick" % "3.3.2"
+libraryDependencies += "com.typesafe.slick" %% "slick" % "3.3.3"
 
-libraryDependencies += "com.typesafe.slick" %% "slick-hikaricp" % "3.3.2"
+libraryDependencies += "com.typesafe.slick" %% "slick-hikaricp" % "3.3.3"
 
-libraryDependencies += "org.postgresql" % "postgresql" % "9.4-1206-jdbc42"
+libraryDependencies += "org.postgresql" % "postgresql" % "42.2.18"
 
 libraryDependencies += "fr.acinq" % "bitcoin-lib_2.13" % "0.18" // Same as Eclair
 

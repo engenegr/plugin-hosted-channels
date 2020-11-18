@@ -52,7 +52,7 @@ case class HC_DATA_CLIENT_WAIT_HOST_INIT(refundScriptPubKey: ByteVector) extends
 case class HC_DATA_CLIENT_WAIT_HOST_STATE_UPDATE(commitments: HostedCommitments) extends HostedData
 
 case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
-                               localChannelUpdate: wire.ChannelUpdate,
+                               channelUpdate: wire.ChannelUpdate,
                                localError: Option[ErrorExt] = None,
                                remoteError: Option[ErrorExt] = None,
                                overrideProposal: Option[StateOverride] = None, // CLOSED channel override can be initiated by Host, a new proposed balance should be retained once this happens

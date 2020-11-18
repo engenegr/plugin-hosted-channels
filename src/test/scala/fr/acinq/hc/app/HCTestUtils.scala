@@ -3,7 +3,8 @@ package fr.acinq.hc.app
 import akka.actor.ActorSystem
 import akka.testkit.TestProbe
 import fr.acinq.eclair.blockchain.TestWallet
-import fr.acinq.eclair.{Kit, TestConstants}
+import fr.acinq.eclair.{Kit, NodeParams, TestConstants}
+import slick.jdbc.PostgresProfile
 
 import scala.concurrent.duration._
 import slick.jdbc.PostgresProfile.api._
@@ -12,17 +13,17 @@ import scala.concurrent.Await
 
 
 object HCTestUtils {
-  def resetEntireDatabase(): Unit = {
+  def resetEntireDatabase(db: PostgresProfile.backend.Database): Unit = {
     val setup = DBIO.seq(
       fr.acinq.hc.app.dbo.Channels.model.schema.dropIfExists,
       fr.acinq.hc.app.dbo.Updates.model.schema.dropIfExists,
       fr.acinq.hc.app.dbo.Channels.model.schema.create,
       fr.acinq.hc.app.dbo.Updates.model.schema.create
     )
-    Await.result(Config.db.run(setup.transactionally), 10.seconds)
+    Await.result(db.run(setup.transactionally), 10.seconds)
   }
 
-  def testKit(implicit system: ActorSystem): Kit = {
+  def testKit(nodeParams: NodeParams)(implicit system: ActorSystem): Kit = {
     val watcher = TestProbe()
     val paymentHandler = TestProbe()
     val register = TestProbe()
@@ -32,7 +33,7 @@ object HCTestUtils {
     val testPaymentInitiator = TestProbe()
     val server = TestProbe()
     Kit(
-      TestConstants.Alice.nodeParams,
+      nodeParams,
       system,
       watcher.ref,
       paymentHandler.ref,

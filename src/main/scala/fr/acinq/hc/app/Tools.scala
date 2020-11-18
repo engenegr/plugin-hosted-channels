@@ -5,6 +5,7 @@ import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import fr.acinq.eclair.wire.{AnnouncementMessage, ChannelAnnouncement, Color, HasChannelId, UnknownMessage}
 import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol}
+import com.typesafe.config.{Config => TypesafeConfig, ConfigFactory}
 import java.io.{ByteArrayInputStream, File}
 import java.nio.file.{Files, Paths}
 
@@ -13,7 +14,6 @@ import fr.acinq.hc.app.channel.HostedCommitments
 import net.ceedubs.ficus.readers.ValueReader
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.bitcoin.Crypto.PublicKey
-import com.typesafe.config.ConfigFactory
 import org.postgresql.util.PSQLException
 import fr.acinq.eclair.io.PeerConnected
 import fr.acinq.hc.app.wire.Codecs
@@ -64,7 +64,16 @@ object Tools {
   }
 }
 
-case class PeerConnectedWrap(info: PeerConnected) { me =>
+trait PeerConnectedWrap {
+  def sendHasChannelIdMsg(message: HasChannelId): Unit
+  def sendHostedChannelMsg(message: HostedChannelMessage): Unit
+  def sendRoutingMsg(message: AnnouncementMessage): Unit
+  def sendUnknownMsg(message: UnknownMessage): Unit
+  def remoteIp: Array[Byte]
+  def info: PeerConnected
+}
+
+case class PeerConnectedWrapNormal(info: PeerConnected) extends PeerConnectedWrap { me =>
   def sendHasChannelIdMsg(message: HasChannelId): Unit = me sendUnknownMsg Codecs.toUnknownHasChanIdMessage(message)
   def sendHostedChannelMsg(message: HostedChannelMessage): Unit = me sendUnknownMsg Codecs.toUnknownHostedMessage(message)
   def sendRoutingMsg(message: AnnouncementMessage): Unit = me sendUnknownMsg Codecs.toUnknownAnnounceMessage(message, isGossip = true)
@@ -74,14 +83,12 @@ case class PeerConnectedWrap(info: PeerConnected) { me =>
 
 
 object Config {
-  private val config = ConfigFactory parseFile new File(s"${System getProperty "user.dir"}/src/main/resources", "hc.conf")
-
-  val db: PostgresProfile.backend.Database = PostgresProfile.backend.Database.forConfig("config.relationalDb", config)
-
   implicit val colorReader: ValueReader[Color] = ValueReader.relative { source =>
     Color(source.getInt("r").toByte, source.getInt("g").toByte, source.getInt("b").toByte)
   }
 
+  val config: TypesafeConfig = ConfigFactory parseFile new File(s"${System getProperty "user.dir"}/src/main/resources", "hc.conf")
+  val db: PostgresProfile.backend.Database = PostgresProfile.backend.Database.forConfig("config.relationalDb", config)
   val vals: Vals = config.as[Vals]("config.vals")
 }
 

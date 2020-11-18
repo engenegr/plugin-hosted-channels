@@ -30,7 +30,7 @@ object HostedChannelCodecs {
 
   val HC_DATA_ESTABLISHED_Codec: Codec[HC_DATA_ESTABLISHED] = {
     (hostedCommitmentsCodec withContext "commitments") ::
-      (lengthDelimited(channelUpdateCodec) withContext "localChannelUpdate") ::
+      (lengthDelimited(channelUpdateCodec) withContext "channelUpdate") ::
       (optional(bool8, errorExtCodec) withContext "localError") ::
       (optional(bool8, errorExtCodec) withContext "remoteError") ::
       (optional(bool8, stateOverrideCodec) withContext "overrideProposal") ::

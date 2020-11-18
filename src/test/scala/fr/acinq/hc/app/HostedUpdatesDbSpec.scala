@@ -26,7 +26,7 @@ class HostedUpdatesDbSpec extends AnyFunSuite {
   }
 
   test("Add announce and related updates") {
-    HCTestUtils.resetEntireDatabase()
+    HCTestUtils.resetEntireDatabase(Config.db)
 
     val channel = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, ShortChannelId(42), a.publicKey, b.publicKey, a.publicKey, b.publicKey, sig, sig, sig, sig)
     val channel_update_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, a, b.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
@@ -65,7 +65,7 @@ class HostedUpdatesDbSpec extends AnyFunSuite {
   }
 
   test("Use HostedUpdatesDb") {
-    HCTestUtils.resetEntireDatabase()
+    HCTestUtils.resetEntireDatabase(Config.db)
     val udb = new HostedUpdatesDb(Config.db)
 
     val channel_1 = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, ShortChannelId(42), a.publicKey, b.publicKey, a.publicKey, b.publicKey, sig, sig, sig, sig)
