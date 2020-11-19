@@ -1,15 +1,20 @@
 package fr.acinq.hc.app
 
 import java.net.InetSocketAddress
+import java.util.UUID
 
-import akka.actor.ActorSystem
+import akka.actor.{ActorRef, ActorSystem}
 import akka.testkit.{TestFSMRef, TestKitBase, TestProbe}
-import fr.acinq.bitcoin.ByteVector32
+import fr.acinq.bitcoin.{ByteVector32, Crypto}
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.TestConstants.Bob
-import fr.acinq.eclair.{Kit, TestConstants}
-import fr.acinq.eclair.channel.{LocalChannelDown, LocalChannelUpdate, NORMAL, SYNCING, State}
+import fr.acinq.eclair.{CltvExpiryDelta, Kit, MilliSatoshi, TestConstants, randomBytes32}
+import fr.acinq.eclair.channel.{CMD_ADD_HTLC, LocalChannelDown, LocalChannelUpdate, NORMAL, SYNCING, State}
 import fr.acinq.eclair.io.{ConnectionInfo, PeerConnected}
+import fr.acinq.eclair.payment.OutgoingPacket
+import fr.acinq.eclair.payment.OutgoingPacket.Upstream
+import fr.acinq.eclair.router.Router.ChannelHop
+import fr.acinq.eclair.wire.Onion.FinalLegacyPayload
 import fr.acinq.eclair.wire.{AnnouncementMessage, ChannelUpdate, HasChannelId, UnknownMessage}
 import fr.acinq.hc.app.channel._
 import fr.acinq.hc.app.dbo.HostedChannelsDb
@@ -97,5 +102,37 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
     awaitCond(channelUpdateListener.expectMsgType[LocalChannelUpdate].channelUpdate.isNode1)
     alice2bob.expectNoMessage()
     bob2alice.expectNoMessage()
+  }
+
+  def announcePHC(setup: SetupFixture): Unit = {
+    import setup._
+    bob ! HC_CMD_PUBLIC(aliceKit.nodeParams.nodeId)
+    alice ! bob2alice.expectMsgType[AnnouncementSignature]
+    channelUpdateListener.expectMsgType[LocalChannelUpdate]
+    alice2bob.expectNoMessage() // Alice does not react since she did not issue a local HC_CMD_PUBLIC command
+    alice ! HC_CMD_PUBLIC(bobKit.nodeParams.nodeId)
+    bob ! alice2bob.expectMsgType[AnnouncementSignature]
+    channelUpdateListener.expectMsgType[LocalChannelUpdate]
+    bobSync.expectMsgType[UnknownMessage]
+    bobSync.expectMsgType[UnknownMessage]
+    alice ! bob2alice.expectMsgType[AnnouncementSignature]
+    channelUpdateListener.expectMsgType[LocalChannelUpdate]
+    channelUpdateListener.expectMsgType[LocalChannelUpdate]
+    aliceSync.expectMsgType[UnknownMessage]
+    aliceSync.expectMsgType[UnknownMessage]
+    channelUpdateListener.expectNoMessage()
+    alice2bob.expectNoMessage()
+    bob2alice.expectNoMessage()
+    aliceSync.expectNoMessage()
+    bobSync.expectNoMessage()
+  }
+
+  def makeCmdAdd(amount: MilliSatoshi, destination: PublicKey, currentBlockHeight: Long, paymentPreimage: ByteVector32 = randomBytes32,
+                 upstream: Upstream = Upstream.Local(UUID.randomUUID), replyTo: ActorRef = TestProbe().ref): (ByteVector32, CMD_ADD_HTLC) = {
+    val paymentHash: ByteVector32 = Crypto.sha256(paymentPreimage)
+    val expiry = CltvExpiryDelta(144).toCltvExpiry(currentBlockHeight)
+    val cmd = OutgoingPacket.buildCommand(replyTo, upstream, paymentHash, ChannelHop(null, destination, null) :: Nil,
+      FinalLegacyPayload(amount, expiry))._1.copy(commit = false)
+    (paymentPreimage, cmd)
   }
 }
