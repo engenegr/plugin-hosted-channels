@@ -145,9 +145,9 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
           stop(FSM.Normal) SendingHasChannelId makeError(ErrorCodes.ERR_HOSTED_CHANNEL_DENIED)
 
         case Success(true) =>
-          val localSU = fullySignedLCSS.stateUpdate(isTerminal = true)
+          channelsDb.updateSecretById(remoteNodeId, wait.invoke.finalSecret)
           log.info(s"PLGN PHC, stored new HC with peer=$remoteNodeId, shortId=$shortChannelId")
-          goto(NORMAL) StoringAndUsing data StoringSecret wait.invoke.finalSecret SendingHosted localSU
+          goto(NORMAL) using data SendingHosted fullySignedLCSS.stateUpdate(isTerminal = true)
 
         case _ =>
           log.info(s"PLGN PHC, database error when storing new HC, peer=$remoteNodeId")
@@ -527,8 +527,10 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
         case _ =>
       }
 
-      (connections.get(remoteNodeId), state, nextState, nextStateData) match {
-        case (Some(connection), OFFLINE | SYNCING, CLOSED, d1: HC_DATA_ESTABLISHED) =>
+      (connections.get(remoteNodeId), state, nextState, stateData, nextStateData) match {
+        case (Some(connection), SYNCING, NORMAL, _: HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE, d1: HC_DATA_ESTABLISHED) if d1.commitments.isHost =>
+          for (brandingMessage <- vals.branding.brandingMessageOpt) connection sendHostedChannelMsg brandingMessage
+        case (Some(connection), OFFLINE | SYNCING, CLOSED, _, d1: HC_DATA_ESTABLISHED) =>
           // We may get fulfills for peer payments while offline when channel is in error state, resend them
           val fulfills = d1.commitments.nextLocalUpdates.collect { case fulfill: UpdateFulfillHtlc => fulfill }
           for (fulfill <- fulfills) connection sendHasChannelIdMsg fulfill
@@ -597,11 +599,6 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
     def StoringAndUsing(data: HC_DATA_ESTABLISHED): HostedFsmState = {
       channelsDb.updateOrAddNewChannel(data)
       state using data
-    }
-
-    def StoringSecret(secret: ByteVector): HostedFsmState = {
-      channelsDb.updateSecretById(remoteNodeId, secret)
-      state
     }
   }
 
