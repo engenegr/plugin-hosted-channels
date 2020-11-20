@@ -23,7 +23,7 @@ object HCTestUtils {
     Await.result(db.run(setup.transactionally), 10.seconds)
   }
 
-  def testKit(nodeParams: NodeParams)(implicit system: ActorSystem): Kit = {
+  def testKit(nodeParams: NodeParams)(implicit system: ActorSystem): (Kit, TestProbe) = {
     val watcher = TestProbe()
     val paymentHandler = TestProbe()
     val register = TestProbe()
@@ -32,7 +32,7 @@ object HCTestUtils {
     val switchboard = TestProbe()
     val testPaymentInitiator = TestProbe()
     val server = TestProbe()
-    Kit(
+    val kit = Kit(
       nodeParams,
       system,
       watcher.ref,
@@ -44,5 +44,6 @@ object HCTestUtils {
       testPaymentInitiator.ref,
       server.ref,
       new TestWallet())
+    (kit, relayer)
   }
 }

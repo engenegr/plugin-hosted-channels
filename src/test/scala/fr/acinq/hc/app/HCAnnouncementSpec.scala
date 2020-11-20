@@ -81,7 +81,7 @@ class HCAnnouncementSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike wi
     bob ! PeerDisconnected(null, null)
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
-    val (_, cmd_add_htlc) = makeCmdAdd(MilliSatoshi(100000L), bobKit.nodeParams.nodeId, currentBlockHeight)
+    val (_, cmd_add_htlc, _) = makeCmdAdd(MilliSatoshi(100000L), bobKit.nodeParams.nodeId, currentBlockHeight)
     bob ! cmd_add_htlc
     assert(bobSync.expectMsgType[UnknownMessage].tag == HC.PHC_UPDATE_GOSSIP_TAG)
     assert(!Announcements.isEnabled(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].channelUpdate.channelFlags))

@@ -8,14 +8,15 @@ import akka.testkit.{TestFSMRef, TestKitBase, TestProbe}
 import fr.acinq.bitcoin.{ByteVector32, Crypto}
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.TestConstants.Bob
-import fr.acinq.eclair.{CltvExpiryDelta, Kit, MilliSatoshi, TestConstants, randomBytes32}
-import fr.acinq.eclair.channel.{CMD_ADD_HTLC, LocalChannelDown, LocalChannelUpdate, NORMAL, SYNCING, State}
+import fr.acinq.eclair.{CltvExpiryDelta, Kit, MilliSatoshi, TestConstants, randomBytes32, randomKey}
+import fr.acinq.eclair.channel.{CMD_ADD_HTLC, CMD_FULFILL_HTLC, CMD_SIGN, LocalChannelDown, LocalChannelUpdate, NORMAL, RES_SUCCESS, SYNCING, State}
 import fr.acinq.eclair.io.{ConnectionInfo, PeerConnected}
 import fr.acinq.eclair.payment.OutgoingPacket
 import fr.acinq.eclair.payment.OutgoingPacket.Upstream
+import fr.acinq.eclair.payment.relay.Relayer
 import fr.acinq.eclair.router.Router.ChannelHop
 import fr.acinq.eclair.wire.Onion.FinalLegacyPayload
-import fr.acinq.eclair.wire.{AnnouncementMessage, ChannelUpdate, HasChannelId, UnknownMessage}
+import fr.acinq.eclair.wire.{AnnouncementMessage, ChannelUpdate, HasChannelId, UnknownMessage, UpdateAddHtlc, UpdateFulfillHtlc}
 import fr.acinq.hc.app.channel._
 import fr.acinq.hc.app.dbo.HostedChannelsDb
 import org.scalatest.{FixtureTestSuite, ParallelTestExecution}
@@ -33,6 +34,8 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
                           bobSync: TestProbe,
                           aliceKit: Kit,
                           bobKit: Kit,
+                          aliceRelayer: TestProbe,
+                          bobRelayer: TestProbe,
                           aliceDB: PostgresProfile.backend.Database,
                           bobDB: PostgresProfile.backend.Database,
                           channelUpdateListener: TestProbe) {
@@ -49,8 +52,8 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
 
   def init(): SetupFixture = {
     implicit val system: ActorSystem = ActorSystem("test-actor-system")
-    val aliceKit = HCTestUtils.testKit(TestConstants.Alice.nodeParams)
-    val bobKit = HCTestUtils.testKit(TestConstants.Bob.nodeParams)
+    val (aliceKit, aliceRelayer) = HCTestUtils.testKit(TestConstants.Alice.nodeParams)
+    val (bobKit, bobRelayer) = HCTestUtils.testKit(TestConstants.Bob.nodeParams)
 
     val aliceDB: PostgresProfile.backend.Database = PostgresProfile.backend.Database.forConfig("config.aliceRelationalDb", Config.config)
     val bobDB: PostgresProfile.backend.Database = PostgresProfile.backend.Database.forConfig("config.bobRelationalDb", Config.config)
@@ -75,7 +78,7 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
     alice2bob.watch(alice)
     bob2alice.watch(bob)
 
-    SetupFixture(alice, bob, alice2bob, bob2alice, aliceSync, bobSync, aliceKit, bobKit, aliceDB, bobDB, channelUpdateListener)
+    SetupFixture(alice, bob, alice2bob, bob2alice, aliceSync, bobSync, aliceKit, bobKit, aliceRelayer, bobRelayer, aliceDB, bobDB, channelUpdateListener)
   }
 
   def reachNormal(setup: SetupFixture): Unit = {
@@ -128,11 +131,43 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
   }
 
   def makeCmdAdd(amount: MilliSatoshi, destination: PublicKey, currentBlockHeight: Long, paymentPreimage: ByteVector32 = randomBytes32,
-                 upstream: Upstream = Upstream.Local(UUID.randomUUID), replyTo: ActorRef = TestProbe().ref): (ByteVector32, CMD_ADD_HTLC) = {
+                 upstream: Upstream = Upstream.Local(UUID.randomUUID), replyTo: TestProbe = TestProbe()): (ByteVector32, CMD_ADD_HTLC, TestProbe) = {
     val paymentHash: ByteVector32 = Crypto.sha256(paymentPreimage)
     val expiry = CltvExpiryDelta(144).toCltvExpiry(currentBlockHeight)
-    val cmd = OutgoingPacket.buildCommand(replyTo, upstream, paymentHash, ChannelHop(null, destination, null) :: Nil,
+    val cmd = OutgoingPacket.buildCommand(replyTo.ref, upstream, paymentHash, ChannelHop(null, destination, null) :: Nil,
       FinalLegacyPayload(amount, expiry))._1.copy(commit = false)
-    (paymentPreimage, cmd)
+    (paymentPreimage, cmd, replyTo)
+  }
+
+  def addHtlcFromAliceToBob(amount: MilliSatoshi, setup: SetupFixture): (ByteVector32, UpdateAddHtlc) = {
+    import setup._
+    val (preimage, cmd_add, replyListener) = makeCmdAdd(amount, randomKey.publicKey, currentBlockHeight)
+    alice ! cmd_add
+    alice ! CMD_SIGN(None)
+    replyListener.expectMsgType[RES_SUCCESS[_]]
+    val alice2bobUpdateAdd = alice2bob.expectMsgType[UpdateAddHtlc]
+    bob ! alice2bobUpdateAdd
+    bob ! alice2bob.expectMsgType[StateUpdate]
+    alice ! bob2alice.expectMsgType[StateUpdate]
+    bob ! alice2bob.expectMsgType[StateUpdate]
+    alice ! bob2alice.expectMsgType[StateUpdate]
+    bob2alice.expectNoMessage()
+    alice2bob.expectNoMessage()
+    bobRelayer.expectMsgType[Relayer.RelayForward]
+    bobRelayer.expectNoMessage()
+    (preimage, alice2bobUpdateAdd)
+  }
+
+  def fulfillHtlc(htlcId: Long, preimage: ByteVector32, setup: SetupFixture): Unit = {
+    import setup._
+    bob ! CMD_FULFILL_HTLC(htlcId, preimage)
+    bob ! CMD_SIGN(None)
+    alice ! bob2alice.expectMsgType[UpdateFulfillHtlc]
+    alice ! bob2alice.expectMsgType[StateUpdate]
+    bob ! alice2bob.expectMsgType[StateUpdate]
+    alice ! bob2alice.expectMsgType[StateUpdate]
+    bob ! alice2bob.expectMsgType[StateUpdate]
+    bob2alice.expectNoMessage()
+    alice2bob.expectNoMessage()
   }
 }

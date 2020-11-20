@@ -38,7 +38,8 @@ class HostedSyncSpec extends BaseRouterSpec {
   test("Hosted sync and gossip") { fixture =>
     implicit val system: ActorSystem = ActorSystem("test-actor-system")
     val config = Config.vals.phcConfig.copy(minNormalChans = 0, maxPerNode = 1)
-    val (syncActor, peerProvider) = recreateHostedSync(HCTestUtils.testKit(TestConstants.Alice.nodeParams)(system).copy(router = fixture.router), config)
+    val (kit, _) = HCTestUtils.testKit(TestConstants.Alice.nodeParams)(system)
+    val (syncActor, peerProvider) = recreateHostedSync(kit.copy(router = fixture.router), config)
     awaitCond(syncActor.stateName == WAIT_FOR_ROUTER_DATA)
     // Router has finished synchronization
     syncActor ! SyncProgress(1D)
