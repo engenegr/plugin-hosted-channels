@@ -28,7 +28,7 @@ case class HC_CMD_OVERRIDE_PROPOSE(remoteNodeId: PublicKey, newLocalBalance: Mil
 case class HC_CMD_OVERRIDE_ACCEPT(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 
 case class HC_CMD_INIT_PENDING_REFUND(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
-case class HC_CMD_FINALIZE_REFUND(remoteNodeId: PublicKey, info: String) extends HasRemoteNodeIdHostedCommand
+case class HC_CMD_FINALIZE_REFUND(remoteNodeId: PublicKey, info: String, force: Boolean = false) extends HasRemoteNodeIdHostedCommand
 
 case class HC_CMD_PUBLIC(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 case class HC_CMD_PRIVATE(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand

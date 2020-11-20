@@ -86,6 +86,9 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       val errorExtOpt: Option[ErrorExt] = Some(remoteError).map(ErrorExt.generateFrom)
       if (data.remoteError.isEmpty) stay StoringAndUsing data.copy(remoteError = errorExtOpt)
       else stay
+
+    case Event(cmd: HC_CMD_FINALIZE_REFUND, data: HC_DATA_ESTABLISHED) =>
+      processFinalizeRefund(stay, cmd, data)
   }
 
   when(SYNCING, stateTimeout = 5.minutes) {
@@ -213,7 +216,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
     // PHC announcements
 
     case Event(HostedChannel.SendAnnouncements(force), data: HC_DATA_ESTABLISHED) if data.commitments.announceChannel =>
-      val lastUpdateTooLongAgo = force || data.channelUpdate.timestamp < System.currentTimeMillis / 1000 - PHC.reAnnounceThreshold
+      val lastUpdateTooLongAgo = force || data.channelUpdate.timestamp < System.currentTimeMillis.millis.toSeconds - PHC.reAnnounceThreshold
       val update1 = makeChannelUpdate(localLCSS = data.commitments.lastCrossSignedState, enable = true)
       context.system.eventStream publish makeLocalUpdateEvent(update1, data.commitments)
       val data1 = data.copy(channelUpdate = update1)
@@ -336,7 +339,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
         }
 
         val completedOutgoingHtlcs = data.commitments.localSpec.htlcs.collect(DirectedHtlc.outgoing).map(_.id) -- commits1.localSpec.htlcs.collect(DirectedHtlc.outgoing).map(_.id)
-        val refundingResetData = data.copy(commitments = commits1.copy(originChannels = commits1.originChannels -- completedOutgoingHtlcs), refundPendingInfo = None)
+        val refundingResetData = data.copy(commitments = commits1.copy(originChannels = commits1.originChannels -- completedOutgoingHtlcs), refundPendingInfo = None, overrideProposal = None)
         context.system.eventStream publish AvailableBalanceChanged(self, channelId, shortChannelId, refundingResetData.commitments)
         stay StoringAndUsing refundingResetData SendingHosted commits1.lastCrossSignedState.stateUpdate(isTerminal = true)
       }
@@ -459,22 +462,13 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
     // Refunds
 
-    case Event(cmd: HC_CMD_INIT_PENDING_REFUND, data: HC_DATA_ESTABLISHED) =>
-      val refundPending: RefundPending = RefundPending(System.currentTimeMillis / 1000)
+    case Event(cmd: HC_CMD_INIT_PENDING_REFUND, data: HC_DATA_ESTABLISHED) if data.commitments.isHost =>
+      val refundPending = RefundPending(startedAt = System.currentTimeMillis.millis.toSeconds)
       val data1 = data.copy(refundPendingInfo = Some(refundPending), overrideProposal = None)
-      stay StoringAndUsing data1 replying CMDResSuccess(cmd)
+      stay StoringAndUsing data1 replying CMDResSuccess(cmd) SendingHosted refundPending
 
     case Event(cmd: HC_CMD_FINALIZE_REFUND, data: HC_DATA_ESTABLISHED) =>
-      val liabilityBlockdays = data.commitments.lastCrossSignedState.initHostedChannel.liabilityDeadlineBlockdays
-      val enoughBlocksPassed = data.commitments.lastCrossSignedState.blockDay + liabilityBlockdays < currentBlockDay
-      if (enoughBlocksPassed) {
-        val data1 = data.copy(refundCompleteInfo = Some(cmd.info), refundPendingInfo = None)
-        log.info(s"PLGN PHC, finalized refund for HC with info=${cmd.info}, peer=$remoteNodeId")
-        goto(CLOSED) StoringAndUsing data1 replying CMDResSuccess(cmd)
-      } else {
-        val lastSignedDay = data.commitments.lastCrossSignedState.blockDay
-        stay replying FSM.Failure(s"Not enough days passed since=$lastSignedDay")
-      }
+      processFinalizeRefund(goto(CLOSED), cmd, data)
 
     // Scheduling override
 
@@ -506,8 +500,8 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
   onTransition {
     case state -> nextState =>
-      Tuple3(state, nextState, nextStateData) match {
-        case Tuple3(SYNCING | CLOSED, NORMAL, d1: HC_DATA_ESTABLISHED) =>
+      (state, nextState, nextStateData) match {
+        case (SYNCING | CLOSED, NORMAL, d1: HC_DATA_ESTABLISHED) =>
           context.system.eventStream publish ChannelRestored(self, channelId, peer = null, remoteNodeId, isFunder = false, d1.commitments)
           context.system.eventStream publish ChannelIdAssigned(self, remoteNodeId, temporaryChannelId = ByteVector32.Zeroes, channelId)
           context.system.eventStream publish ShortChannelIdAssigned(self, channelId, shortChannelId, previousShortChannelId = None)
@@ -517,27 +511,27 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
         case _ =>
       }
 
-      Tuple3(state, nextState, nextStateData) match {
-        case Tuple3(OFFLINE | SYNCING, NORMAL | CLOSED, d1: HC_DATA_ESTABLISHED) if d1.pendingHtlcs.nonEmpty =>
+      (state, nextState, nextStateData) match {
+        case (OFFLINE | SYNCING, NORMAL | CLOSED, d1: HC_DATA_ESTABLISHED) if d1.pendingHtlcs.nonEmpty =>
           val pending = getPendingFailsAndFulfills(kit.nodeParams.db.pendingRelay, channelId)(log)
           for (failOrFulfillCommand <- pending) self ! failOrFulfillCommand
           if (pending.nonEmpty) self ! CMD_SIGN(None)
         case _ =>
       }
 
-      Tuple4(connections.get(remoteNodeId), state, nextState, nextStateData) match {
-        case Tuple4(Some(connection), OFFLINE | SYNCING, NORMAL | CLOSED, d1: HC_DATA_ESTABLISHED) =>
+      (connections.get(remoteNodeId), state, nextState, nextStateData) match {
+        case (Some(connection), OFFLINE | SYNCING, NORMAL | CLOSED, d1: HC_DATA_ESTABLISHED) =>
           context.system.eventStream publish ChannelStateChanged(self, channelId, peer = null, remoteNodeId, state, nextState, d1.commitmentsOpt)
           for (refundPendingInfo <- d1.refundPendingInfo if d1.commitments.isHost) connection sendHostedChannelMsg refundPendingInfo
           for (overrideProposal <- d1.overrideProposal if d1.commitments.isHost) connection sendHostedChannelMsg overrideProposal
         case _ =>
       }
 
-      Tuple4(connections.get(remoteNodeId), state, nextState, nextStateData) match {
-        case Tuple4(Some(connection), OFFLINE | SYNCING, CLOSED, d1: HC_DATA_ESTABLISHED) =>
+      (connections.get(remoteNodeId), state, nextState, nextStateData) match {
+        case (Some(connection), OFFLINE | SYNCING, CLOSED, d1: HC_DATA_ESTABLISHED) =>
           // We may get fulfills for peer payments while offline when channel is in error state, resend them
           val fulfills = d1.commitments.nextLocalUpdates.collect { case fulfill: UpdateFulfillHtlc => fulfill }
-          fulfills.foreach(connection.sendHasChannelIdMsg)
+          for (fulfill <- fulfills) connection sendHasChannelIdMsg fulfill
         case _ =>
       }
   }
@@ -695,8 +689,17 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
     if (failedIds.nonEmpty) {
       failTimedoutOutgoing(localAdds = failedIds, data)
       val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_TIMED_OUT_OUTGOING_HTLC)
-      val commits1 = fakeFailsForOutgoingAdds.map(Right.apply).foldLeft(data.commitments)(_ addProposal _)
-      errorState StoringAndUsing data1.copy(commitments = commits1) SendingHasChannelId error
+      val c1 = fakeFailsForOutgoingAdds.map(Right.apply).foldLeft(data.commitments)(_ addProposal _)
+      errorState StoringAndUsing data1.copy(commitments = c1) SendingHasChannelId error
     } else stay
+  }
+
+  def processFinalizeRefund(errorState: FsmStateExt, cmd: HC_CMD_FINALIZE_REFUND, data: HC_DATA_ESTABLISHED): HostedFsmState = {
+    val liabilityBlockdays = data.commitments.lastCrossSignedState.initHostedChannel.liabilityDeadlineBlockdays
+    val enoughDays = data.commitments.lastCrossSignedState.blockDay + liabilityBlockdays < currentBlockDay
+    val data1 = data.copy(refundCompleteInfo = Some(cmd.info), refundPendingInfo = None)
+
+    if (cmd.force || enoughDays) errorState StoringAndUsing data1 replying CMDResSuccess(cmd) SendingHasChannelId makeError(cmd.info)
+    else stay replying FSM.Failure(s"Not enough days passed since=${data.commitments.lastCrossSignedState.blockDay} blockday")
   }
 }
