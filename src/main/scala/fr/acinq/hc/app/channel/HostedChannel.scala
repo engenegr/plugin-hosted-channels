@@ -168,7 +168,12 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       else if (isBlockDayWrong) stop(FSM.Normal) SendingHasChannelId makeError(InvalidBlockDay(channelId, currentBlockDay, hostSU.blockDay).getMessage)
       else if (isRemoteUpdatesMismatch) stop(FSM.Normal) SendingHasChannelId makeError("Proposed remote/local update number mismatch")
       else if (isLocalUpdatesMismatch) stop(FSM.Normal) SendingHasChannelId makeError("Proposed local/remote update number mismatch")
-      else goto(NORMAL) StoringAndUsing restoreEmptyData(fullySignedLCSS, isHost = false)
+      else {
+        val data1 = restoreEmptyData(fullySignedLCSS, isHost = false)
+        // Client HC has been established, add it to reconnect list
+        vals.clientChannelRemoteNodeIds += remoteNodeId
+        goto(NORMAL) StoringAndUsing data1
+      }
 
     // MISSING CHANNEL
 
