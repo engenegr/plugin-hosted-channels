@@ -5,6 +5,7 @@ import fr.acinq.eclair.router.Router.PublicChannel
 import scala.collection.immutable.SortedMap
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.ShortChannelId
+import fr.acinq.hc.app.PHCConfig
 
 // STATE
 
@@ -30,4 +31,10 @@ case class OperationalData(phcNetwork: PHCNetwork,
                            phcGossip: CollectedGossip,
                            lastSyncNodeId: Option[PublicKey],
                            normalChannels: SortedMap[ShortChannelId, PublicChannel],
-                           normalGraph: DirectedGraph) extends HostedSyncData
+                           normalGraph: DirectedGraph) extends HostedSyncData {
+
+  def tooFewNormalChans(nodeId1: PublicKey, nodeId2: PublicKey, phcConfig: PHCConfig): Option[PublicKey] =
+    if (normalGraph.getIncomingEdgesOf(nodeId1).size < phcConfig.minNormalChans) Some(nodeId1)
+    else if (normalGraph.getIncomingEdgesOf(nodeId2).size < phcConfig.minNormalChans) Some(nodeId2)
+    else None
+}

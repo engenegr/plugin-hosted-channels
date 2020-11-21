@@ -2,6 +2,7 @@ package fr.acinq.hc.app.network
 
 import fr.acinq.eclair.wire._
 import fr.acinq.hc.app.Tools._
+
 import scala.concurrent.duration._
 import fr.acinq.hc.app.network.PHCNetwork.ShortChannelIdSet
 import fr.acinq.eclair.router.Announcements
@@ -9,6 +10,7 @@ import fr.acinq.eclair.ShortChannelId
 import fr.acinq.hc.app.wire.Codecs
 import fr.acinq.hc.app.PHCConfig
 import fr.acinq.bitcoin.Crypto
+import fr.acinq.bitcoin.Crypto.PublicKey
 
 
 object PHC {
@@ -65,11 +67,10 @@ case class PHCNetwork(channels: Map[ShortChannelId, PHC],
       announce.bitcoinSignature1 == announce.nodeSignature1 && announce.bitcoinSignature2 == announce.nodeSignature2 &&
       announce.bitcoinKey1 == announce.nodeId1 && announce.bitcoinKey2 == announce.nodeId2
 
-  def isNewAnnounceAcceptable(announce: ChannelAnnouncement, phcConfig: PHCConfig): Boolean = {
-    val notTooMuchNode1PHCs = perNode.getOrElse(announce.nodeId1, Set.empty).size < phcConfig.maxPerNode
-    val notTooMuchNode2PHCs = perNode.getOrElse(announce.nodeId1, Set.empty).size < phcConfig.maxPerNode
-    isAnnounceAcceptable(announce) && notTooMuchNode1PHCs && notTooMuchNode2PHCs
-  }
+  def tooManyPHCs(nodeId1: PublicKey, nodeId2: PublicKey, phcConfig: PHCConfig): Option[PublicKey] =
+    if (perNode.getOrElse(nodeId1, Set.empty).size >= phcConfig.maxPerNode) Some(nodeId1)
+    else if (perNode.getOrElse(nodeId2, Set.empty).size >= phcConfig.maxPerNode) Some(nodeId2)
+    else None
 
   // Add announce without updates
   def addNewAnnounce(announce: ChannelAnnouncement): PHCNetwork = {

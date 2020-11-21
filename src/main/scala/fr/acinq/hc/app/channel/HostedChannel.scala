@@ -4,11 +4,14 @@ import fr.acinq.eclair._
 import fr.acinq.hc.app._
 import fr.acinq.eclair.channel._
 import scala.concurrent.duration._
+
 import fr.acinq.eclair.wire.{ChannelUpdate, UpdateAddHtlc, UpdateFailHtlc, UpdateFulfillHtlc}
 import fr.acinq.eclair.db.PendingRelayDb.{ackCommand, getPendingFailsAndFulfills}
 import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc}
 import fr.acinq.hc.app.Tools.{DuplicateHandler, DuplicateShortId}
+import fr.acinq.hc.app.network.{HostedSync, OperationalData, PHC}
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64}
+import fr.acinq.hc.app.dbo.Blocking.{span, timeout}
 import fr.acinq.eclair.io.{Peer, PeerDisconnected}
 import scala.util.{Failure, Success}
 import akka.actor.{ActorRef, FSM}
@@ -21,11 +24,11 @@ import fr.acinq.eclair.payment.relay.Relayer
 import fr.acinq.hc.app.dbo.HostedChannelsDb
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.hc.app.network.PHC
 import fr.acinq.hc.app.wire.Codecs
 import scala.collection.mutable
-import scodec.bits.ByteVector
+import scala.concurrent.Await
 import fr.acinq.eclair.wire
+import akka.pattern.ask
 
 
 object HostedChannel {
@@ -246,13 +249,21 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
         stay
       }
 
+    case Event(HC_CMD_PUBLIC(remoteNodeId, false), data: HC_DATA_ESTABLISHED) =>
+      val syncData = Await.result(hostedSync ? HostedSync.GetHostedSyncData, span).asInstanceOf[OperationalData]
+      val tooFewNormal: Option[PublicKey] = syncData.tooFewNormalChans(kit.nodeParams.nodeId, remoteNodeId, vals.phcConfig)
+      val tooManyPHC: Option[PublicKey] = syncData.phcNetwork.tooManyPHCs(kit.nodeParams.nodeId, remoteNodeId, vals.phcConfig)
+      if (tooManyPHC.isDefined) stay replying FSM.Failure(s"Can't proceed: nodeId=${tooManyPHC.get} has too many PHCs already, max=${vals.phcConfig.maxPerNode}")
+      else if (tooFewNormal.isDefined) stay replying FSM.Failure(s"Can't proceed: nodeId=${tooFewNormal.get} has too few normal channels, min=${vals.phcConfig.minNormalChans}")
+      else if (vals.phcConfig.minCapacity > data.commitments.capacity) stay replying FSM.Failure(s"Can't proceed: HC capacity is below min=${vals.phcConfig.minCapacity}")
+      else stay Receiving HC_CMD_PUBLIC(remoteNodeId, force = true)
+
     case Event(cmd: HC_CMD_PUBLIC, data: HC_DATA_ESTABLISHED) =>
       val data1 = data.copy(commitments = data.commitments.copy(announceChannel = true), channelAnnouncement = None)
       stay StoringAndUsing data1 replying CMDResSuccess(cmd) Receiving HostedChannel.SendAnnouncements(force = false)
 
     case Event(cmd: HC_CMD_PRIVATE, data: HC_DATA_ESTABLISHED) =>
-      val commitments1 = data.commitments.copy(announceChannel = false)
-      val data1 = data.copy(commitments = commitments1, channelAnnouncement = None)
+      val data1 = data.copy(commitments = data.commitments.copy(announceChannel = false), channelAnnouncement = None)
       stay StoringAndUsing data1 replying CMDResSuccess(cmd)
 
     // Payments
@@ -592,7 +603,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
     }
 
     def Receiving(message: Any): HostedFsmState = {
-      self ! message
+      self forward message
       state
     }
 
@@ -665,7 +676,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       originChan <- data.commitments.originChannels.get(add.id)
       reasonChain = HtlcResult OnChainFail HtlcsTimedoutDownstream(channelId, Set apply add)
       _ = log.info(s"PLGN PHC, failing timed out outgoing htlc, hash=${add.paymentHash} origin=$originChan")
-    } kit.relayer ! RES_ADD_SETTLED(originChan, add, result = reasonChain)
+    } kit.relayer ! RES_ADD_SETTLED(originChan, add, reasonChain)
 
   // Prevent OFFLINE -> CLOSED jump by supplying a next state
 
@@ -680,16 +691,14 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
         errorState StoringAndUsing data1 SendingHasChannelId error
     }
 
-  def processBlockCount(errorState: FsmStateExt, failedIds: Set[UpdateAddHtlc], data: HC_DATA_ESTABLISHED): HostedFsmState = {
-    val fakeFailsForOutgoingAdds = for (add <- failedIds) yield UpdateFailHtlc(channelId, add.id, ByteVector32.Zeroes)
-
+  def processBlockCount(errorState: FsmStateExt, failedIds: Set[UpdateAddHtlc], data: HC_DATA_ESTABLISHED): HostedFsmState =
     if (failedIds.nonEmpty) {
       failTimedoutOutgoing(localAdds = failedIds, data)
       val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_TIMED_OUT_OUTGOING_HTLC)
-      val c1 = fakeFailsForOutgoingAdds.map(Right.apply).foldLeft(data.commitments)(_ addProposal _)
-      errorState StoringAndUsing data1.copy(commitments = c1) SendingHasChannelId error
+      val fakeFailsForOutgoingAdds = for (add <- failedIds) yield UpdateFailHtlc(channelId, add.id, ByteVector32.Zeroes)
+      val commits1 = fakeFailsForOutgoingAdds.map(Right.apply).foldLeft(data.commitments)(_ addProposal _)
+      errorState StoringAndUsing data1.copy(commitments = commits1) SendingHasChannelId error
     } else stay
-  }
 
   def processFinalizeRefund(errorState: FsmStateExt, cmd: HC_CMD_FINALIZE_REFUND, data: HC_DATA_ESTABLISHED): HostedFsmState = {
     val liabilityBlockdays = data.commitments.lastCrossSignedState.initHostedChannel.liabilityDeadlineBlockdays

@@ -9,6 +9,7 @@ import slick.jdbc.PostgresProfile.backend.Database
 import scala.concurrent.Await
 import slick.sql.SqlAction
 import slick.dbio.Effect
+import akka.util.Timeout
 
 
 object Blocking {
@@ -21,6 +22,8 @@ object Blocking {
   type RepByteArray = Rep[ByteArray]
 
   val span: FiniteDuration = 25.seconds
+  implicit val timeout: Timeout = Timeout(span)
+
   def txRead[T](act: DBIOAction[T, NoStream, Effect.Read], db: Database): T = Await.result(db.run(act.transactionally), span)
   def txWrite[T](act: DBIOAction[T, NoStream, Effect.Write], db: Database): T = Await.result(db.run(act.transactionally), span)
 

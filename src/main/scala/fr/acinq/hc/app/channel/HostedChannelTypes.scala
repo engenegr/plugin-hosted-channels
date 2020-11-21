@@ -30,7 +30,7 @@ case class HC_CMD_OVERRIDE_ACCEPT(remoteNodeId: PublicKey) extends HasRemoteNode
 case class HC_CMD_INIT_PENDING_REFUND(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 case class HC_CMD_FINALIZE_REFUND(remoteNodeId: PublicKey, info: String, force: Boolean = false) extends HasRemoteNodeIdHostedCommand
 
-case class HC_CMD_PUBLIC(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
+case class HC_CMD_PUBLIC(remoteNodeId: PublicKey, force: Boolean = false) extends HasRemoteNodeIdHostedCommand
 case class HC_CMD_PRIVATE(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 
 case class HC_CMD_GET_INFO(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
@@ -55,8 +55,8 @@ case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
                                channelUpdate: wire.ChannelUpdate,
                                localError: Option[ErrorExt] = None,
                                remoteError: Option[ErrorExt] = None,
-                               overrideProposal: Option[StateOverride] = None, // CLOSED channel override can be initiated by Host, a new proposed balance should be retained once this happens
-                               refundPendingInfo: Option[RefundPending] = None, // Will be present in case if funds should be refunded, but `liabilityDeadlineBlockdays` has not passed yet
+                               overrideProposal: Option[StateOverride] = None, // CLOSED channel override can be initiated by Host
+                               refundPendingInfo: Option[RefundPending] = None, // Will be present in case if funds should be refunded
                                refundCompleteInfo: Option[String] = None, // Will be present after channel has been manually updated as a refunded one
                                channelAnnouncement: Option[wire.ChannelAnnouncement] = None) extends HostedData {
 

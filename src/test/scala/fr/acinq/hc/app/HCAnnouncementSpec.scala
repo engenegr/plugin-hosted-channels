@@ -54,7 +54,7 @@ class HCAnnouncementSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike wi
     awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].channelAnnouncement.isEmpty)
     alice ! HostedChannel.SendAnnouncements(force = false)
     channelUpdateListener.expectNoMessage()
-    alice ! HC_CMD_PUBLIC(bobKit.nodeParams.nodeId)
+    alice ! HC_CMD_PUBLIC(bobKit.nodeParams.nodeId, force = true)
     channelUpdateListener.expectMsgType[LocalChannelUpdate] // Alice update event
     bob ! alice2bob.expectMsgType[AnnouncementSignature]
     channelUpdateListener.expectMsgType[LocalChannelUpdate] // Bob update event

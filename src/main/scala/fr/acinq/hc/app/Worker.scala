@@ -99,7 +99,8 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
       val isConnected = remoteNode2Connection.contains(cmd.remoteNodeId)
       val isInDb = channelsDb.getChannelByRemoteNodeId(cmd.remoteNodeId).nonEmpty
       val isInMemory = Option(inMemoryHostedChannels get cmd.remoteNodeId).nonEmpty
-      if (isInMemory || isInDb) sender ! FSM.Failure("HC with remote node already exists")
+      if (kit.nodeParams.nodeId == cmd.remoteNodeId) sender ! FSM.Failure("HC with itself is prohibited")
+      else if (isInMemory || isInDb) sender ! FSM.Failure("HC with remote node already exists")
       else if (!isConnected) sender ! FSM.Failure("Not yet connected to remote peer")
       else spawnChannel(cmd.remoteNodeId) !> Worker.HCPeerConnected !> cmd
 
