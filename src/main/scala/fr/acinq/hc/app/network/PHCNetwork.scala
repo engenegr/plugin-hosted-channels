@@ -2,15 +2,15 @@ package fr.acinq.hc.app.network
 
 import fr.acinq.eclair.wire._
 import fr.acinq.hc.app.Tools._
-
 import scala.concurrent.duration._
+
 import fr.acinq.hc.app.network.PHCNetwork.ShortChannelIdSet
 import fr.acinq.eclair.router.Announcements
+import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.ShortChannelId
 import fr.acinq.hc.app.wire.Codecs
 import fr.acinq.hc.app.PHCConfig
 import fr.acinq.bitcoin.Crypto
-import fr.acinq.bitcoin.Crypto.PublicKey
 
 
 object PHC {

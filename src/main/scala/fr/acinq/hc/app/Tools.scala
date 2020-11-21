@@ -124,7 +124,8 @@ case class PHCConfig(maxPerNode: Long, minNormalChans: Long, maxSyncSendsPerIpPe
 }
 
 case class Vals(hcDefaultParams: HCParams, hcOverrideParams: List[HCOverrideParams],
-                maxNewChansPerIpPerHour: Int, branding: Branding, phcConfig: PHCConfig) {
+                maxNewChansPerIpPerHour: Int, restoredChannelBlockDayAgeThreshold: Int,
+                branding: Branding, phcConfig: PHCConfig) {
 
   val hcOverrideMap: Map[PublicKey, HCOverrideParams] =
     Tools.toMapBy[PublicKey, HCOverrideParams](hcOverrideParams) {

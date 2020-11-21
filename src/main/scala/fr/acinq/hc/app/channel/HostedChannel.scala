@@ -649,6 +649,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
     if (!isRemoteSigOk) stop(FSM.Normal) SendingHasChannelId makeError(ErrorCodes.ERR_HOSTED_WRONG_REMOTE_SIG) // Their proposed signature does not match, an obvious error
     else if (!isLocalSigOk) stop(FSM.Normal) SendingHasChannelId makeError(ErrorCodes.ERR_HOSTED_WRONG_LOCAL_SIG) // Our own signature does not match, means we did not sign it earlier
     else if (isHtlcPresent) stop(FSM.Normal) SendingHasChannelId makeError(ErrorCodes.ERR_HOSTED_IN_FLIGHT_HTLC_IN_RESTORE) // It's unclear how to resolve these, better halt right away
+    else if (remoteLCSS.blockDay < currentBlockDay - vals.restoredChannelBlockDayAgeThreshold) stop(FSM.Normal) SendingHasChannelId makeError(ErrorCodes.ERR_HOSTED_CHANNEL_DENIED) // Too old
     else goto(NORMAL) StoringAndUsing data1 SendingHosted data1.commitments.lastCrossSignedState
   }
 
