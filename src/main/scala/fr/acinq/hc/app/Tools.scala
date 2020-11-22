@@ -20,9 +20,6 @@ import fr.acinq.hc.app.wire.Codecs
 import slick.jdbc.PostgresProfile
 import scodec.bits.ByteVector
 import java.nio.ByteOrder
-
-import fr.acinq.hc.app.dbo.HostedChannelsDb
-
 import scala.util.Try
 
 
@@ -99,10 +96,6 @@ object Config {
 case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDeltaBlocks: Int, onChainRefundThresholdSat: Long,
                     liabilityDeadlineBlockdays: Int, defaultCapacityMsat: Long, maxHtlcValueInFlightMsat: Long,
                     htlcMinimumMsat: Long, maxAcceptedHtlcs: Int) {
-
-  val feeBase: MilliSatoshi = MilliSatoshi(feeBaseMsat)
-
-  val cltvDelta: CltvExpiryDelta = CltvExpiryDelta(cltvDeltaBlocks)
 
   val initMsg: InitHostedChannel =
     InitHostedChannel(UInt64(maxHtlcValueInFlightMsat), htlcMinimumMsat.msat, maxAcceptedHtlcs,
