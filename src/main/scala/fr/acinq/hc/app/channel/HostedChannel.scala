@@ -261,6 +261,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       if (tooManyPHC.isDefined) stay replying FSM.Failure(s"Can't proceed: nodeId=${tooManyPHC.get} has too many PHCs already, max=${vals.phcConfig.maxPerNode}")
       else if (tooFewNormal.isDefined) stay replying FSM.Failure(s"Can't proceed: nodeId=${tooFewNormal.get} has too few normal channels, min=${vals.phcConfig.minNormalChans}")
       else if (vals.phcConfig.minCapacity > data.commitments.capacity) stay replying FSM.Failure(s"Can't proceed: HC capacity is below min=${vals.phcConfig.minCapacity}")
+      else if (vals.phcConfig.maxCapacity < data.commitments.capacity) stay replying FSM.Failure(s"Can't proceed: HC capacity is above max=${vals.phcConfig.maxCapacity}")
       else stay Receiving HC_CMD_PUBLIC(remoteNodeId, force = true)
 
     case Event(cmd: HC_CMD_PUBLIC, data: HC_DATA_ESTABLISHED) =>

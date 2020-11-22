@@ -116,6 +116,7 @@ case class Branding(logo: String, color: Color, contactInfo: String) {
 }
 
 case class PHCConfig(maxPerNode: Long, minNormalChans: Long, maxSyncSendsPerIpPerMinute: Int) {
+  val maxCapacity: MilliSatoshi = MilliSatoshi(1000000000000000L) // No more than 10 000 BTC
   val minCapacity: MilliSatoshi = MilliSatoshi(50000000000L) // At least 0.5 BTC
 }
 
