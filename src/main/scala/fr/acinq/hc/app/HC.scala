@@ -1,6 +1,16 @@
 package fr.acinq.hc.app
 
-import fr.acinq.eclair.{Feature, UnknownFeature}
+import fr.acinq.eclair._
+import fr.acinq.hc.app.HC._
+import fr.acinq.hc.app.dbo.{Blocking, HostedChannelsDb, HostedUpdatesDb}
+import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner.IncomingHtlc
+import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner
+import fr.acinq.eclair.transactions.DirectedHtlc
+import fr.acinq.eclair.payment.IncomingPacket
+import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.eclair.channel.Origin
+import akka.event.LoggingAdapter
+import akka.actor.Props
 
 
 object HC {
@@ -39,6 +49,49 @@ object HC {
     Set(HC_INVOKE_HOSTED_CHANNEL_TAG, HC_INIT_HOSTED_CHANNEL_TAG, HC_LAST_CROSS_SIGNED_STATE_TAG,
       HC_STATE_UPDATE_TAG, HC_STATE_OVERRIDE_TAG, HC_HOSTED_CHANNEL_BRANDING_TAG, HC_REFUND_PENDING_TAG,
       HC_ANNOUNCEMENT_SIGNATURE_TAG, HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG, HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG)
+}
+
+class HC extends Plugin {
+
+  val updatesDb: HostedUpdatesDb = new HostedUpdatesDb(Config.db)
+
+  val channelsDb: HostedChannelsDb = new HostedChannelsDb(Config.db)
+
+  override def onSetup(setup: Setup): Unit = Blocking.createTablesIfNotExist(Config.db)
+
+  override def onKit(kit: Kit): Unit = {
+    val clientHCs = channelsDb.listClientChannels
+    val workerRef = kit.system actorOf Props(classOf[Worker], kit, updatesDb, channelsDb, Config.vals)
+    require(clientHCs.forall(_.commitments.localNodeId == kit.nodeParams.nodeId), "PLGN PHC, localNodeId mismatch")
+    Config.vals.clientChannelRemoteNodeIds = clientHCs.map(_.commitments.remoteNodeId).toSet
+    workerRef ! Worker.ClientChannels(clientHCs)
+  }
+
+  override def params: PluginParams = new CustomFeaturePlugin with ConnectionControlPlugin with CustomCommitmentsPlugin {
+
+    override def forceReconnect(nodeId: PublicKey): Boolean = Config.vals.clientChannelRemoteNodeIds.contains(nodeId)
+
+    override def messageTags: Set[Int] = announceTags ++ chanIdMessageTags ++ hostedMessageTags
+
+    override def name: String = "Hosted channels"
+
+    override def feature: Feature = HCFeature
+
+    override def getIncomingHtlcs(nodeParams: NodeParams)(implicit log: LoggingAdapter): Seq[IncomingHtlc] =
+      channelsDb.listHotChannels.flatMap(_.commitments.nextLocalSpec.htlcs).collect(DirectedHtlc.incoming)
+        .map(updateAddHtlc => IncomingPacket.decrypt(updateAddHtlc, nodeParams.privateKey))
+        .collect(PostRestartHtlcCleaner.decryptedIncomingHtlcs(nodeParams.db.payments))
+
+    private def htlcsOut = for {
+      data <- channelsDb.listHotChannels
+      channelId = Tools.hostedChanId(data.commitments.localNodeId.value, data.commitments.remoteNodeId.value)
+      outgoingHtlc <- data.commitments.nextLocalSpec.htlcs.collect(DirectedHtlc.outgoing)
+      origin <- data.commitments.originChannels.get(outgoingHtlc.id)
+    } yield (origin, channelId, outgoingHtlc.id)
+
+    override def getHtlcsRelayedOut(htlcsIn: Seq[IncomingHtlc] = Nil): Map[Origin, Set[PostRestartHtlcCleaner.ChannelIdAndHtlcId]] =
+      PostRestartHtlcCleaner.groupByOrigin(htlcsOut, htlcsIn)
+  }
 }
 
 case object HCFeature extends Feature {

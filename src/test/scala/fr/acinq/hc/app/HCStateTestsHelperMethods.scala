@@ -72,8 +72,8 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
     val aliceConnections: mutable.Map[PublicKey, PeerConnectedWrap] = mutable.Map(bobKit.nodeParams.nodeId -> PeerConnectedWrapTest(bobPeerConnected))
     val bobConnections: mutable.Map[PublicKey, PeerConnectedWrap] = mutable.Map(aliceKit.nodeParams.nodeId -> PeerConnectedWrapTest(alicePeerConnected))
 
-    val alice: TestFSMRef[State, HostedData, HostedChannel] = TestFSMRef(new HostedChannel(aliceKit, aliceConnections, bobKit.nodeParams.nodeId, new HostedChannelsDb(aliceDB, aliceKit.nodeParams.nodeId), aliceSync.ref, Config.vals))
-    val bob: TestFSMRef[State, HostedData, HostedChannel] = TestFSMRef(new HostedChannel(bobKit, bobConnections, aliceKit.nodeParams.nodeId, new HostedChannelsDb(bobDB, bobKit.nodeParams.nodeId), bobSync.ref, Config.vals))
+    val alice: TestFSMRef[State, HostedData, HostedChannel] = TestFSMRef(new HostedChannel(aliceKit, aliceConnections, bobKit.nodeParams.nodeId, new HostedChannelsDb(aliceDB), aliceSync.ref, Config.vals))
+    val bob: TestFSMRef[State, HostedData, HostedChannel] = TestFSMRef(new HostedChannel(bobKit, bobConnections, aliceKit.nodeParams.nodeId, new HostedChannelsDb(bobDB), bobSync.ref, Config.vals))
 
     alice2bob.watch(alice)
     bob2alice.watch(bob)

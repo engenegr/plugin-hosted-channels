@@ -679,10 +679,10 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
   def failTimedoutOutgoing(localAdds: Set[wire.UpdateAddHtlc], data: HC_DATA_ESTABLISHED): Unit =
     for {
       add <- localAdds
-      originChan <- data.commitments.originChannels.get(add.id)
+      origin <- data.commitments.originChannels.get(add.id)
       reasonChain = HtlcResult OnChainFail HtlcsTimedoutDownstream(channelId, Set apply add)
-      _ = log.info(s"PLGN PHC, failing timed out outgoing htlc, hash=${add.paymentHash} origin=$originChan")
-    } kit.relayer ! RES_ADD_SETTLED(originChan, add, reasonChain)
+      _ = log.info(s"PLGN PHC, failing timed out outgoing htlc, hash=${add.paymentHash} origin=$origin")
+    } kit.relayer ! RES_ADD_SETTLED(origin, add, reasonChain)
 
   // Prevent OFFLINE -> CLOSED jump by supplying a next state
 

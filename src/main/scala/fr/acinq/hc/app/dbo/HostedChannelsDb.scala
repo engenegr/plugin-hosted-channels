@@ -10,15 +10,8 @@ import fr.acinq.bitcoin.Crypto.PublicKey
 import slick.jdbc.PostgresProfile
 
 
-class HostedChannelsDb(db: PostgresProfile.backend.Database, localNodeId: PublicKey) {
-
-  private def decode(data: ByteArray) = {
-    val decoded = HC_DATA_ESTABLISHED_Codec.decode(BitVector view data).require.value
-    val localNodeIdMismatch = decoded.commitments.localNodeId != localNodeId
-    if (localNodeIdMismatch) println("PLGN PHC, localNodeId mismatch")
-    if (localNodeIdMismatch) System.exit(0)
-    decoded
-  }
+class HostedChannelsDb(db: PostgresProfile.backend.Database) {
+  private def decode(data: ByteArray) = HC_DATA_ESTABLISHED_Codec.decode(BitVector view data).require.value
 
   def addNewChannel(data: HC_DATA_ESTABLISHED): Boolean =
     Blocking.txWrite(Channels.insertCompiled += (data.commitments.remoteNodeId.value.toArray, data.channelUpdate.shortChannelId.toLong,
