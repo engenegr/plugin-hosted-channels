@@ -40,7 +40,8 @@ object HostedChannelCodecs {
   }.as[HC_DATA_ESTABLISHED]
 
   val hostedStateCodec: Codec[HostedState] = {
-    (publicKey withContext "remoteNodeId") ::
+    (publicKey withContext "nodeId1") ::
+      (publicKey withContext "nodeId2") ::
       (listOfN(uint16, updateMessageCodec) withContext "nextLocalUpdates") ::
       (listOfN(uint16, updateMessageCodec) withContext "nextRemoteUpdates") ::
       (lastCrossSignedStateCodec withContext "lastCrossSignedState")

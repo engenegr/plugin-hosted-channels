@@ -252,9 +252,11 @@ case class HostedCommitments(isHost: Boolean,
   }
 }
 
-case class RemoteHostedStateResult(state: HostedState, isLocalSigValid: Boolean)
+case class RemoteHostedStateResult(state: HostedState, remoteNodeId: Option[PublicKey], isLocalSigValid: Boolean)
 
-case class HostedState(remoteNodeId: PublicKey, nextLocalUpdates: List[wire.UpdateMessage], nextRemoteUpdates: List[wire.UpdateMessage], lastCrossSignedState: LastCrossSignedState)
+case class HostedState(nodeId1: PublicKey, nodeId2: PublicKey, nextLocalUpdates: List[wire.UpdateMessage], nextRemoteUpdates: List[wire.UpdateMessage], lastCrossSignedState: LastCrossSignedState) {
+  def remoteNodeIdOpt(localNodeId: PublicKey): Option[PublicKey] = if (nodeId1 == localNodeId) Some(nodeId2) else if (nodeId2 == localNodeId) Some(nodeId1) else None
+}
 
 // Channel errors
 

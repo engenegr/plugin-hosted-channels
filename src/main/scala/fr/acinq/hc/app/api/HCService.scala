@@ -4,12 +4,12 @@ import fr.acinq.eclair._
 import fr.acinq.hc.app.channel._
 import akka.http.scaladsl.server._
 import fr.acinq.eclair.api.FormParamExtractors._
-
 import fr.acinq.eclair.api.JsonSupport.{formats, marshaller, serialization}
-import fr.acinq.bitcoin.{Script, ByteVector32}
+import fr.acinq.bitcoin.{ByteVector32, Script}
 import akka.actor.{ActorRef, ActorSystem}
 
 import fr.acinq.eclair.api.AbstractService
+import fr.acinq.bitcoin.Crypto.PublicKey
 import scodec.bits.ByteVector
 import fr.acinq.hc.app.Vals
 import akka.util.Timeout
@@ -71,9 +71,11 @@ class HCService(kit: Kit, worker: ActorRef, vals: Vals) extends AbstractService 
       } ~
       path("verifystate") {
         formFields("state".as[ByteVector](binaryDataUnmarshaller)) { state =>
-          val remoteState = fr.acinq.hc.app.wire.HostedChannelCodecs.hostedStateCodec.decodeValue(state.toBitVector).require
-          val isLocalSigOk = remoteState.lastCrossSignedState.verifyRemoteSig(kit.nodeParams.nodeId)
-          complete(RemoteHostedStateResult(remoteState, isLocalSigOk))
+          val remoteState: HostedState = fr.acinq.hc.app.wire.HostedChannelCodecs.hostedStateCodec.decodeValue(state.toBitVector).require
+          val isLocalSigOk: Boolean = remoteState.lastCrossSignedState.verifyRemoteSig(kit.nodeParams.nodeId)
+          val remoteNodeIdOpt: Option[PublicKey] = remoteState.remoteNodeIdOpt(kit.nodeParams.nodeId)
+          val result = RemoteHostedStateResult(remoteState, remoteNodeIdOpt, isLocalSigOk)
+          complete(result)
         }
       }
     }
