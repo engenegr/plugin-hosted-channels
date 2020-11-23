@@ -31,7 +31,7 @@ object Worker {
 
   case class ClientChannels(channels: Seq[HC_DATA_ESTABLISHED] = Nil)
 
-  val notFound: FSM.Failure = FSM.Failure("HC with remote node is not found")
+  val notFound: CMDResFailure = CMDResFailure("HC with remote node is not found")
 
   val chanDenied: eclair.wire.Error = eclair.wire.Error(ByteVector32.Zeroes, ErrorCodes.ERR_HOSTED_CHANNEL_DENIED)
 }
@@ -98,9 +98,9 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
       val isConnected = remoteNode2Connection.contains(cmd.remoteNodeId)
       val isInDb = channelsDb.getChannelByRemoteNodeId(cmd.remoteNodeId).nonEmpty
       val isInMemory = Option(inMemoryHostedChannels get cmd.remoteNodeId).nonEmpty
-      if (kit.nodeParams.nodeId == cmd.remoteNodeId) sender ! FSM.Failure("HC with itself is prohibited")
-      else if (isInMemory || isInDb) sender ! FSM.Failure("HC with remote node already exists")
-      else if (!isConnected) sender ! FSM.Failure("Not yet connected to remote peer")
+      if (kit.nodeParams.nodeId == cmd.remoteNodeId) sender ! CMDResFailure("HC with itself is prohibited")
+      else if (isInMemory || isInDb) sender ! CMDResFailure("HC with remote node already exists")
+      else if (!isConnected) sender ! CMDResFailure("Not yet connected to remote peer")
       else spawnChannel(cmd.remoteNodeId) !> HCPeerConnected !> cmd
 
     // Peer may be disconnected when commands are issued
@@ -115,7 +115,7 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
     case Terminated(channelRef) => inMemoryHostedChannels.inverse.remove(channelRef)
 
     case TickRemoveIdleChannels =>
-      logger.info(s"PLGN PHC, in-memory HCs=${inMemoryHostedChannels.size}")
+      logger.info(s"PLGN PHC, in-memory=${inMemoryHostedChannels.size}")
       inMemoryHostedChannels.values.forEach(_ ! TickRemoveIdleChannels)
 
     case ClientChannels(channels) =>

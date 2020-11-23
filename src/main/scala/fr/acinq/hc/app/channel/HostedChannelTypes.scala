@@ -35,9 +35,13 @@ case class HC_CMD_PRIVATE(remoteNodeId: PublicKey) extends HasRemoteNodeIdHosted
 
 case class HC_CMD_GET_INFO(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 
-case class CMDResSuccess(cmd: HasRemoteNodeIdHostedCommand)
+sealed trait HCCommandResponse
 
-case class CMDResponseInfo(state: State, data: HC_DATA_ESTABLISHED, nextLocalSpec: CommitmentSpec)
+case class CMDResFailure(reason: String) extends HCCommandResponse
+
+case class CMDResSuccess(cmd: HasRemoteNodeIdHostedCommand) extends HCCommandResponse
+
+case class CMDResInfo(state: State, data: HC_DATA_ESTABLISHED, nextLocalSpec: CommitmentSpec) extends HCCommandResponse
 
 // Data
 
@@ -248,12 +252,9 @@ case class HostedCommitments(isHost: Boolean,
   }
 }
 
-case class HostedState(channelId: ByteVector32,
-                       nextLocalUpdates: List[wire.UpdateMessage],
-                       nextRemoteUpdates: List[wire.UpdateMessage],
-                       lastCrossSignedState: LastCrossSignedState)
-
 case class RemoteHostedStateResult(state: HostedState, isLocalSigValid: Boolean)
+
+case class HostedState(remoteNodeId: PublicKey, nextLocalUpdates: List[wire.UpdateMessage], nextRemoteUpdates: List[wire.UpdateMessage], lastCrossSignedState: LastCrossSignedState)
 
 // Channel errors
 

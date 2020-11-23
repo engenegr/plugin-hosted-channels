@@ -258,10 +258,10 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       val syncData = Await.result(hostedSync ? HostedSync.GetHostedSyncData, span).asInstanceOf[OperationalData]
       val tooFewNormal: Option[PublicKey] = syncData.tooFewNormalChans(kit.nodeParams.nodeId, remoteNodeId, vals.phcConfig)
       val tooManyPHC: Option[PublicKey] = syncData.phcNetwork.tooManyPHCs(kit.nodeParams.nodeId, remoteNodeId, vals.phcConfig)
-      if (tooManyPHC.isDefined) stay replying FSM.Failure(s"Can't proceed: nodeId=${tooManyPHC.get} has too many PHCs already, max=${vals.phcConfig.maxPerNode}")
-      else if (tooFewNormal.isDefined) stay replying FSM.Failure(s"Can't proceed: nodeId=${tooFewNormal.get} has too few normal channels, min=${vals.phcConfig.minNormalChans}")
-      else if (vals.phcConfig.minCapacity > data.commitments.capacity) stay replying FSM.Failure(s"Can't proceed: HC capacity is below min=${vals.phcConfig.minCapacity}")
-      else if (vals.phcConfig.maxCapacity < data.commitments.capacity) stay replying FSM.Failure(s"Can't proceed: HC capacity is above max=${vals.phcConfig.maxCapacity}")
+      if (tooManyPHC.isDefined) stay replying CMDResFailure(s"Can't proceed: nodeId=${tooManyPHC.get} has too many PHCs already, max=${vals.phcConfig.maxPerNode}")
+      else if (tooFewNormal.isDefined) stay replying CMDResFailure(s"Can't proceed: nodeId=${tooFewNormal.get} has too few normal channels, min=${vals.phcConfig.minNormalChans}")
+      else if (vals.phcConfig.minCapacity > data.commitments.capacity) stay replying CMDResFailure(s"Can't proceed: HC capacity is below min=${vals.phcConfig.minCapacity}")
+      else if (vals.phcConfig.maxCapacity < data.commitments.capacity) stay replying CMDResFailure(s"Can't proceed: HC capacity is above max=${vals.phcConfig.maxCapacity}")
       else stay Receiving HC_CMD_PUBLIC(remoteNodeId, force = true)
 
     case Event(cmd: HC_CMD_PUBLIC, data: HC_DATA_ESTABLISHED) =>
@@ -376,9 +376,9 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       stay StoringAndUsing data1
 
     case Event(cmd: HC_CMD_OVERRIDE_ACCEPT, data: HC_DATA_ESTABLISHED) =>
-      if (data.errorExt.isEmpty) stay replying FSM.Failure("Overriding declined: channel is in normal state")
-      else if (data.commitments.isHost) stay replying FSM.Failure("Overriding declined: only client side can accept override")
-      else if (data.overrideProposal.isEmpty) stay replying FSM.Failure("Overriding declined: no override proposal from host is found")
+      if (data.errorExt.isEmpty) stay replying CMDResFailure("Overriding declined: channel is in normal state")
+      else if (data.commitments.isHost) stay replying CMDResFailure("Overriding declined: only client side can accept override")
+      else if (data.overrideProposal.isEmpty) stay replying CMDResFailure("Overriding declined: no override proposal from host is found")
       else {
         val remoteSO: StateOverride = data.overrideProposal.get
         val newLocalBalance = data.commitments.lastCrossSignedState.initHostedChannel.channelCapacityMsat - remoteSO.localBalanceMsat
@@ -387,12 +387,12 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
           remoteSigOfLocal = remoteSO.localSigOfRemoteLCSS).withLocalSigOfRemote(kit.nodeParams.privateKey)
         val isRemoteSigOk = completeLocalLCSS.verifyRemoteSig(remoteNodeId)
 
-        if (remoteSO.localUpdates < data.commitments.lastCrossSignedState.remoteUpdates) stay replying FSM.Failure("Overridden local update number is less than remote")
-        else if (remoteSO.remoteUpdates < data.commitments.lastCrossSignedState.localUpdates) stay replying FSM.Failure("Overridden remote update number is less than local")
-        else if (remoteSO.blockDay < data.commitments.lastCrossSignedState.blockDay) stay replying FSM.Failure("Overridden remote blockday is less than local")
-        else if (newLocalBalance > data.commitments.capacity) stay replying FSM.Failure("Overriding declined: new local balance exceeds capacity")
-        else if (newLocalBalance < 0L.msat) stay replying FSM.Failure("Overriding declined: new local balance is less than zero")
-        else if (!isRemoteSigOk) stay replying FSM.Failure("Remote override signature is wrong")
+        if (remoteSO.localUpdates < data.commitments.lastCrossSignedState.remoteUpdates) stay replying CMDResFailure("Overridden local update number is less than remote")
+        else if (remoteSO.remoteUpdates < data.commitments.lastCrossSignedState.localUpdates) stay replying CMDResFailure("Overridden remote update number is less than local")
+        else if (remoteSO.blockDay < data.commitments.lastCrossSignedState.blockDay) stay replying CMDResFailure("Overridden remote blockday is less than local")
+        else if (newLocalBalance > data.commitments.capacity) stay replying CMDResFailure("Overriding declined: new local balance exceeds capacity")
+        else if (newLocalBalance < 0L.msat) stay replying CMDResFailure("Overriding declined: new local balance is less than zero")
+        else if (!isRemoteSigOk) stay replying CMDResFailure("Remote override signature is wrong")
         else {
           val localSU = completeLocalLCSS.stateUpdate(isTerminal = true)
           val data1 = restoreEmptyData(completeLocalLCSS, isHost = false)
@@ -490,11 +490,11 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
     // Scheduling override
 
     case Event(cmd: HC_CMD_OVERRIDE_PROPOSE, data: HC_DATA_ESTABLISHED) =>
-      if (data.errorExt.isEmpty) stay replying FSM.Failure("Overriding declined: channel is in normal state")
-      else if (!data.commitments.isHost) stay replying FSM.Failure("Overriding declined: only host side can initiate override")
-      else if (data.refundCompleteInfo.isDefined) stay replying FSM.Failure("Overriding declined: target channel has been refunded")
-      else if (cmd.newLocalBalance > data.commitments.capacity) stay replying FSM.Failure("Overriding declined: new local balance exceeds capacity")
-      else if (cmd.newLocalBalance < 0L.msat) stay replying FSM.Failure("Overriding declined: new local balance is less than zero")
+      if (data.errorExt.isEmpty) stay replying CMDResFailure("Overriding declined: channel is in normal state")
+      else if (!data.commitments.isHost) stay replying CMDResFailure("Overriding declined: only host side can initiate override")
+      else if (data.refundCompleteInfo.isDefined) stay replying CMDResFailure("Overriding declined: target channel has been refunded")
+      else if (cmd.newLocalBalance > data.commitments.capacity) stay replying CMDResFailure("Overriding declined: new local balance exceeds capacity")
+      else if (cmd.newLocalBalance < 0L.msat) stay replying CMDResFailure("Overriding declined: new local balance is less than zero")
       else {
         log.info(s"PLGN PHC, scheduling override proposal for peer=$remoteNodeId")
         val newLocalUpdates = data.commitments.lastCrossSignedState.localUpdates + data.commitments.nextLocalUpdates.size + 1
@@ -508,11 +508,11 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
     // Misc
 
-    case Event(HC_CMD_GET_INFO, data: HC_DATA_ESTABLISHED) => stay replying CMDResponseInfo(stateName, data, data.commitments.nextLocalSpec)
+    case Event(HC_CMD_GET_INFO, data: HC_DATA_ESTABLISHED) => stay replying CMDResInfo(stateName, data, data.commitments.nextLocalSpec)
 
     case Event(cmd: HC_CMD_EXTERNAL_FULFILL, _: HC_DATA_ESTABLISHED) => stay replying CMDResSuccess(cmd) Receiving UpdateFulfillHtlc(channelId, cmd.htlcId, cmd.paymentPreimage)
 
-    case Event(_: HasRemoteNodeIdHostedCommand, data) => stay replying FSM.Failure(s"Can't process, data=${data.getClass.getSimpleName}, state=$stateName")
+    case Event(_: HasRemoteNodeIdHostedCommand, data) => stay replying CMDResFailure(s"Can't process, data=${data.getClass.getSimpleName}, state=$stateName")
   }
 
   onTransition {
@@ -713,6 +713,6 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
     val data1 = data.copy(refundCompleteInfo = Some(cmd.info), refundPendingInfo = None)
 
     if (cmd.force || enoughDays) errorState StoringAndUsing data1 replying CMDResSuccess(cmd) SendingHasChannelId makeError(cmd.info)
-    else stay replying FSM.Failure(s"Not enough days passed since=${data.commitments.lastCrossSignedState.blockDay} blockday")
+    else stay replying CMDResFailure(s"Not enough days passed since=${data.commitments.lastCrossSignedState.blockDay} blockday")
   }
 }

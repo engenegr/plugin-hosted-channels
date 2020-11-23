@@ -109,7 +109,7 @@ class HostedWireSpec extends AnyFunSuite {
       assert(hdc === check)
     }
 
-    val state = HostedState(ByteVector32.Zeroes, List(add1, add2), List.empty, lcss1)
+    val state = HostedState(randomKey.publicKey, List(add1, add2), List.empty, lcss1)
 
     {
       val binary = HostedChannelCodecs.hostedStateCodec.encode(state).require
