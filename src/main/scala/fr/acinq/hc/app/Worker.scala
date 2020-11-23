@@ -2,6 +2,7 @@ package fr.acinq.hc.app
 
 import fr.acinq.hc.app.HC._
 import fr.acinq.eclair.io._
+import scala.concurrent.stm._
 import fr.acinq.hc.app.Worker._
 import fr.acinq.hc.app.channel._
 import scala.concurrent.duration._
@@ -46,7 +47,7 @@ class Worker(kit: eclair.Kit, updatesDb: HostedUpdatesDb, channelsDb: HostedChan
 
   val hostedSync: ActorRef = context actorOf Props(classOf[HostedSync], kit, updatesDb, vals.phcConfig, self)
 
-  val remoteNode2Connection: mutable.Map[PublicKey, PeerConnectedWrap] = mutable.Map.empty[PublicKey, PeerConnectedWrap]
+  val remoteNode2Connection: mutable.Map[PublicKey, PeerConnectedWrap] = TMap.empty[PublicKey, PeerConnectedWrap].single
 
   val inMemoryHostedChannels: HashBiMap[PublicKey, ActorRef] = HashBiMap.create[PublicKey, ActorRef]
 

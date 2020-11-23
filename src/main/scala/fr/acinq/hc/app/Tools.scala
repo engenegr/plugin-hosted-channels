@@ -7,7 +7,6 @@ import fr.acinq.eclair.wire.{AnnouncementMessage, ChannelAnnouncement, Color, Ha
 import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol}
 import com.typesafe.config.{ConfigFactory, Config => TypesafeConfig}
 import java.io.{ByteArrayInputStream, File}
-import java.net.InetSocketAddress
 import java.nio.file.{Files, Paths}
 
 import fr.acinq.eclair.channel.Channel.OutgoingMessage
@@ -21,7 +20,6 @@ import fr.acinq.hc.app.wire.Codecs
 import slick.jdbc.PostgresProfile
 import scodec.bits.ByteVector
 import java.nio.ByteOrder
-
 import scala.util.Try
 
 
@@ -122,9 +120,7 @@ case class PHCConfig(maxPerNode: Long, minNormalChans: Long, maxSyncSendsPerIpPe
   val minCapacity: MilliSatoshi = MilliSatoshi(50000000000L) // At least 0.5 BTC
 }
 
-case class ApiParams(password: String, bindingIp: String, port: Int) {
-  val serverBindingAddress = new InetSocketAddress(bindingIp, port)
-}
+case class ApiParams(password: String, bindingIp: String, port: Int)
 
 case class Vals(hcDefaultParams: HCParams, hcOverrideParams: List[HCOverrideParams],
                 maxNewChansPerIpPerHour: Int, restoredChannelBlockDayAgeThreshold: Int,

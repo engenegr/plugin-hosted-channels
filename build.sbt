@@ -37,4 +37,6 @@ libraryDependencies += "fr.acinq" % "bitcoin-lib_2.13" % "0.18" // Same as Eclai
 
 libraryDependencies += "com.google.guava" % "guava" % "24.0-android" // Same as Eclair
 
+libraryDependencies += "org.scala-stm" % "scala-stm_2.13" % "0.11.0"
+
 enablePlugins(ReproducibleBuildsPlugin)
