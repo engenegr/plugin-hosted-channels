@@ -19,6 +19,12 @@ libraryDependencies += "com.typesafe.akka" % "akka-actor_2.13" % "2.6.10" // Sam
 
 libraryDependencies += "com.typesafe.akka" % "akka-testkit_2.13" % "2.6.10" // Same as Eclair
 
+libraryDependencies += "com.typesafe.akka" % "akka-http-core_2.13" % "10.2.0" // Same as Eclair
+
+libraryDependencies += "com.typesafe.akka" % "akka-stream_2.13" % "2.6.10" // Same as Eclair
+
+libraryDependencies += "de.heikoseeberger" % "akka-http-json4s_2.13" % "1.34.0" // Same as Eclair
+
 libraryDependencies += "com.iheart" % "ficus_2.13" % "1.5.0"
 
 libraryDependencies += "com.typesafe.slick" %% "slick" % "3.3.3"

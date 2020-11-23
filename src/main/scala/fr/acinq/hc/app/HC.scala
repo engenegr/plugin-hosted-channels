@@ -2,15 +2,18 @@ package fr.acinq.hc.app
 
 import fr.acinq.eclair._
 import fr.acinq.hc.app.HC._
+import akka.actor.{ActorSystem, Props}
 import fr.acinq.hc.app.dbo.{Blocking, HostedChannelsDb, HostedUpdatesDb}
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner.IncomingHtlc
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner
 import fr.acinq.eclair.transactions.DirectedHtlc
+import scala.concurrent.ExecutionContextExecutor
 import fr.acinq.eclair.payment.IncomingPacket
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.channel.Origin
+import fr.acinq.hc.app.api.HCService
 import akka.event.LoggingAdapter
-import akka.actor.Props
+import akka.http.scaladsl.Http
 
 
 object HC {
@@ -62,7 +65,11 @@ class HC extends Plugin {
   override def onKit(kit: Kit): Unit = {
     val clientHCs = channelsDb.listClientChannels
     val workerRef = kit.system actorOf Props(classOf[Worker], kit, updatesDb, channelsDb, Config.vals)
-    require(clientHCs.forall(_.commitments.localNodeId == kit.nodeParams.nodeId), "PLGN PHC, localNodeId mismatch")
+    implicit val executionContext: ExecutionContextExecutor = kit.system.dispatcher
+    implicit val coreActorSystem: ActorSystem = kit.system
+
+    require(clientHCs.forall(_.commitments.localNodeId == kit.nodeParams.nodeId), "PLGN PHC, localNodeId mismatch in HC commitments")
+    Http().newServerAt(Config.vals.apiParams.bindingIp, Config.vals.apiParams.port).bindFlow(new HCService(kit, workerRef, Config.vals).finalRoute)
     Config.vals.clientChannelRemoteNodeIds = clientHCs.map(_.commitments.remoteNodeId).toSet
     workerRef ! Worker.ClientChannels(clientHCs)
   }
@@ -89,7 +96,8 @@ class HC extends Plugin {
       origin <- data.commitments.originChannels.get(outgoingHtlc.id)
     } yield (origin, channelId, outgoingHtlc.id)
 
-    override def getHtlcsRelayedOut(htlcsIn: Seq[IncomingHtlc] = Nil): Map[Origin, Set[PostRestartHtlcCleaner.ChannelIdAndHtlcId]] =
+    type PaymentLocations = Set[PostRestartHtlcCleaner.ChannelIdAndHtlcId]
+    override def getHtlcsRelayedOut(htlcsIn: Seq[IncomingHtlc] = Nil): Map[Origin, PaymentLocations] =
       PostRestartHtlcCleaner.groupByOrigin(htlcsOut, htlcsIn)
   }
 }

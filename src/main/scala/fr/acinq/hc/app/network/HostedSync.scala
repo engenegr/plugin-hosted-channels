@@ -250,30 +250,31 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig, pee
   private def publicPeers(peers: Seq[PeerConnectedWrap], data: OperationalData): Seq[PeerConnectedWrap] =
     peers.filter(wrap => data.normalGraph.getIncomingEdgesOf(wrap.info.nodeId).nonEmpty)
 
-  private def isUpdateAcceptable(update: ChannelUpdate, data: OperationalData): Boolean = data.phcNetwork.channels.get(update.shortChannelId) match {
-    case Some(phc) if data.tooFewNormalChans(phc.channelAnnounce.nodeId1, phc.channelAnnounce.nodeId2, phcConfig).isDefined =>
-      log.info(s"PLGN PHC, gossip update fail: too few normal channels, msg=$update")
-      false
+  private def isUpdateAcceptable(update: ChannelUpdate, data: OperationalData): Boolean =
+    data.phcNetwork.channels.get(update.shortChannelId) match {
+      case Some(phc) if data.tooFewNormalChans(phc.channelAnnounce.nodeId1, phc.channelAnnounce.nodeId2, phcConfig).isDefined =>
+        log.info(s"PLGN PHC, gossip update fail: too few normal channels, msg=$update")
+        false
 
-    case _ if update.htlcMaximumMsat.exists(_ > phcConfig.maxCapacity) =>
-      log.info(s"PLGN PHC, gossip update fail: capacity is above max, msg=$update")
-      false
+      case _ if update.htlcMaximumMsat.forall(_ > phcConfig.maxCapacity) =>
+        log.info(s"PLGN PHC, gossip update fail: capacity is above max, msg=$update")
+        false
 
-    case _ if update.htlcMaximumMsat.forall(_ < phcConfig.minCapacity) =>
-      log.info(s"PLGN PHC, gossip update fail: capacity is below min, msg=$update")
-      false
+      case _ if update.htlcMaximumMsat.forall(_ < phcConfig.minCapacity) =>
+        log.info(s"PLGN PHC, gossip update fail: capacity is below min, msg=$update")
+        false
 
-    case Some(phc) if !phc.isUpdateFresh(update) =>
-      log.info(s"PLGN PHC, gossip update fail: not fresh, msg=$update")
-      false
+      case Some(phc) if !phc.isUpdateFresh(update) =>
+        log.info(s"PLGN PHC, gossip update fail: not fresh, msg=$update")
+        false
 
-    case Some(phc) if !phc.verifySig(update) =>
-      log.info(s"PLGN PHC, gossip update fail: wrong signature, msg=$update")
-      false
+      case Some(phc) if !phc.verifySig(update) =>
+        log.info(s"PLGN PHC, gossip update fail: wrong signature, msg=$update")
+        false
 
-    case None => false
-    case _ => true
-  }
+      case None => false
+      case _ => true
+    }
 
   private def tryPersist(phcNetwork: PHCNetwork) = Try {
     Blocking.txWrite(DBIO.sequence(phcNetwork.unsaved.orderedMessages.map {
