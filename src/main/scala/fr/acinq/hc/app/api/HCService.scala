@@ -72,6 +72,11 @@ class HCService(kit: Kit, worker: ActorRef, sync: ActorRef, vals: Vals) extends 
           complete(worker ? HC_CMD_PRIVATE(remoteNodeId))
         }
       } ~
+      path("suspend") {
+        formFields(nodeIdFormParam) { remoteNodeId =>
+          complete(worker ? HC_SUSPEND(remoteNodeId))
+        }
+      } ~
       path("verifystate") {
         formFields("state".as[ByteVector](binaryDataUnmarshaller)) { state =>
           val remoteState: HostedState = fr.acinq.hc.app.wire.HostedChannelCodecs.hostedStateCodec.decodeValue(state.toBitVector).require

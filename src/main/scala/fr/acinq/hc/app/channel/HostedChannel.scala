@@ -89,6 +89,15 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       if (data.remoteError.isEmpty) stay StoringAndUsing data.copy(remoteError = errorExtOpt)
       else stay
 
+    case Event(cmd: HC_CMD_EXTERNAL_FULFILL, data: HC_DATA_ESTABLISHED) =>
+      val fulfill = UpdateFulfillHtlc(channelId, cmd.htlcId, cmd.paymentPreimage)
+      val (data1, _) = withLocalError(data, ErrorCodes.ERR_HOSTED_HTLC_EXTERNAL_FULFILL)
+      stay StoringAndUsing data1 replying CMDResSuccess(cmd) Receiving fulfill
+
+    case Event(cmd: HC_SUSPEND, data: HC_DATA_ESTABLISHED) =>
+      val (data1, _) = withLocalError(data, ErrorCodes.ERR_MANUAL_SUSPEND)
+      stay StoringAndUsing data1 replying CMDResSuccess(cmd)
+
     case Event(cmd: HC_CMD_FINALIZE_REFUND, data: HC_DATA_ESTABLISHED) =>
       processFinalizeRefund(stay, cmd, data)
   }
@@ -509,8 +518,12 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     case Event(cmd: HC_CMD_EXTERNAL_FULFILL, data: HC_DATA_ESTABLISHED) =>
       val fulfill = UpdateFulfillHtlc(channelId, cmd.htlcId, cmd.paymentPreimage)
-      val errorExtOpt = Some(ErrorCodes.ERR_HOSTED_HTLC_EXTERNAL_FULFILL).map(makeError).map(ErrorExt.generateFrom)
-      stay StoringAndUsing data.copy(localError = errorExtOpt) replying CMDResSuccess(cmd) Receiving fulfill
+      val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_HTLC_EXTERNAL_FULFILL)
+      goto(CLOSED) StoringAndUsing data1 replying CMDResSuccess(cmd) SendingHasChannelId error Receiving fulfill
+
+    case Event(cmd: HC_SUSPEND, data: HC_DATA_ESTABLISHED) =>
+      val (data1, error) = withLocalError(data, ErrorCodes.ERR_MANUAL_SUSPEND)
+      goto(CLOSED) StoringAndUsing data1 replying CMDResSuccess(cmd) SendingHasChannelId error
 
     case Event(HC_CMD_GET_INFO, data: HC_DATA_ESTABLISHED) => stay replying CMDResInfo(stateName, data, data.commitments.nextLocalSpec)
 

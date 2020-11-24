@@ -35,6 +35,8 @@ case class HC_CMD_PRIVATE(remoteNodeId: PublicKey) extends HasRemoteNodeIdHosted
 
 case class HC_CMD_GET_INFO(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 
+case class HC_SUSPEND(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
+
 sealed trait HCCommandResponse
 
 case class CMDResFailure(reason: String) extends HCCommandResponse
