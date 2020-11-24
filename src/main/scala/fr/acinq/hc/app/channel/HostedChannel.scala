@@ -507,9 +507,12 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     // Misc
 
-    case Event(HC_CMD_GET_INFO, data: HC_DATA_ESTABLISHED) => stay replying CMDResInfo(stateName, data, data.commitments.nextLocalSpec)
+    case Event(cmd: HC_CMD_EXTERNAL_FULFILL, data: HC_DATA_ESTABLISHED) =>
+      val fulfill = UpdateFulfillHtlc(channelId, cmd.htlcId, cmd.paymentPreimage)
+      val errorExtOpt = Some(ErrorCodes.ERR_HOSTED_HTLC_EXTERNAL_FULFILL).map(makeError).map(ErrorExt.generateFrom)
+      stay StoringAndUsing data.copy(localError = errorExtOpt) replying CMDResSuccess(cmd) Receiving fulfill
 
-    case Event(cmd: HC_CMD_EXTERNAL_FULFILL, _: HC_DATA_ESTABLISHED) => stay replying CMDResSuccess(cmd) Receiving UpdateFulfillHtlc(channelId, cmd.htlcId, cmd.paymentPreimage)
+    case Event(HC_CMD_GET_INFO, data: HC_DATA_ESTABLISHED) => stay replying CMDResInfo(stateName, data, data.commitments.nextLocalSpec)
 
     case Event(_: HasRemoteNodeIdHostedCommand, data) => stay replying CMDResFailure(s"Can't process, data=${data.getClass.getSimpleName}, state=$stateName")
   }

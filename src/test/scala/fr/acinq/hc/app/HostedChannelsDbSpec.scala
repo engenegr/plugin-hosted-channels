@@ -105,18 +105,14 @@ class HostedChannelsDbSpec extends AnyFunSuite {
 
     {
       // Adding
-      val a = System.currentTimeMillis()
       val hdcs = for (n <- 0 to 1000) yield data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(n)), commitments = hdc.copy(remoteNodeId = keys(n), channelId = randomBytes32))
       hdcs.foreach(cdb.updateOrAddNewChannel)
-      println(System.currentTimeMillis() - a)
     }
 
     {
       // Updating
-      val a = System.currentTimeMillis()
       val hdcs = for (n <- 0 to 1000) yield data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(n)), commitments = hdc.copy(remoteNodeId = keys(n), channelId = randomBytes32))
       hdcs.foreach(cdb.updateOrAddNewChannel)
-      println(System.currentTimeMillis() - a)
     }
 
     {
