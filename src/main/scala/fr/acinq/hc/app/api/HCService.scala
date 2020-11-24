@@ -5,18 +5,21 @@ import fr.acinq.hc.app.channel._
 import akka.http.scaladsl.server._
 import fr.acinq.eclair.api.FormParamExtractors._
 import fr.acinq.eclair.api.JsonSupport.{formats, marshaller, serialization}
+import fr.acinq.hc.app.network.{HostedSync, OperationalData}
 import fr.acinq.bitcoin.{ByteVector32, Script}
 import akka.actor.{ActorRef, ActorSystem}
 
+import scala.concurrent.ExecutionContext.Implicits.global
 import fr.acinq.eclair.api.AbstractService
 import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.eclair.router.Router
 import scodec.bits.ByteVector
 import fr.acinq.hc.app.Vals
 import akka.util.Timeout
 import akka.pattern.ask
 
 
-class HCService(kit: Kit, worker: ActorRef, vals: Vals) extends AbstractService {
+class HCService(kit: Kit, worker: ActorRef, sync: ActorRef, vals: Vals) extends AbstractService {
 
   override val password: String = vals.apiParams.password
 
@@ -77,7 +80,21 @@ class HCService(kit: Kit, worker: ActorRef, vals: Vals) extends AbstractService 
           val result = RemoteHostedStateResult(remoteState, remoteNodeIdOpt, isLocalSigOk)
           complete(result)
         }
+      } ~
+      path("phcnodes") {
+        val phcNodeAnnounces = for {
+          routerData <- (kit.router ? Router.GetRouterData).mapTo[Router.Data]
+          hostedSyncData <- (sync ? HostedSync.GetHostedSyncData).mapTo[OperationalData]
+        } yield phcAnnounces(routerData, hostedSyncData).flatten.toSet
+        complete(phcNodeAnnounces)
       }
     }
   }
+
+  private def phcAnnounces(routerData: Router.Data, hostedSyncData: OperationalData) =
+    for {
+      phc <- hostedSyncData.phcNetwork.channels.values
+      node1AnnounceOpt = routerData.nodes.get(phc.channelAnnounce.nodeId1)
+      node2AnnounceOpt = routerData.nodes.get(phc.channelAnnounce.nodeId2)
+    } yield node1AnnounceOpt ++ node2AnnounceOpt
 }

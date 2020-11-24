@@ -22,9 +22,7 @@ import fr.acinq.hc.app.wire.Codecs
 class HostedSyncSpec extends BaseRouterSpec {
   private def recreateHostedSync(kit: Kit, phcConfig: PHCConfig)(implicit system: ActorSystem) = {
     HCTestUtils.resetEntireDatabase(Config.db)
-    val peerProvider = TestProbe()
-    val syncActor: TestFSMRef[HostedSyncState, HostedSyncData, HostedSync] = TestFSMRef(new HostedSync(kit, new HostedUpdatesDb(Config.db), phcConfig, peerProvider.ref))
-    (syncActor, peerProvider)
+    TestFSMRef(new HostedSync(kit, new HostedUpdatesDb(Config.db), phcConfig))
   }
 
   private def createPeer(nodeId: PublicKey)(implicit system: ActorSystem) = {
@@ -37,27 +35,28 @@ class HostedSyncSpec extends BaseRouterSpec {
 
   test("Hosted sync and gossip") { fixture =>
     implicit val system: ActorSystem = ActorSystem("test-actor-system")
+    val probe = TestProbe()
     val config = Config.vals.phcConfig.copy(minNormalChans = 0, maxPerNode = 1)
     val (kit, _) = HCTestUtils.testKit(TestConstants.Alice.nodeParams)(system)
-    val (syncActor, peerProvider) = recreateHostedSync(kit.copy(router = fixture.router), config)
+    val syncActor = recreateHostedSync(kit.copy(router = fixture.router), config)
     awaitCond(syncActor.stateName == WAIT_FOR_ROUTER_DATA)
     // Router has finished synchronization
     syncActor ! SyncProgress(1D)
-    awaitCond(syncActor.stateName == WAIT_FOR_PHC_SYNC)
-    peerProvider.expectMsgType[HostedSync.GetPeersForSync.type]
     // No PHC enabled peers are connected yet
-    syncActor ! HostedSync.PeersToSyncFrom(Nil)
     awaitCond(syncActor.stateName == WAIT_FOR_PHC_SYNC)
+    val privatePeer = createPeer(randomKey.publicKey)._3
     // Private HC peer is connected
-    syncActor ! HostedSync.PeersToSyncFrom(List(createPeer(randomKey.publicKey)._3)) // Not seen in graph
+    HC.remoteNode2Connection addOne privatePeer.info.nodeId -> privatePeer
+    syncActor ! HostedSync.SyncFromPHCPeers
     awaitCond(syncActor.stateName == WAIT_FOR_PHC_SYNC)
 
-    peerProvider.send(fixture.router, Router.GetRouterData)
-    val routerData = peerProvider.expectMsgType[Data]
+    probe.send(fixture.router, Router.GetRouterData)
+    val routerData = probe.expectMsgType[Data]
 
     val (peer, _, wrap) = createPeer(routerData.nodes.keys.head)
     // PHC peer is connected (can be seen in normal graph), synchronizing
-    syncActor ! HostedSync.PeersToSyncFrom(List(wrap))
+    HC.remoteNode2Connection addOne wrap.info.nodeId -> wrap
+    syncActor ! HostedSync.SyncFromPHCPeers
     assert(peer.expectMsgType[OutgoingMessage].msg.asInstanceOf[UnknownMessage].tag == HC.HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG)
     awaitCond(syncActor.stateName == DOING_PHC_SYNC)
 
@@ -129,19 +128,24 @@ class HostedSyncSpec extends BaseRouterSpec {
       // Broadcasting collected gossip
       val (gossipPeer1, _, gossipReceiver1) = createPeer(secondPublicNode)
       val (gossipPeer2, _, gossipReceiver2) = createPeer(thirdPublicNode)
-      syncActor ! TickSendGossip(List(gossipReceiver1, gossipReceiver2))
+      HC.remoteNode2Connection.clear()
+      HC.remoteNode2Connection addOne gossipReceiver1.info.nodeId -> gossipReceiver1
+      HC.remoteNode2Connection addOne gossipReceiver2.info.nodeId -> gossipReceiver2
+      syncActor ! TickSendGossip
       gossipPeer1.expectNoMessage() // We have seen gossip from this one, so no updates to it
       // Only 3 messages, invalid gossip discarded
       assert(gossipPeer2.expectMsgType[OutgoingMessage].msg.asInstanceOf[UnknownMessage].tag == HC.PHC_ANNOUNCE_GOSSIP_TAG)
       assert(gossipPeer2.expectMsgType[OutgoingMessage].msg.asInstanceOf[UnknownMessage].tag == HC.PHC_UPDATE_GOSSIP_TAG)
       assert(gossipPeer2.expectMsgType[OutgoingMessage].msg.asInstanceOf[UnknownMessage].tag == HC.PHC_UPDATE_GOSSIP_TAG)
-      syncActor ! TickSendGossip(List(gossipReceiver1, gossipReceiver2))
+      syncActor ! TickSendGossip
       gossipPeer1.expectNoMessage()
       gossipPeer2.expectNoMessage()
     }
 
     // Another sync cycle, network is recreated from db in the end
-    syncActor ! HostedSync.PeersToSyncFrom(List(wrap))
+    HC.remoteNode2Connection.clear()
+    HC.remoteNode2Connection addOne wrap.info.nodeId -> wrap
+    syncActor ! HostedSync.SyncFromPHCPeers
     awaitCond(syncActor.stateName == DOING_PHC_SYNC)
     syncActor ! GotAllSyncFrom(wrap)
     awaitCond(syncActor.stateName == OPERATIONAL)

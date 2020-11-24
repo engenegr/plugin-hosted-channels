@@ -2,17 +2,21 @@ package fr.acinq.hc.app
 
 import fr.acinq.eclair._
 import fr.acinq.hc.app.HC._
+import scala.concurrent.stm._
 import akka.actor.{ActorSystem, Props}
 import fr.acinq.hc.app.dbo.{Blocking, HostedChannelsDb, HostedUpdatesDb}
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner.IncomingHtlc
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner
+import fr.acinq.hc.app.channel.HC_DATA_ESTABLISHED
 import fr.acinq.eclair.transactions.DirectedHtlc
 import scala.concurrent.ExecutionContextExecutor
 import fr.acinq.eclair.payment.IncomingPacket
+import fr.acinq.hc.app.network.HostedSync
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.channel.Origin
 import fr.acinq.hc.app.api.HCService
 import akka.event.LoggingAdapter
+import scala.collection.mutable
 import akka.http.scaladsl.Http
 
 
@@ -52,31 +56,34 @@ object HC {
     Set(HC_INVOKE_HOSTED_CHANNEL_TAG, HC_INIT_HOSTED_CHANNEL_TAG, HC_LAST_CROSS_SIGNED_STATE_TAG,
       HC_STATE_UPDATE_TAG, HC_STATE_OVERRIDE_TAG, HC_HOSTED_CHANNEL_BRANDING_TAG, HC_REFUND_PENDING_TAG,
       HC_ANNOUNCEMENT_SIGNATURE_TAG, HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG, HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG)
+
+  val remoteNode2Connection: mutable.Map[PublicKey, PeerConnectedWrap] = TMap.empty[PublicKey, PeerConnectedWrap].single
+
+  var clientChannelRemoteNodeIds: Set[PublicKey] = Set.empty
 }
 
 class HC extends Plugin {
-
-  val updatesDb: HostedUpdatesDb = new HostedUpdatesDb(Config.db)
 
   val channelsDb: HostedChannelsDb = new HostedChannelsDb(Config.db)
 
   override def onSetup(setup: Setup): Unit = Blocking.createTablesIfNotExist(Config.db)
 
   override def onKit(kit: Kit): Unit = {
-    val clientHCs = channelsDb.listClientChannels
-    val workerRef = kit.system actorOf Props(classOf[Worker], kit, updatesDb, channelsDb, Config.vals)
+    val syncRef = kit.system actorOf Props(classOf[HostedSync], kit, new HostedUpdatesDb(Config.db), Config.vals.phcConfig)
+    val workerRef = kit.system actorOf Props(classOf[Worker], kit, syncRef, channelsDb, Config.vals)
     implicit val executionContext: ExecutionContextExecutor = kit.system.dispatcher
     implicit val coreActorSystem: ActorSystem = kit.system
 
+    val clientHCs: Seq[HC_DATA_ESTABLISHED] = channelsDb.listClientChannels
     require(clientHCs.forall(_.commitments.localNodeId == kit.nodeParams.nodeId), "PLGN PHC, localNodeId mismatch in HC commitments")
-    Http().newServerAt(Config.vals.apiParams.bindingIp, Config.vals.apiParams.port).bindFlow(new HCService(kit, workerRef, Config.vals).finalRoute)
-    Config.vals.clientChannelRemoteNodeIds = clientHCs.map(_.commitments.remoteNodeId).toSet
+    Http().newServerAt(Config.vals.apiParams.bindingIp, Config.vals.apiParams.port).bindFlow(new HCService(kit, workerRef, syncRef, Config.vals).finalRoute)
+    HC.clientChannelRemoteNodeIds = clientHCs.map(_.commitments.remoteNodeId).toSet
     workerRef ! Worker.ClientChannels(clientHCs)
   }
 
   override def params: PluginParams = new CustomFeaturePlugin with ConnectionControlPlugin with CustomCommitmentsPlugin {
 
-    override def forceReconnect(nodeId: PublicKey): Boolean = Config.vals.clientChannelRemoteNodeIds.contains(nodeId)
+    override def forceReconnect(nodeId: PublicKey): Boolean = HC.clientChannelRemoteNodeIds.contains(nodeId)
 
     override def messageTags: Set[Int] = announceTags ++ chanIdMessageTags ++ hostedMessageTags
 

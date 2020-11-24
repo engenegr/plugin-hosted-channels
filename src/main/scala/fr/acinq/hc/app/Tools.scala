@@ -126,8 +126,6 @@ case class Vals(hcDefaultParams: HCParams, hcOverrideParams: List[HCOverridePara
                 maxNewChansPerIpPerHour: Int, restoredChannelBlockDayAgeThreshold: Int,
                 branding: Branding, phcConfig: PHCConfig, apiParams: ApiParams) {
 
-  var clientChannelRemoteNodeIds: Set[PublicKey] = Set.empty
-
   val hcOverrideMap: Map[PublicKey, HCOverrideParams] =
     Tools.toMapBy[PublicKey, HCOverrideParams](hcOverrideParams) {
       hcParams => PublicKey(ByteVector fromValidHex hcParams.nodeId)

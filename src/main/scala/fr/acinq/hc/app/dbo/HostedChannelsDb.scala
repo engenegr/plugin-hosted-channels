@@ -21,15 +21,15 @@ class HostedChannelsDb(db: PostgresProfile.backend.Database) {
   def updateOrAddNewChannel(data: HC_DATA_ESTABLISHED): Unit = {
     val encoded = HC_DATA_ESTABLISHED_Codec.encode(data).require.toByteArray
     val remoteNodeId = data.commitments.remoteNodeId.value.toArray
-    val startedAtLong = data.refundPendingInfo.map(_.startedAt)
+    val pendingRefund = data.refundPendingInfo.map(_.startedAt)
     val inFlightHtlcs = data.pendingHtlcs.size
 
-    val updateTuple = (inFlightHtlcs, data.commitments.isHost, data.refundCompleteInfo, startedAtLong, data.commitments.lastCrossSignedState.blockDay, encoded)
+    val updateTuple = (inFlightHtlcs, data.commitments.isHost, data.refundCompleteInfo, pendingRefund, data.commitments.lastCrossSignedState.blockDay, encoded)
     val updateHasFailed: Boolean = Blocking.txWrite(Channels.findByRemoteNodeIdUpdatableCompiled(remoteNodeId).update(updateTuple), db) == 0
 
     if (updateHasFailed) {
       Blocking.txWrite(Channels.insertCompiled += (remoteNodeId, data.channelUpdate.shortChannelId.toLong, inFlightHtlcs,
-        data.commitments.isHost, data.refundCompleteInfo, startedAtLong, data.commitments.lastCrossSignedState.blockDay,
+        data.commitments.isHost, data.refundCompleteInfo, pendingRefund, data.commitments.lastCrossSignedState.blockDay,
         System.currentTimeMillis, encoded, Array.emptyByteArray), db)
     }
   }

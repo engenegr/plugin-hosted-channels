@@ -69,11 +69,10 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
 
     val alicePeerConnected = PeerConnected(bob2alice.ref, aliceKit.nodeParams.nodeId, ConnectionInfo(new InetSocketAddress("127.0.0.2", 9001), TestProbe().ref, localInit = null, remoteInit = null))
     val bobPeerConnected = PeerConnected(alice2bob.ref, bobKit.nodeParams.nodeId, ConnectionInfo(new InetSocketAddress("127.0.0.3", 9001), TestProbe().ref, localInit = null, remoteInit = null))
-    val aliceConnections: mutable.Map[PublicKey, PeerConnectedWrap] = mutable.Map(bobKit.nodeParams.nodeId -> PeerConnectedWrapTest(bobPeerConnected))
-    val bobConnections: mutable.Map[PublicKey, PeerConnectedWrap] = mutable.Map(aliceKit.nodeParams.nodeId -> PeerConnectedWrapTest(alicePeerConnected))
-
-    val alice: TestFSMRef[State, HostedData, HostedChannel] = TestFSMRef(new HostedChannel(aliceKit, aliceConnections, bobKit.nodeParams.nodeId, new HostedChannelsDb(aliceDB), aliceSync.ref, Config.vals))
-    val bob: TestFSMRef[State, HostedData, HostedChannel] = TestFSMRef(new HostedChannel(bobKit, bobConnections, aliceKit.nodeParams.nodeId, new HostedChannelsDb(bobDB), bobSync.ref, Config.vals))
+    HC.remoteNode2Connection addOne aliceKit.nodeParams.nodeId -> PeerConnectedWrapTest(alicePeerConnected)
+    HC.remoteNode2Connection addOne bobKit.nodeParams.nodeId -> PeerConnectedWrapTest(bobPeerConnected)
+    val alice: TestFSMRef[State, HostedData, HostedChannel] = TestFSMRef(new HostedChannel(aliceKit, bobKit.nodeParams.nodeId, new HostedChannelsDb(aliceDB), aliceSync.ref, Config.vals))
+    val bob: TestFSMRef[State, HostedData, HostedChannel] = TestFSMRef(new HostedChannel(bobKit, aliceKit.nodeParams.nodeId, new HostedChannelsDb(bobDB), bobSync.ref, Config.vals))
 
     alice2bob.watch(alice)
     bob2alice.watch(bob)

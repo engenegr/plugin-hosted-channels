@@ -101,11 +101,28 @@ class HostedChannelsDbSpec extends AnyFunSuite {
     HCTestUtils.resetEntireDatabase(Config.db)
     val cdb = new HostedChannelsDb(Config.db)
 
-    val hdcs = for (n <- 0L to 1000L) yield data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(n)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
-    hdcs.foreach(cdb.updateOrAddNewChannel)
+    val keys = for (_ <- 0 to 1000) yield randomKey.publicKey
 
-    val a = System.currentTimeMillis()
-    assert(cdb.listHotChannels.size === 1001)
-    assert(System.currentTimeMillis() - a < 1000L) // less than 1 ms per object
+    {
+      // Adding
+      val a = System.currentTimeMillis()
+      val hdcs = for (n <- 0 to 1000) yield data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(n)), commitments = hdc.copy(remoteNodeId = keys(n), channelId = randomBytes32))
+      hdcs.foreach(cdb.updateOrAddNewChannel)
+      println(System.currentTimeMillis() - a)
+    }
+
+    {
+      // Updating
+      val a = System.currentTimeMillis()
+      val hdcs = for (n <- 0 to 1000) yield data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(n)), commitments = hdc.copy(remoteNodeId = keys(n), channelId = randomBytes32))
+      hdcs.foreach(cdb.updateOrAddNewChannel)
+      println(System.currentTimeMillis() - a)
+    }
+
+    {
+      val a = System.currentTimeMillis()
+      assert(cdb.listHotChannels.size === 1001)
+      assert(System.currentTimeMillis() - a < 1000L) // less than 1 ms per object
+    }
   }
 }

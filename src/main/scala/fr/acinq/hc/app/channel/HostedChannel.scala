@@ -25,7 +25,6 @@ import fr.acinq.hc.app.dbo.HostedChannelsDb
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.hc.app.wire.Codecs
-import scala.collection.mutable
 import scala.concurrent.Await
 import fr.acinq.eclair.wire
 import akka.pattern.ask
@@ -37,8 +36,8 @@ object HostedChannel {
   case object RemoteUpdateTimeout { val label = "RemoteUpdateTimeout" }
 }
 
-class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedWrap], remoteNodeId: PublicKey, channelsDb: HostedChannelsDb,
-                    hostedSync: ActorRef, vals: Vals) extends FSM[State, HostedData] with FSMDiagnosticActorLogging[State, HostedData] {
+class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannelsDb, hostedSync: ActorRef,
+                    vals: Vals) extends FSM[State, HostedData] with FSMDiagnosticActorLogging[State, HostedData] {
 
   lazy val channelId: ByteVector32 = Tools.hostedChanId(kit.nodeParams.nodeId.value, remoteNodeId.value)
 
@@ -171,7 +170,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
       else {
         val data1 = restoreEmptyData(fullySignedLCSS, isHost = false)
         // Client HC has been established, add it to reconnect list
-        vals.clientChannelRemoteNodeIds += remoteNodeId
+        HC.clientChannelRemoteNodeIds += remoteNodeId
         goto(NORMAL) StoringAndUsing data1
       }
 
@@ -536,7 +535,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
         case _ =>
       }
 
-      (connections.get(remoteNodeId), state, nextState, nextStateData) match {
+      (HC.remoteNode2Connection.get(remoteNodeId), state, nextState, nextStateData) match {
         case (Some(connection), OFFLINE | SYNCING, NORMAL | CLOSED, d1: HC_DATA_ESTABLISHED) =>
           context.system.eventStream publish ChannelStateChanged(self, channelId, peer = null, remoteNodeId, state, nextState, d1.commitmentsOpt)
           for (refundPendingInfo <- d1.refundPendingInfo if d1.commitments.isHost) connection sendHostedChannelMsg refundPendingInfo
@@ -544,7 +543,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
         case _ =>
       }
 
-      (connections.get(remoteNodeId), state, nextState, stateData, nextStateData) match {
+      (HC.remoteNode2Connection.get(remoteNodeId), state, nextState, stateData, nextStateData) match {
         case (Some(connection), SYNCING, NORMAL, _: HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE, d1: HC_DATA_ESTABLISHED) if d1.commitments.isHost =>
           for (brandingMessage <- vals.branding.brandingMessageOpt) connection sendHostedChannelMsg brandingMessage
         case (Some(connection), OFFLINE | SYNCING, CLOSED, _, d1: HC_DATA_ESTABLISHED) =>
@@ -559,7 +558,7 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
     case (SYNCING | CLOSED) -> NORMAL =>
       nextStateData match {
         case d1: HC_DATA_ESTABLISHED if !d1.commitments.announceChannel =>
-          connections.get(remoteNodeId).foreach(_ sendRoutingMsg d1.channelUpdate)
+          HC.remoteNode2Connection.get(remoteNodeId).foreach(_ sendRoutingMsg d1.channelUpdate)
         case d1: HC_DATA_ESTABLISHED if !Announcements.isEnabled(d1.channelUpdate.channelFlags) =>
           self ! HostedChannel.SendAnnouncements(force = false)
         case _ =>
@@ -571,18 +570,18 @@ class HostedChannel(kit: Kit, connections: mutable.Map[PublicKey, PeerConnectedW
 
   implicit class FsmStateExt(state: HostedFsmState) {
     def SendingHasChannelId(messages: wire.HasChannelId *): HostedFsmState = {
-      connections.get(remoteNodeId).foreach(messages foreach _.sendHasChannelIdMsg)
+      HC.remoteNode2Connection.get(remoteNodeId).foreach(messages foreach _.sendHasChannelIdMsg)
       state
     }
 
     def SendingHosted(messages: HostedChannelMessage *): HostedFsmState = {
-      connections.get(remoteNodeId).foreach(messages foreach _.sendHostedChannelMsg)
+      HC.remoteNode2Connection.get(remoteNodeId).foreach(messages foreach _.sendHostedChannelMsg)
       state
     }
 
     def Disconnecting: HostedFsmState = {
       val message = Peer.Disconnect(remoteNodeId)
-      connections.get(remoteNodeId).foreach(_.info.peer ! message)
+      HC.remoteNode2Connection.get(remoteNodeId).foreach(_.info.peer ! message)
       state
     }
 
