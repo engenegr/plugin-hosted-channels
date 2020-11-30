@@ -89,7 +89,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
   }
 
   when(SYNCING, stateTimeout = 5.minutes) {
-    case Event(StateTimeout, _: HC_DATA_ESTABLISHED) => stay SendingToPeer Peer.Disconnect(remoteNodeId)
+    case Event(StateTimeout, _: HC_DATA_ESTABLISHED) => stay SendingToPeerActor Peer.Disconnect(remoteNodeId)
 
     case Event(StateTimeout, _) => stop(FSM.Normal)
 
@@ -215,7 +215,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
   }
 
   when(NORMAL) {
-    case Event(HostedChannel.RemoteUpdateTimeout, _: HC_DATA_ESTABLISHED) => stay SendingToPeer Peer.Disconnect(remoteNodeId)
+    case Event(HostedChannel.RemoteUpdateTimeout, _: HC_DATA_ESTABLISHED) => stay SendingToPeerActor Peer.Disconnect(remoteNodeId)
 
     // PHC announcements
 
@@ -552,7 +552,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       state
     }
 
-    def SendingToPeer(message: Any): HostedFsmState = {
+    def SendingToPeerActor(message: Any): HostedFsmState = {
       HC.remoteNode2Connection.get(remoteNodeId).foreach(_.info.peer ! message)
       state
     }

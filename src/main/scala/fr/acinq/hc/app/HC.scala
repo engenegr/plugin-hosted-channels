@@ -93,8 +93,8 @@ class HC extends Plugin {
 
     override def getIncomingHtlcs(nodeParams: NodeParams)(implicit log: LoggingAdapter): Seq[IncomingHtlc] =
       channelsDb.listHotChannels.flatMap(_.commitments.localSpec.htlcs).collect(DirectedHtlc.incoming)
-        .map(updateAddHtlc => IncomingPacket.decrypt(updateAddHtlc, nodeParams.privateKey))
-        .collect(PostRestartHtlcCleaner decryptedIncomingHtlcs nodeParams.db.payments)
+        .map(incomingUpdateAdd => IncomingPacket.decrypt(incomingUpdateAdd, nodeParams.privateKey)(log))
+        .collect(packet => PostRestartHtlcCleaner.decryptedIncomingHtlcs(nodeParams.db.payments)(packet))
 
     private def htlcsOut = for {
       data <- channelsDb.listHotChannels

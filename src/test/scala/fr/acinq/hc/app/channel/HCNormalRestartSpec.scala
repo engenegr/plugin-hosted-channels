@@ -1,4 +1,4 @@
-package fr.acinq.hc.app.Channel
+package fr.acinq.hc.app.channel
 
 import akka.actor.PoisonPill
 import fr.acinq.eclair._
@@ -6,7 +6,6 @@ import fr.acinq.eclair.channel._
 import fr.acinq.eclair.io.PeerDisconnected
 import fr.acinq.eclair.payment.relay.Relayer
 import fr.acinq.eclair.wire.{ChannelUpdate, UpdateAddHtlc, UpdateFulfillHtlc}
-import fr.acinq.hc.app.channel.HC_DATA_ESTABLISHED
 import fr.acinq.hc.app._
 import org.scalatest.Outcome
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
@@ -365,5 +364,37 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     awaitCond(f2.bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.htlcs.isEmpty)
     awaitCond(f2.alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 9999900000L.msat)
     awaitCond(f2.bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 100000L.msat)
+  }
+
+  test("Bob re-sends an HTLC fulfill in got in OFFLINE for a CLOSED channel") { f =>
+    import f._
+    HCTestUtils.resetEntireDatabase(aliceDB)
+    HCTestUtils.resetEntireDatabase(bobDB)
+    reachNormal(f)
+    val (preimage3, alice2bobUpdateAdd3) = addHtlcFromAliceToBob(15000L.msat, f, currentBlockHeight)
+
+    alice ! PeerDisconnected(null, null)
+    bob ! PeerDisconnected(null, null)
+    awaitCond(alice.stateName == OFFLINE)
+    awaitCond(bob.stateName == OFFLINE)
+
+    alice ! HC_CMD_SUSPEND(randomKey.publicKey)
+    awaitCond(alice.stateName == OFFLINE) // Not leaving an OFFLINE state
+
+    bob ! HC_CMD_SUSPEND(randomKey.publicKey)
+    awaitCond(bob.stateName == OFFLINE) // Not leaving an OFFLINE state
+
+    bob ! CMD_FULFILL_HTLC(alice2bobUpdateAdd3.id, preimage3) // Bob gets a fulfill for a first payment while offline
+    bob2alice.expectMsgType[UpdateFulfillHtlc] // Goes nowhere
+
+    bob ! Worker.HCPeerConnected
+    alice ! Worker.HCPeerConnected
+    alice ! bob2alice.expectMsgType[fr.acinq.eclair.wire.Error]
+    alice ! bob2alice.expectMsgType[UpdateFulfillHtlc]
+    bob2alice.expectNoMessage()
+    alice2bob.expectNoMessage()
+
+    awaitCond(alice.stateName == CLOSED)
+    awaitCond(alice.stateName == CLOSED)
   }
 }

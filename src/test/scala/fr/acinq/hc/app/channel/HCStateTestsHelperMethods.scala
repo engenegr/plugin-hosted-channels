@@ -1,4 +1,4 @@
-package fr.acinq.hc.app.Channel
+package fr.acinq.hc.app.channel
 
 import java.net.InetSocketAddress
 import java.util.UUID

@@ -1,4 +1,4 @@
-package fr.acinq.hc.app.Channel
+package fr.acinq.hc.app.channel
 
 import akka.actor.FSM.StateTimeout
 import fr.acinq.bitcoin.ByteVector32

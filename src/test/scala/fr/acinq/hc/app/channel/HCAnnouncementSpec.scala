@@ -1,4 +1,4 @@
-package fr.acinq.hc.app.Channel
+package fr.acinq.hc.app.channel
 
 import fr.acinq.eclair.channel.{LocalChannelUpdate, NORMAL, OFFLINE}
 import fr.acinq.eclair.io.PeerDisconnected

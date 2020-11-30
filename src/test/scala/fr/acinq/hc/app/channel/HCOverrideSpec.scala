@@ -1,4 +1,4 @@
-package fr.acinq.hc.app.Channel
+package fr.acinq.hc.app.channel
 
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64}
 import fr.acinq.eclair._

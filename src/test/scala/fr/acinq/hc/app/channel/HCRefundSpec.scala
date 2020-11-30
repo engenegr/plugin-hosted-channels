@@ -1,4 +1,4 @@
-package fr.acinq.hc.app.Channel
+package fr.acinq.hc.app.channel
 
 import fr.acinq.eclair._
 import fr.acinq.eclair.channel.{CLOSED, NORMAL, OFFLINE}
