@@ -4,8 +4,8 @@ import fr.acinq.hc.app.wire.Codecs._
 import fr.acinq.eclair.wire.ChannelCodecs._
 import fr.acinq.eclair.wire.LightningMessageCodecs.{channelUpdateCodec, channelAnnouncementCodec, errorCodec}
 import fr.acinq.hc.app.channel.{ErrorExt, HC_DATA_ESTABLISHED, HostedCommitments, HostedState}
-import scodec.codecs.{bool, either, listOfN, optional, uint16, uint8, utf8, variableSizeBytes}
-import fr.acinq.eclair.wire.CommonCodecs.{bytes32, publicKey, setCodec, uint64overflow}
+import scodec.codecs.{bool, listOfN, optional, uint16, uint8, utf8, variableSizeBytes}
+import fr.acinq.eclair.wire.CommonCodecs.{bytes32, publicKey}
 import scodec.Codec
 
 
@@ -18,7 +18,8 @@ object HostedChannelCodecs {
       (commitmentSpecCodec withContext "localSpec") ::
       (originsMapCodec withContext "originChannels") ::
       (lastCrossSignedStateCodec withContext "lastCrossSignedState") ::
-      (listOfN(uint8, either(bool, updateWithChannelIdCodec, updateWithChannelIdCodec)) withContext "futureUpdates") ::
+      (listOfN(uint8, updateMessageWithHasChannelIdCodec) withContext "nextLocalUpdates") ::
+      (listOfN(uint8, updateMessageWithHasChannelIdCodec) withContext "nextRemoteUpdates") ::
       (bool withContext "announceChannel")
   }.as[HostedCommitments]
 
@@ -31,7 +32,7 @@ object HostedChannelCodecs {
   val HC_DATA_ESTABLISHED_Codec: Codec[HC_DATA_ESTABLISHED] = {
     (hostedCommitmentsCodec withContext "commitments") ::
       (lengthDelimited(channelUpdateCodec) withContext "channelUpdate") ::
-      (optional(bool8, errorExtCodec) withContext "localError") ::
+      (listOfN(uint8, errorExtCodec) withContext "localErrors") ::
       (optional(bool8, errorExtCodec) withContext "remoteError") ::
       (optional(bool8, stateOverrideCodec) withContext "overrideProposal") ::
       (optional(bool8, refundPendingCodec) withContext "refundPendingInfo") ::

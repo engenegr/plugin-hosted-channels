@@ -44,7 +44,7 @@ class HostedChannelsDbSpec extends AnyFunSuite {
     val cdb = new HostedChannelsDb(Config.db)
     val secret = ByteVector32.Zeroes.bytes
 
-    val hdc1 = hdc.copy(futureUpdates = Nil, originChannels = Map.empty)
+    val hdc1 = hdc.copy(nextLocalUpdates = Nil, nextRemoteUpdates = Nil, originChannels = Map.empty)
     val data1 = data.copy(commitments = hdc1, remoteError = None, refundPendingInfo = None, refundCompleteInfo = None)
 
     cdb.updateOrAddNewChannel(data1)
@@ -61,7 +61,7 @@ class HostedChannelsDbSpec extends AnyFunSuite {
     val data1 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(1L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
     val data2 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(2L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
     val data3 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(3L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32,
-      futureUpdates = Nil, localSpec = CommitmentSpec(htlcs = Set.empty, feeratePerKw = FeeratePerKw(Satoshi(0L)), toLocal = MilliSatoshi(Random.nextInt(Int.MaxValue)),
+      nextLocalUpdates = Nil, nextRemoteUpdates = Nil, localSpec = CommitmentSpec(htlcs = Set.empty, feeratePerKw = FeeratePerKw(Satoshi(0L)), toLocal = MilliSatoshi(Random.nextInt(Int.MaxValue)),
         toRemote = MilliSatoshi(Random.nextInt(Int.MaxValue)))))
 
     cdb.updateOrAddNewChannel(data1)

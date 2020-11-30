@@ -1,28 +1,27 @@
-package fr.acinq.hc.app
+package fr.acinq.hc.app.Channel
 
 import java.net.InetSocketAddress
 import java.util.UUID
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorSystem
 import akka.testkit.{TestFSMRef, TestKitBase, TestProbe}
-import fr.acinq.bitcoin.{ByteVector32, Crypto}
 import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.{ByteVector32, Crypto}
 import fr.acinq.eclair.TestConstants.Bob
-import fr.acinq.eclair.{CltvExpiryDelta, Kit, MilliSatoshi, TestConstants, randomBytes32, randomKey}
-import fr.acinq.eclair.channel.{CMD_ADD_HTLC, CMD_FULFILL_HTLC, CMD_SIGN, LocalChannelDown, LocalChannelUpdate, NORMAL, RES_SUCCESS, SYNCING, State}
+import fr.acinq.eclair.channel._
 import fr.acinq.eclair.io.{ConnectionInfo, PeerConnected}
 import fr.acinq.eclair.payment.OutgoingPacket
 import fr.acinq.eclair.payment.OutgoingPacket.Upstream
 import fr.acinq.eclair.payment.relay.Relayer
 import fr.acinq.eclair.router.Router.ChannelHop
 import fr.acinq.eclair.wire.Onion.FinalLegacyPayload
-import fr.acinq.eclair.wire.{AnnouncementMessage, ChannelUpdate, HasChannelId, UnknownMessage, UpdateAddHtlc, UpdateFulfillHtlc}
+import fr.acinq.eclair.wire._
+import fr.acinq.eclair.{CltvExpiryDelta, Kit, MilliSatoshi, TestConstants, randomBytes32}
 import fr.acinq.hc.app.channel._
 import fr.acinq.hc.app.dbo.HostedChannelsDb
+import fr.acinq.hc.app._
 import org.scalatest.{FixtureTestSuite, ParallelTestExecution}
 import slick.jdbc.PostgresProfile
-
-import scala.collection.mutable
 
 trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with ParallelTestExecution {
 
@@ -138,9 +137,9 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
     (paymentPreimage, cmd, replyTo)
   }
 
-  def addHtlcFromAliceToBob(amount: MilliSatoshi, setup: SetupFixture): (ByteVector32, UpdateAddHtlc) = {
+  def addHtlcFromAliceToBob(amount: MilliSatoshi, setup: SetupFixture, blockHeight: Long): (ByteVector32, UpdateAddHtlc) = {
     import setup._
-    val (preimage, cmd_add, replyListener) = makeCmdAdd(amount, randomKey.publicKey, currentBlockHeight)
+    val (preimage, cmd_add, replyListener) = makeCmdAdd(amount, bobKit.nodeParams.nodeId, blockHeight)
     alice ! cmd_add
     alice ! CMD_SIGN(None)
     replyListener.expectMsgType[RES_SUCCESS[_]]
@@ -149,7 +148,6 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
     bob ! alice2bob.expectMsgType[StateUpdate]
     alice ! bob2alice.expectMsgType[StateUpdate]
     bob ! alice2bob.expectMsgType[StateUpdate]
-    alice ! bob2alice.expectMsgType[StateUpdate]
     bob2alice.expectNoMessage()
     alice2bob.expectNoMessage()
     bobRelayer.expectMsgType[Relayer.RelayForward]
@@ -157,7 +155,7 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
     (preimage, alice2bobUpdateAdd)
   }
 
-  def fulfillHtlc(htlcId: Long, preimage: ByteVector32, setup: SetupFixture): Unit = {
+  def fulfillAliceHtlcByBob(htlcId: Long, preimage: ByteVector32, setup: SetupFixture): Unit = {
     import setup._
     bob ! CMD_FULFILL_HTLC(htlcId, preimage)
     bob ! CMD_SIGN(None)
@@ -165,8 +163,39 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
     alice ! bob2alice.expectMsgType[StateUpdate]
     bob ! alice2bob.expectMsgType[StateUpdate]
     alice ! bob2alice.expectMsgType[StateUpdate]
-    bob ! alice2bob.expectMsgType[StateUpdate]
+    aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
     bob2alice.expectNoMessage()
     alice2bob.expectNoMessage()
+  }
+
+  def addHtlcFromBob2Alice(amount: MilliSatoshi, setup: SetupFixture): (ByteVector32, UpdateAddHtlc) = {
+    import setup._
+    val (preimage, cmd_add, replyListener) = makeCmdAdd(amount, aliceKit.nodeParams.nodeId, currentBlockHeight)
+    bob ! cmd_add
+    bob ! CMD_SIGN(None)
+    replyListener.expectMsgType[RES_SUCCESS[_]]
+    val bob2aliceUpdateAdd = bob2alice.expectMsgType[UpdateAddHtlc]
+    alice ! bob2aliceUpdateAdd
+    alice ! bob2alice.expectMsgType[StateUpdate]
+    bob ! alice2bob.expectMsgType[StateUpdate]
+    alice ! bob2alice.expectMsgType[StateUpdate]
+    alice2bob.expectNoMessage()
+    bob2alice.expectNoMessage()
+    aliceRelayer.expectMsgType[Relayer.RelayForward]
+    aliceRelayer.expectNoMessage()
+    (preimage, bob2aliceUpdateAdd)
+  }
+
+  def fulfillBobHtlcByAlice(htlcId: Long, preimage: ByteVector32, setup: SetupFixture): Unit = {
+    import setup._
+    alice ! CMD_FULFILL_HTLC(htlcId, preimage)
+    alice ! CMD_SIGN(None)
+    bob ! alice2bob.expectMsgType[UpdateFulfillHtlc]
+    bob ! alice2bob.expectMsgType[StateUpdate]
+    alice ! bob2alice.expectMsgType[StateUpdate]
+    bob ! alice2bob.expectMsgType[StateUpdate]
+    bobRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
+    alice2bob.expectNoMessage()
+    bob2alice.expectNoMessage()
   }
 }

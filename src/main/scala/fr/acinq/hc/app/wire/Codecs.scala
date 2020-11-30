@@ -50,8 +50,7 @@ object Codecs {
     (uint32 withContext "blockDay") ::
       (uint32 withContext "localUpdates") ::
       (uint32 withContext "remoteUpdates") ::
-      (bytes64 withContext "localSigOfRemoteLCSS") ::
-      (bool withContext "isTerminal")
+      (bytes64 withContext "localSigOfRemoteLCSS")
   }.as[StateUpdate]
 
   val stateOverrideCodec: Codec[StateOverride] = {
@@ -76,12 +75,8 @@ object Codecs {
   val replyPublicHostedChannelsEndCodec: Codec[ReplyPublicHostedChannelsEnd] =
     (bytes32 withContext "chainHash").as[ReplyPublicHostedChannelsEnd]
 
-  type UpdateWithChannelId = fr.acinq.eclair.wire.UpdateMessage with fr.acinq.eclair.wire.HasChannelId
-  // Left is locally sent from us to remote peer, Right is remotely sent from from remote peer to us
-  type LocalOrRemoteUpdateWithChannelId = Either[UpdateWithChannelId, UpdateWithChannelId]
-
-  val updateWithChannelIdCodec: Codec[UpdateWithChannelId] =
-    lightningMessageCodec.narrow(Attempt successful _.asInstanceOf[UpdateWithChannelId], identity)
+  val updateMessageWithHasChannelIdCodec: Codec[UpdateMessage with HasChannelId] =
+    lightningMessageCodec.narrow(Attempt successful _.asInstanceOf[UpdateMessage with HasChannelId], identity)
 
   // HC messages which don't have channel id
 

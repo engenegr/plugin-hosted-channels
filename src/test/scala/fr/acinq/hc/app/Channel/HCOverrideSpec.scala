@@ -1,13 +1,14 @@
-package fr.acinq.hc.app
+package fr.acinq.hc.app.Channel
 
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64}
 import fr.acinq.eclair._
 import fr.acinq.eclair.blockchain.CurrentBlockCount
-import fr.acinq.eclair.channel.{CLOSED, NORMAL, OFFLINE, RES_ADD_SETTLED, SYNCING}
+import fr.acinq.eclair.channel._
 import fr.acinq.eclair.io.PeerDisconnected
 import fr.acinq.eclair.transactions.DirectedHtlc
 import fr.acinq.eclair.wire.{ChannelUpdate, UpdateFailHtlc, UpdateFulfillHtlc}
 import fr.acinq.hc.app.channel.{HC_CMD_OVERRIDE_ACCEPT, HC_CMD_OVERRIDE_PROPOSE, HC_DATA_ESTABLISHED}
+import fr.acinq.hc.app.{wire => _, _}
 import org.scalatest.Outcome
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 import scodec.bits.ByteVector
@@ -36,18 +37,18 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     HCTestUtils.resetEntireDatabase(aliceDB)
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
-    val (preimage, alice2bobUpdateAdd) = addHtlcFromAliceToBob(100000L.msat, f)
-    fulfillHtlc(alice2bobUpdateAdd.id, preimage, f)
+    val (preimage, alice2bobUpdateAdd) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
+    fulfillAliceHtlcByBob(alice2bobUpdateAdd.id, preimage, f)
     assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal === 100000L.msat)
     assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal === 100000L.msat)
     assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal === 9999900000L.msat)
     assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal === 9999900000L.msat)
-    val (_, alice2bobUpdateAdd1) = addHtlcFromAliceToBob(200000L.msat, f)
+    val (_, alice2bobUpdateAdd1) = addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight)
     alice ! UpdateFulfillHtlc(alice2bobUpdateAdd1.channelId, alice2bobUpdateAdd1.id, ByteVector32.Zeroes) // Wrong preimage
     bob ! alice2bob.expectMsgType[wire.Error]
     awaitCond(alice.stateName == CLOSED)
     awaitCond(bob.stateName == CLOSED)
-    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].localError.isDefined)
+    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].localErrors.nonEmpty)
     assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].remoteError.isDefined)
     alice ! HC_CMD_OVERRIDE_PROPOSE(bobKit.nodeParams.nodeId, newLocalBalance = 9999899999L.msat)
     bob ! alice2bob.expectMsgType[StateOverride].copy(localSigOfRemoteLCSS = ByteVector64.Zeroes) // Wrong signature
@@ -69,14 +70,13 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     HCTestUtils.resetEntireDatabase(aliceDB)
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
-    val (preimage, alice2bobUpdateAdd) = addHtlcFromAliceToBob(100000L.msat, f)
-    fulfillHtlc(alice2bobUpdateAdd.id, preimage, f)
+    val (preimage, alice2bobUpdateAdd) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
+    fulfillAliceHtlcByBob(alice2bobUpdateAdd.id, preimage, f)
     assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal === 100000L.msat)
     assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal === 100000L.msat)
     assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal === 9999900000L.msat)
     assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal === 9999900000L.msat)
-    aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
-    val (_, alice2bobUpdateAdd1) = addHtlcFromAliceToBob(200000L.msat, f)
+    val (_, alice2bobUpdateAdd1) = addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight)
     alice ! UpdateFulfillHtlc(alice2bobUpdateAdd1.channelId, alice2bobUpdateAdd1.id, ByteVector32.Zeroes) // Wrong preimage
     bob ! alice2bob.expectMsgType[wire.Error]
     awaitCond(alice.stateName == CLOSED)
@@ -111,14 +111,13 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     HCTestUtils.resetEntireDatabase(aliceDB)
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
-    val (preimage, alice2bobUpdateAdd) = addHtlcFromAliceToBob(100000L.msat, f)
-    fulfillHtlc(alice2bobUpdateAdd.id, preimage, f)
+    val (preimage, alice2bobUpdateAdd) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
+    fulfillAliceHtlcByBob(alice2bobUpdateAdd.id, preimage, f)
     assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal === 100000L.msat)
     assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal === 100000L.msat)
     assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal === 9999900000L.msat)
     assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal === 9999900000L.msat)
-    aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
-    val (preimage1, alice2bobUpdateAdd1) = addHtlcFromAliceToBob(200000L.msat, f)
+    val (preimage1, alice2bobUpdateAdd1) = addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight)
     alice ! UpdateFulfillHtlc(alice2bobUpdateAdd1.channelId, alice2bobUpdateAdd1.id, ByteVector32.Zeroes) // Wrong preimage
     bob ! alice2bob.expectMsgType[wire.Error]
     awaitCond(alice.stateName == CLOSED)
@@ -150,14 +149,13 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     HCTestUtils.resetEntireDatabase(aliceDB)
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
-    val (preimage, alice2bobUpdateAdd) = addHtlcFromAliceToBob(100000L.msat, f)
-    fulfillHtlc(alice2bobUpdateAdd.id, preimage, f)
+    val (preimage, alice2bobUpdateAdd) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
+    fulfillAliceHtlcByBob(alice2bobUpdateAdd.id, preimage, f)
     assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal === 100000L.msat)
     assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal === 100000L.msat)
     assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal === 9999900000L.msat)
     assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal === 9999900000L.msat)
-    aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
-    val (preimage1, alice2bobUpdateAdd1) = addHtlcFromAliceToBob(200000L.msat, f)
+    val (preimage1, alice2bobUpdateAdd1) = addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight)
     alice ! UpdateFulfillHtlc(alice2bobUpdateAdd1.channelId, alice2bobUpdateAdd1.id, ByteVector32.Zeroes) // Wrong preimage
     bob ! alice2bob.expectMsgType[wire.Error]
     awaitCond(alice.stateName == CLOSED)

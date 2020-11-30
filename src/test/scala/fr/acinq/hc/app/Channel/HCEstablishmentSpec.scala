@@ -1,18 +1,16 @@
-package fr.acinq.hc.app
+package fr.acinq.hc.app.Channel
 
 import akka.actor.FSM.StateTimeout
 import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.eclair.TestConstants.{Alice, Bob}
-import fr.acinq.eclair.TestKitBaseClass
-import fr.acinq.eclair.channel.{LocalChannelDown, LocalChannelUpdate, NORMAL, OFFLINE, SYNCING}
+import fr.acinq.eclair.channel._
 import fr.acinq.eclair.io.PeerDisconnected
-import slick.jdbc.PostgresProfile.api._
+import fr.acinq.eclair.{TestKitBaseClass, wire}
+import fr.acinq.eclair.wire.ChannelUpdate
 import fr.acinq.hc.app.channel._
+import fr.acinq.hc.app._
 import org.scalatest.Outcome
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
-import fr.acinq.eclair.wire
-import fr.acinq.eclair.wire.ChannelUpdate
-import fr.acinq.hc.app.dbo.{Blocking, Channels}
 
 class HCEstablishmentSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCStateTestsHelperMethods {
 
@@ -78,77 +76,6 @@ class HCEstablishmentSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     // Retry
     val f2 = init()
     reachNormal(f2)
-  }
-
-  test("Client disconnects before obtaining StateUpdate, then restores HC on reconnect") { f =>
-
-    HCTestUtils.resetEntireDatabase(f.aliceDB)
-    HCTestUtils.resetEntireDatabase(f.bobDB)
-    f.bob ! Worker.HCPeerConnected
-    f.alice ! Worker.HCPeerConnected
-    awaitCond(f.bob.stateName == SYNCING)
-    awaitCond(f.alice.stateName == SYNCING)
-    f.bob ! HC_CMD_LOCAL_INVOKE(f.aliceKit.nodeParams.nodeId, Bob.channelParams.defaultFinalScriptPubKey, ByteVector32.Zeroes)
-    awaitCond(f.bob.stateData.isInstanceOf[HC_DATA_CLIENT_WAIT_HOST_INIT])
-    f.alice ! f.bob2alice.expectMsgType[InvokeHostedChannel]
-    awaitCond(f.alice.stateData.isInstanceOf[HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE])
-    f.bob ! f.alice2bob.expectMsgType[InitHostedChannel]
-    awaitCond(f.bob.stateData.isInstanceOf[HC_DATA_CLIENT_WAIT_HOST_STATE_UPDATE])
-    f.alice ! f.bob2alice.expectMsgType[StateUpdate] // Alice persists a channel
-    f.alice2bob.expectMsgType[StateUpdate] // Goes nowhere
-    f.alice2bob.expectMsgType[ChannelUpdate] // Goes nowhere
-    awaitCond(f.alice.stateName == NORMAL)
-    awaitCond(f.bob.stateName == SYNCING)
-    f.alice ! PeerDisconnected(null, null)
-    f.bob ! PeerDisconnected(null, null)
-    awaitCond(f.alice.stateName == OFFLINE)
-    f.bob2alice.expectTerminated(f.bob)
-
-    val f2 = init()  // Alice actor stays as f.alice, but connection reference gets updated to f2.alice2bob
-    f2.bob ! Worker.HCPeerConnected
-    f.alice ! Worker.HCPeerConnected
-    awaitCond(f2.bob.stateName == SYNCING)
-    awaitCond(f.alice.stateName == SYNCING)
-    awaitCond(f2.bob.stateData == HC_NOTHING)
-    awaitCond(f.alice.stateData.isInstanceOf[HC_DATA_ESTABLISHED])
-    f2.bob ! HC_CMD_LOCAL_INVOKE(f.aliceKit.nodeParams.nodeId, Bob.channelParams.defaultFinalScriptPubKey, ByteVector32.Zeroes)
-    awaitCond(f2.bob.stateData.isInstanceOf[HC_DATA_CLIENT_WAIT_HOST_INIT])
-    f.alice ! f2.bob2alice.expectMsgType[InvokeHostedChannel]
-    f2.bob ! f2.alice2bob.expectMsgType[LastCrossSignedState] // Bob was expecting for InitHostedChannel, but got LastCrossSignedState
-    f.alice ! f2.bob2alice.expectMsgType[LastCrossSignedState]
-    val bobData = f2.bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED]
-    val aliceData = f.alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED]
-    assert(!bobData.commitments.isHost)
-    assert(aliceData.commitments.isHost)
-    assert(bobData.commitments.lastCrossSignedState.verifyRemoteSig(Alice.nodeParams.nodeId))
-    assert(aliceData.commitments.lastCrossSignedState.verifyRemoteSig(Bob.nodeParams.nodeId))
-    awaitCond(f2.bob.stateName == NORMAL)
-    awaitCond(f.alice.stateName == NORMAL)
-  }
-
-  test("Host loses channel data, restores from client data") { f =>
-    HCTestUtils.resetEntireDatabase(f.aliceDB)
-    HCTestUtils.resetEntireDatabase(f.bobDB)
-    reachNormal(f)
-    Blocking.txWrite(Channels.model.delete, f.aliceDB)
-    f.bob ! PeerDisconnected(null, null)
-    awaitCond(f.bob.stateName == OFFLINE)
-
-    val f2 = init() // Bob actor stays as f.bob, but connection reference gets updated to f2.bob2alice
-    f.bob ! Worker.HCPeerConnected
-    f2.alice ! Worker.HCPeerConnected
-    awaitCond(f.bob.stateName == SYNCING)
-    awaitCond(f2.alice.stateName == SYNCING)
-    f2.alice ! f2.bob2alice.expectMsgType[InvokeHostedChannel]
-    f.bob ! f2.alice2bob.expectMsgType[InitHostedChannel]
-    f2.alice ! f2.bob2alice.expectMsgType[LastCrossSignedState]
-    f.bob ! f2.alice2bob.expectMsgType[LastCrossSignedState]
-    val bobData = f.bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED]
-    val aliceData = f2.alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED]
-    assert(!bobData.commitments.isHost)
-    assert(aliceData.commitments.isHost)
-    assert(bobData.commitments.lastCrossSignedState.verifyRemoteSig(Alice.nodeParams.nodeId))
-    assert(aliceData.commitments.lastCrossSignedState.verifyRemoteSig(Bob.nodeParams.nodeId))
   }
 
   test("Host rejects a channel with duplicate id") { f =>

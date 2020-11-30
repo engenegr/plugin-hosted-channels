@@ -92,16 +92,15 @@ class HC extends Plugin {
     override def feature: Feature = HCFeature
 
     override def getIncomingHtlcs(nodeParams: NodeParams)(implicit log: LoggingAdapter): Seq[IncomingHtlc] =
-      channelsDb.listHotChannels.flatMap(_.commitments.nextLocalSpec.htlcs).collect(DirectedHtlc.incoming)
+      channelsDb.listHotChannels.flatMap(_.commitments.localSpec.htlcs).collect(DirectedHtlc.incoming)
         .map(updateAddHtlc => IncomingPacket.decrypt(updateAddHtlc, nodeParams.privateKey))
-        .collect(PostRestartHtlcCleaner.decryptedIncomingHtlcs(nodeParams.db.payments))
+        .collect(PostRestartHtlcCleaner decryptedIncomingHtlcs nodeParams.db.payments)
 
     private def htlcsOut = for {
       data <- channelsDb.listHotChannels
-      channelId = Tools.hostedChanId(data.commitments.localNodeId.value, data.commitments.remoteNodeId.value)
-      outgoingHtlc <- data.commitments.nextLocalSpec.htlcs.collect(DirectedHtlc.outgoing)
-      origin <- data.commitments.originChannels.get(outgoingHtlc.id)
-    } yield (origin, channelId, outgoingHtlc.id)
+      outgoingAdd <- data.pendingHtlcs.collect(DirectedHtlc.outgoing)
+      origin <- data.commitments.originChannels.get(outgoingAdd.id)
+    } yield (origin, data.commitments.channelId, outgoingAdd.id)
 
     type PaymentLocations = Set[PostRestartHtlcCleaner.ChannelIdAndHtlcId]
     override def getHtlcsRelayedOut(htlcsIn: Seq[IncomingHtlc] = Nil): Map[Origin, PaymentLocations] =

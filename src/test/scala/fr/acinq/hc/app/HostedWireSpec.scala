@@ -65,13 +65,14 @@ object HostedWireSpec {
     originChannels = Map(42L -> Origin.LocalCold(UUID.randomUUID),
       15000L -> Origin.ChannelRelayedCold(ByteVector32(ByteVector.fill(32)(42)), 43, MilliSatoshi(11000000L), MilliSatoshi(10000000L))),
     lcss1,
-    futureUpdates = List(Right(add1), Left(add2)),
+    nextLocalUpdates = List(add1, add2),
+    nextRemoteUpdates = Nil,
     announceChannel = false)
 
   val data: HC_DATA_ESTABLISHED = HC_DATA_ESTABLISHED(
     hdc,
     channelUpdate,
-    localError = None,
+    localErrors = Nil,
     remoteError = Some(ErrorExt generateFrom error),
     overrideProposal = None,
     refundPendingInfo = Some(RefundPending(System.currentTimeMillis / 1000)),

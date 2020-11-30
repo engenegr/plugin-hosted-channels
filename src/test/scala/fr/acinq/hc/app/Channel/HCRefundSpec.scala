@@ -1,10 +1,11 @@
-package fr.acinq.hc.app
+package fr.acinq.hc.app.Channel
 
 import fr.acinq.eclair._
 import fr.acinq.eclair.channel.{CLOSED, NORMAL, OFFLINE}
 import fr.acinq.eclair.io.PeerDisconnected
 import fr.acinq.eclair.wire.ChannelUpdate
 import fr.acinq.hc.app.channel.{HC_CMD_FINALIZE_REFUND, HC_CMD_INIT_PENDING_REFUND, HC_CMD_OVERRIDE_PROPOSE, HC_DATA_ESTABLISHED}
+import fr.acinq.hc.app.{wire => _, _}
 import org.scalatest.Outcome
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 
@@ -77,8 +78,8 @@ class HCRefundSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     bob ! alice2bob.expectMsgType[RefundPending]
     assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].refundPendingInfo.isDefined)
     // Real Bob sees a notification and cancels pending refund by receiving/sending a payment
-    val (preimage, alice2bobUpdateAdd) = addHtlcFromAliceToBob(100000L.msat, f)
-    fulfillHtlc(alice2bobUpdateAdd.id, preimage, f)
+    val (preimage, alice2bobUpdateAdd) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
+    fulfillAliceHtlcByBob(alice2bobUpdateAdd.id, preimage, f)
     awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].errorExt.isEmpty)
     awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].refundPendingInfo.isEmpty)
     awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].refundCompleteInfo.isEmpty)

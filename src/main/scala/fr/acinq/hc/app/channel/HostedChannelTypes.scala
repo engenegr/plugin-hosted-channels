@@ -3,12 +3,10 @@ package fr.acinq.hc.app.channel
 import fr.acinq.eclair._
 import fr.acinq.hc.app._
 import fr.acinq.eclair.channel._
-
 import scala.util.{Failure, Success, Try}
 import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
 import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc}
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, Satoshi}
-import fr.acinq.hc.app.wire.Codecs.{LocalOrRemoteUpdateWithChannelId, UpdateWithChannelId}
 import fr.acinq.eclair.payment.OutgoingPacket
 import fr.acinq.eclair.MilliSatoshi
 import scodec.bits.ByteVector
@@ -35,7 +33,7 @@ case class HC_CMD_PRIVATE(remoteNodeId: PublicKey) extends HasRemoteNodeIdHosted
 
 case class HC_CMD_GET_INFO(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 
-case class HC_SUSPEND(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
+case class HC_CMD_SUSPEND(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 
 sealed trait HCCommandResponse
 
@@ -59,19 +57,17 @@ case class HC_DATA_CLIENT_WAIT_HOST_STATE_UPDATE(commitments: HostedCommitments)
 
 case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
                                channelUpdate: wire.ChannelUpdate,
-                               localError: Option[ErrorExt] = None,
+                               localErrors: List[ErrorExt] = Nil,
                                remoteError: Option[ErrorExt] = None,
                                overrideProposal: Option[StateOverride] = None, // CLOSED channel override can be initiated by Host
                                refundPendingInfo: Option[RefundPending] = None, // Will be present in case if funds should be refunded
                                refundCompleteInfo: Option[String] = None, // Will be present after channel has been manually updated as a refunded one
                                channelAnnouncement: Option[wire.ChannelAnnouncement] = None) extends HostedData {
 
-  lazy val commitmentsOpt: Option[HostedCommitments] = Some(commitments)
-
-  lazy val errorExt: Option[ErrorExt] = localError orElse remoteError
+  lazy val errorExt: Option[ErrorExt] = localErrors.headOption orElse remoteError
 
   lazy val pendingHtlcs: Set[DirectedHtlc] = if (errorExt.isEmpty) {
-    // In operational state a peer may send FAIL or we may send (and sign) ADD without subsequent state update
+    // In operational state peer may send FAIL or we may send (and sign) ADD without subsequent state update
     // so we must always look at both localSpec and nextLocalSpec to always see an entire pending HTLC set
     commitments.localSpec.htlcs ++ commitments.nextLocalSpec.htlcs
   } else {
@@ -92,14 +88,13 @@ case class HostedCommitments(isHost: Boolean,
                              localSpec: CommitmentSpec,
                              originChannels: Map[Long, Origin],
                              lastCrossSignedState: LastCrossSignedState,
-                             futureUpdates: List[LocalOrRemoteUpdateWithChannelId],
+                             nextLocalUpdates: List[wire.UpdateMessage with wire.HasChannelId],
+                             nextRemoteUpdates: List[wire.UpdateMessage with wire.HasChannelId],
                              announceChannel: Boolean) extends AbstractCommitments {
 
-  val (nextLocalUpdates, nextRemoteUpdates, nextTotalLocal, nextTotalRemote) =
-    futureUpdates.foldLeft((List.empty[UpdateWithChannelId], List.empty[UpdateWithChannelId], lastCrossSignedState.localUpdates, lastCrossSignedState.remoteUpdates)) {
-      case ((localMessages, remoteMessages, totalLocalNumber, totalRemoteNumber), Left(msg)) => (localMessages :+ msg, remoteMessages, totalLocalNumber + 1, totalRemoteNumber)
-      case ((localMessages, remoteMessages, totalLocalNumber, totalRemoteNumber), Right(msg)) => (localMessages, remoteMessages :+ msg, totalLocalNumber, totalRemoteNumber + 1)
-    }
+  val nextTotalLocal: Long = lastCrossSignedState.localUpdates + nextLocalUpdates.size
+
+  val nextTotalRemote: Long = lastCrossSignedState.remoteUpdates + nextRemoteUpdates.size
 
   val nextLocalSpec: CommitmentSpec = CommitmentSpec.reduce(localSpec, nextLocalUpdates, nextRemoteUpdates)
 
@@ -109,7 +104,9 @@ case class HostedCommitments(isHost: Boolean,
 
   val capacity: Satoshi = lastCrossSignedState.initHostedChannel.channelCapacityMsat.truncateToSatoshi
 
-  def addProposal(update: LocalOrRemoteUpdateWithChannelId): HostedCommitments = copy(futureUpdates = futureUpdates :+ update)
+  def addLocalProposal(update: wire.UpdateMessage with wire.HasChannelId): HostedCommitments = copy(nextLocalUpdates = nextLocalUpdates :+ update)
+
+  def addRemoteProposal(update: wire.UpdateMessage with wire.HasChannelId): HostedCommitments = copy(nextRemoteUpdates = nextRemoteUpdates :+ update)
 
   // Find a cross-signed (in localSpec) and still not resolved (also in nextLocalSpec)
   def getOutgoingHtlcCrossSigned(htlcId: Long): Option[wire.UpdateAddHtlc] =
@@ -130,19 +127,11 @@ case class HostedCommitments(isHost: Boolean,
       localSigned.add
     }
 
-  def nextLocalUnsignedLCSS(blockDay: Long): LastCrossSignedState = LastCrossSignedState(lastCrossSignedState.refundScriptPubKey,
-    lastCrossSignedState.initHostedChannel, blockDay, nextLocalSpec.toLocal, nextLocalSpec.toRemote, nextTotalLocal, nextTotalRemote,
-    nextLocalSpec.htlcs.collect(DirectedHtlc.incoming).toList, nextLocalSpec.htlcs.collect(DirectedHtlc.outgoing).toList,
-    localSigOfRemote = ByteVector64.Zeroes, remoteSigOfLocal = ByteVector64.Zeroes)
-
-  // Rebuild all messaging and state history starting from local LCSS,
-  // then try to find a future state with same update numbers as remote LCSS
-  def findState(remoteLCSS: LastCrossSignedState): Seq[HostedCommitments] =
-    for {
-      previousIndex <- futureUpdates.indices drop 1
-      previousHC = copy(futureUpdates = futureUpdates take previousIndex)
-      if previousHC.nextLocalUnsignedLCSS(remoteLCSS.blockDay).isEven(remoteLCSS)
-    } yield previousHC
+  def nextLocalUnsignedLCSS(blockDay: Long): LastCrossSignedState =
+    LastCrossSignedState(lastCrossSignedState.refundScriptPubKey, lastCrossSignedState.initHostedChannel,
+      blockDay, localBalanceMsat = nextLocalSpec.toLocal, remoteBalanceMsat = nextLocalSpec.toRemote, nextTotalLocal, nextTotalRemote,
+      nextLocalSpec.htlcs.collect(DirectedHtlc.incoming).toList, nextLocalSpec.htlcs.collect(DirectedHtlc.outgoing).toList,
+      localSigOfRemote = ByteVector64.Zeroes, remoteSigOfLocal = ByteVector64.Zeroes)
 
   def sendAdd(cmd: CMD_ADD_HTLC, blockHeight: Long): Either[ChannelException, (HostedCommitments, wire.UpdateAddHtlc)] = {
     val minExpiry = Channel.MIN_CLTV_EXPIRY_DELTA.toCltvExpiry(blockHeight)
@@ -160,7 +149,7 @@ case class HostedCommitments(isHost: Boolean,
     }
 
     val add = wire.UpdateAddHtlc(channelId, nextTotalLocal + 1, cmd.amount, cmd.paymentHash, cmd.cltvExpiry, cmd.onion)
-    val commits1 = addProposal(Left(add)).copy(originChannels = originChannels + (add.id -> cmd.origin))
+    val commits1 = addLocalProposal(add).copy(originChannels = originChannels + (add.id -> cmd.origin))
     val outgoingHtlcs = commits1.nextLocalSpec.htlcs.collect(DirectedHtlc.outgoing)
 
     if (commits1.nextLocalSpec.toLocal < 0.msat) {
@@ -189,7 +178,7 @@ case class HostedCommitments(isHost: Boolean,
       throw HtlcValueTooSmall(channelId, minimum = lastCrossSignedState.initHostedChannel.htlcMinimumMsat, actual = add.amountMsat)
     }
 
-    val commits1 = addProposal(Right(add))
+    val commits1 = addRemoteProposal(add)
     val incomingHtlcs = commits1.nextLocalSpec.htlcs.collect(DirectedHtlc.incoming)
 
     if (commits1.nextLocalSpec.toRemote < 0.msat) {
@@ -213,7 +202,7 @@ case class HostedCommitments(isHost: Boolean,
     getIncomingHtlcCrossSigned(cmd.id) match {
       case Some(add) if add.paymentHash == Crypto.sha256(cmd.r) =>
         val fulfill = wire.UpdateFulfillHtlc(channelId, cmd.id, cmd.r)
-        Success(addProposal(Left(fulfill)), fulfill)
+        Success(addLocalProposal(fulfill), fulfill)
       case Some(_) => Failure(InvalidHtlcPreimage(channelId, cmd.id))
       case None => Failure(UnknownHtlcId(channelId, cmd.id))
     }
@@ -222,14 +211,15 @@ case class HostedCommitments(isHost: Boolean,
     // Technically peer may send a preimage at any moment, even if new LCSS has not been reached yet so do our best and always resolve on getting it
     // this is why for fulfills we look at `nextLocalSpec` only which may contain our not-yet-cross-signed Add which they may fulfill right away
     nextLocalSpec.findOutgoingHtlcById(fulfill.id) match {
-      case Some(htlc) if htlc.add.paymentHash == Crypto.sha256(fulfill.paymentPreimage) => Success((addProposal(Right(fulfill)), originChannels(fulfill.id), htlc.add))
+      case Some(htlc) if htlc.add.paymentHash == Crypto.sha256(fulfill.paymentPreimage) =>
+        Success((addRemoteProposal(fulfill), originChannels(fulfill.id), htlc.add))
       case Some(_) => Failure(InvalidHtlcPreimage(channelId, fulfill.id))
       case None => Failure(UnknownHtlcId(channelId, fulfill.id))
     }
 
   def sendFail(cmd: CMD_FAIL_HTLC, nodeSecret: PrivateKey): Try[(HostedCommitments, wire.UpdateFailHtlc)] =
     getIncomingHtlcCrossSigned(cmd.id) match {
-      case Some(add) => OutgoingPacket.buildHtlcFailure(nodeSecret, cmd, add).map(updateFail => (addProposal(Left(updateFail)), updateFail))
+      case Some(add) => OutgoingPacket.buildHtlcFailure(nodeSecret, cmd, add).map(updateFail => (addLocalProposal(updateFail), updateFail))
       case None => Failure(UnknownHtlcId(channelId, cmd.id))
     }
 
@@ -238,30 +228,28 @@ case class HostedCommitments(isHost: Boolean,
     else if (getIncomingHtlcCrossSigned(cmd.id).isEmpty) Failure(UnknownHtlcId(channelId, cmd.id))
     else {
       val fail = wire.UpdateFailMalformedHtlc(channelId, cmd.id, cmd.onionHash, cmd.failureCode)
-      Success(addProposal(Left(fail)), fail)
+      Success(addLocalProposal(fail), fail)
     }
 
   def receiveFail(fail: wire.UpdateFailHtlc): Try[HostedCommitments] =
     // Unlike Fulfill, for Fail/FailMalformed we make sure they fail our cross-signed outgoing payment
     if (getOutgoingHtlcCrossSigned(fail.id).isEmpty) Failure(UnknownHtlcId(channelId, fail.id))
-    else Success(addProposal(Right(fail)))
+    else Success(addRemoteProposal(fail))
 
   def receiveFailMalformed(fail: wire.UpdateFailMalformedHtlc): Try[HostedCommitments] = {
     // A receiving node MUST fail the channel if the BADONION bit in failure_code is not set for update_fail_malformed_htlc.
     if ((fail.failureCode & wire.FailureMessageCodecs.BADONION) == 0) Failure(InvalidFailureCode(channelId))
     else if (getOutgoingHtlcCrossSigned(fail.id).isEmpty) Failure(UnknownHtlcId(channelId, fail.id))
-    else Success(addProposal(Right(fail)))
+    else Success(addRemoteProposal(fail))
   }
 }
 
-case class RemoteHostedStateResult(state: HostedState, remoteNodeId: Option[PublicKey], isLocalSigValid: Boolean)
+case class RemoteHostedStateResult(state: HostedState,
+                                   remoteNodeId: Option[PublicKey],
+                                   isLocalSigValid: Boolean)
 
-case class HostedState(nodeId1: PublicKey, nodeId2: PublicKey, nextLocalUpdates: List[wire.UpdateMessage], nextRemoteUpdates: List[wire.UpdateMessage], lastCrossSignedState: LastCrossSignedState) {
-  def remoteNodeIdOpt(localNodeId: PublicKey): Option[PublicKey] = if (nodeId1 == localNodeId) Some(nodeId2) else if (nodeId2 == localNodeId) Some(nodeId1) else None
-}
-
-// Channel errors
-
-case class InvalidBlockDay(override val channelId: ByteVector32, localBlockDay: Long, remoteBlockDay: Long) extends ChannelException(channelId, s"invalid block day local=$localBlockDay remote=$remoteBlockDay")
-
-case class InvalidRemoteStateSignature(override val channelId: ByteVector32) extends ChannelException(channelId, s"invalid remote state signature")
+case class HostedState(nodeId1: PublicKey,
+                       nodeId2: PublicKey,
+                       nextLocalUpdates: List[wire.UpdateMessage],
+                       nextRemoteUpdates: List[wire.UpdateMessage],
+                       lastCrossSignedState: LastCrossSignedState)

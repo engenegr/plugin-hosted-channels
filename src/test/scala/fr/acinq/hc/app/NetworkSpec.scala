@@ -19,12 +19,7 @@ import fr.acinq.hc.app.network._
 import fr.acinq.hc.app.wire.Codecs
 
 
-class HostedSyncSpec extends BaseRouterSpec {
-  private def recreateHostedSync(kit: Kit, phcConfig: PHCConfig)(implicit system: ActorSystem) = {
-    HCTestUtils.resetEntireDatabase(Config.db)
-    TestFSMRef(new HostedSync(kit, new HostedUpdatesDb(Config.db), phcConfig))
-  }
-
+class NetworkSpec extends BaseRouterSpec {
   private def createPeer(nodeId: PublicKey)(implicit system: ActorSystem) = {
     val connection = TestProbe()
     val peer = TestProbe()
@@ -34,11 +29,11 @@ class HostedSyncSpec extends BaseRouterSpec {
   }
 
   test("Hosted sync and gossip") { fixture =>
-    implicit val system: ActorSystem = ActorSystem("test-actor-system")
+    HCTestUtils.resetEntireDatabase(Config.db)
     val probe = TestProbe()
     val config = Config.vals.phcConfig.copy(minNormalChans = 0, maxPerNode = 1)
     val (kit, _) = HCTestUtils.testKit(TestConstants.Alice.nodeParams)(system)
-    val syncActor = recreateHostedSync(kit.copy(router = fixture.router), config)
+    val syncActor = TestFSMRef(new HostedSync(kit.copy(router = fixture.router), new HostedUpdatesDb(Config.db), config))
     awaitCond(syncActor.stateName == WAIT_FOR_ROUTER_DATA)
     // Router has finished synchronization
     syncActor ! SyncProgress(1D)

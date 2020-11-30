@@ -55,20 +55,13 @@ class HostedChannelTypesSpec extends AnyFunSuite {
     assert(lcss.reverse.reverse === lcss)
   }
 
-  test("LCSS is correctly ahead and even") {
-    assert(!lcss.isEven(lcss))
-    assert(lcss.isEven(lcss.reverse))
-    assert(lcss.isAhead(lcss.reverse.copy(remoteUpdates = 200))) // their remote view of our local updates is behind
-    assert(lcss.isAhead(lcss.copy(localUpdates = 200).reverse)) // their remote view of our local updates is behind
-  }
-
   test("LCSS signature checks 1") {
     val aliceLocallySignedLCSS = lcss.withLocalSigOfRemote(alicePrivKey)
     val bobLocallySignedLCSS = lcss.reverse.withLocalSigOfRemote(bobPrivKey)
     val aliceFullySignedLCSS = aliceLocallySignedLCSS.copy(remoteSigOfLocal = bobLocallySignedLCSS.localSigOfRemote)
     val bobFullySignedLCSS = bobLocallySignedLCSS.copy(remoteSigOfLocal = aliceLocallySignedLCSS.localSigOfRemote)
-    assert(aliceFullySignedLCSS.stateUpdate(false).localUpdates === bobFullySignedLCSS.remoteUpdates)
-    assert(bobFullySignedLCSS.stateUpdate(false).localUpdates === aliceFullySignedLCSS.remoteUpdates)
+    assert(aliceFullySignedLCSS.stateUpdate.localUpdates === bobFullySignedLCSS.remoteUpdates)
+    assert(bobFullySignedLCSS.stateUpdate.localUpdates === aliceFullySignedLCSS.remoteUpdates)
     assert(bobFullySignedLCSS.verifyRemoteSig(alicePrivKey.publicKey))
     assert(aliceFullySignedLCSS.verifyRemoteSig(bobPrivKey.publicKey))
   }
@@ -89,8 +82,9 @@ class HostedChannelTypesSpec extends AnyFunSuite {
     (payment_preimage, cmd)
   }
 
-  private val hdc = HostedCommitments(isHost = true, randomKey.publicKey, randomKey.publicKey, channelId,
-    localCommitmentSpec, originChannels = Map.empty, lcss1, futureUpdates = Nil, announceChannel = true)
+  private val hdc =
+    HostedCommitments(isHost = true, randomKey.publicKey, randomKey.publicKey, channelId, localCommitmentSpec,
+      originChannels = Map.empty, lcss1, nextLocalUpdates = Nil, nextRemoteUpdates = Nil, announceChannel = true)
 
   test("Processing HTLCs") {
     val (_, cmdAdd1) = makeCmdAdd(5.msat, randomKey.publicKey, currentBlockHeight = 100)
@@ -126,25 +120,23 @@ class HostedChannelTypesSpec extends AnyFunSuite {
     assert(data.timedOutOutgoingHtlcs(244).isEmpty)
     assert(data.timedOutOutgoingHtlcs(245).size === 3)
 
-    val bobHdc6LCSS: LastCrossSignedState = hdc6.nextLocalUnsignedLCSS(200).reverse.withLocalSigOfRemote(bobPrivKey) // Bob falls behind by one update and has an hdc6 LCSS
-    assert(hdc7.futureUpdates.diff(hdc7.findState(bobHdc6LCSS).head.futureUpdates) == List(Right(updateAddHtlc2))) // Alice has hdc7 with all updates and hdc LCSS, finds future state and rest of updates
-
     val aliceSignedLCSS = hdc7.nextLocalUnsignedLCSS(blockDay = 200).withLocalSigOfRemote(alicePrivKey)
     val bobSignedLCSS = hdc7.nextLocalUnsignedLCSS(blockDay = 200).reverse.withLocalSigOfRemote(bobPrivKey)
-    val aliceStateUpdatedHdc = hdc7.copy(lastCrossSignedState = aliceSignedLCSS.copy(remoteSigOfLocal = bobSignedLCSS.localSigOfRemote), localSpec = hdc7.nextLocalSpec, futureUpdates = Nil)
+    val aliceStateUpdatedHdc = hdc7.copy(lastCrossSignedState = aliceSignedLCSS.copy(remoteSigOfLocal = bobSignedLCSS.localSigOfRemote), localSpec = hdc7.nextLocalSpec, nextLocalUpdates = Nil, nextRemoteUpdates = Nil)
     assert(aliceStateUpdatedHdc.lastCrossSignedState.verifyRemoteSig(bobPrivKey.publicKey)) // Alice now has an updated LCSS signed by Bob
     assert(aliceStateUpdatedHdc.localSpec.htlcs.size === 5) // And 5 HTLCs in-flight
 
     val Success((aliceStateUpdatedHdc1, fulfill)) = aliceStateUpdatedHdc.sendFulfill(CMD_FULFILL_HTLC(updateAddHtlc1.id, preimage1))
     assert(aliceStateUpdatedHdc1.nextLocalSpec.toLocal === aliceStateUpdatedHdc1.localSpec.toLocal + updateAddHtlc1.amountMsat)
     assert(aliceStateUpdatedHdc1.nextLocalSpec.htlcs.size === 4)
-    assert(aliceStateUpdatedHdc1.futureUpdates === List(Left(fulfill)))
-    assert(aliceStateUpdatedHdc1.nextLocalUnsignedLCSS(blockDay = 201).withLocalSigOfRemote(alicePrivKey).stateUpdate(false).localUpdates === 205) // Fail/Fulfill also increase an update counter
+    assert(aliceStateUpdatedHdc1.nextLocalUpdates === List(fulfill))
+    assert(aliceStateUpdatedHdc1.nextLocalUnsignedLCSS(blockDay = 201).withLocalSigOfRemote(alicePrivKey).stateUpdate.localUpdates === 205) // Fail/Fulfill also increase an update counter
 
     val bobFulfill = UpdateFulfillHtlc(channelId, bob2AliceAdd.id, bob2AliceAddPreimage)
     val Success((aliceStateUpdatedHdc2, _, _)) = aliceStateUpdatedHdc1.receiveFulfill(bobFulfill)
     assert(aliceStateUpdatedHdc2.nextLocalSpec.htlcs.size === 3)
-    assert(aliceStateUpdatedHdc2.futureUpdates === List(Left(fulfill), Right(bobFulfill)))
-    assert(aliceStateUpdatedHdc2.nextLocalUnsignedLCSS(blockDay = 201).withLocalSigOfRemote(alicePrivKey).stateUpdate(true).remoteUpdates === 104) // Fail/Fulfill also increase an update counter
+    assert(aliceStateUpdatedHdc2.nextLocalUpdates === List(fulfill))
+    assert(aliceStateUpdatedHdc2.nextRemoteUpdates === List(bobFulfill))
+    assert(aliceStateUpdatedHdc2.nextLocalUnsignedLCSS(blockDay = 201).withLocalSigOfRemote(alicePrivKey).stateUpdate.remoteUpdates === 104) // Fail/Fulfill also increase an update counter
   }
 }

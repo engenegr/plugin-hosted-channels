@@ -11,7 +11,6 @@ import akka.actor.{ActorRef, ActorSystem}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import fr.acinq.eclair.api.AbstractService
-import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.router.Router
 import scodec.bits.ByteVector
 import fr.acinq.hc.app.Vals
@@ -37,7 +36,7 @@ class HCService(kit: Kit, worker: ActorRef, sync: ActorRef, vals: Vals) extends 
           complete(worker ? HC_CMD_EXTERNAL_FULFILL(remoteNodeId, htlcId, paymentPreimage))
         }
       } ~
-      path("hostedchannel") {
+      path("details") {
         formFields(nodeIdFormParam) { remoteNodeId =>
           complete(worker ? HC_CMD_GET_INFO(remoteNodeId))
         }
@@ -74,14 +73,14 @@ class HCService(kit: Kit, worker: ActorRef, sync: ActorRef, vals: Vals) extends 
       } ~
       path("suspend") {
         formFields(nodeIdFormParam) { remoteNodeId =>
-          complete(worker ? HC_SUSPEND(remoteNodeId))
+          complete(worker ? HC_CMD_SUSPEND(remoteNodeId))
         }
       } ~
       path("verifystate") {
         formFields("state".as[ByteVector](binaryDataUnmarshaller)) { state =>
-          val remoteState: HostedState = fr.acinq.hc.app.wire.HostedChannelCodecs.hostedStateCodec.decodeValue(state.toBitVector).require
-          val isLocalSigOk: Boolean = remoteState.lastCrossSignedState.verifyRemoteSig(kit.nodeParams.nodeId)
-          val remoteNodeIdOpt: Option[PublicKey] = remoteState.remoteNodeIdOpt(kit.nodeParams.nodeId)
+          val remoteState = fr.acinq.hc.app.wire.HostedChannelCodecs.hostedStateCodec.decodeValue(state.toBitVector).require
+          val remoteNodeIdOpt = Set(remoteState.nodeId1, remoteState.nodeId2).find(kit.nodeParams.nodeId.!=)
+          val isLocalSigOk = remoteState.lastCrossSignedState.verifyRemoteSig(kit.nodeParams.nodeId)
           val result = RemoteHostedStateResult(remoteState, remoteNodeIdOpt, isLocalSigOk)
           complete(result)
         }
