@@ -17,7 +17,6 @@ import fr.acinq.eclair.router.Router.ChannelHop
 import fr.acinq.eclair.wire.Onion.FinalLegacyPayload
 import fr.acinq.eclair.wire._
 import fr.acinq.eclair.{CltvExpiryDelta, Kit, MilliSatoshi, TestConstants, randomBytes32}
-import fr.acinq.hc.app.channel._
 import fr.acinq.hc.app.db.HostedChannelsDb
 import fr.acinq.hc.app._
 import org.scalatest.{FixtureTestSuite, ParallelTestExecution}

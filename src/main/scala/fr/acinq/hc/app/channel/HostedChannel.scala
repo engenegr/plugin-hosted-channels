@@ -20,8 +20,8 @@ import fr.acinq.eclair.blockchain.CurrentBlockCount
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.FSMDiagnosticActorLogging
 import fr.acinq.eclair.payment.relay.Relayer
-import fr.acinq.hc.app.db.HostedChannelsDb
 import fr.acinq.eclair.router.Announcements
+import fr.acinq.hc.app.db.HostedChannelsDb
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.hc.app.wire.Codecs
 import scodec.bits.ByteVector

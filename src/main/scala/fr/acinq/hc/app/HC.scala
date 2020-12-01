@@ -2,7 +2,6 @@ package fr.acinq.hc.app
 
 import fr.acinq.eclair._
 import fr.acinq.hc.app.HC._
-
 import scala.concurrent.stm._
 import akka.actor.{ActorSystem, Props}
 import fr.acinq.hc.app.db.{Blocking, HostedChannelsDb, HostedUpdatesDb}
@@ -10,18 +9,16 @@ import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner.IncomingHtlc
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner
 import fr.acinq.hc.app.channel.HC_DATA_ESTABLISHED
 import fr.acinq.eclair.transactions.DirectedHtlc
-
 import scala.concurrent.ExecutionContextExecutor
 import fr.acinq.eclair.payment.IncomingPacket
 import fr.acinq.hc.app.network.HostedSync
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.channel.Origin
 import fr.acinq.hc.app.api.HCService
+import fr.acinq.bitcoin.ByteVector32
 import akka.event.LoggingAdapter
-
 import scala.collection.mutable
 import akka.http.scaladsl.Http
-import fr.acinq.bitcoin.ByteVector32
 
 
 object HC {
