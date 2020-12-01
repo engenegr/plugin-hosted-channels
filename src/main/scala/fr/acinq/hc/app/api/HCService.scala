@@ -10,6 +10,7 @@ import fr.acinq.bitcoin.{ByteVector32, Script}
 import akka.actor.{ActorRef, ActorSystem}
 
 import scala.concurrent.ExecutionContext.Implicits.global
+import fr.acinq.hc.app.db.HostedChannelsDb
 import fr.acinq.eclair.api.AbstractService
 import fr.acinq.eclair.router.Router
 import scodec.bits.ByteVector
@@ -18,7 +19,7 @@ import akka.util.Timeout
 import akka.pattern.ask
 
 
-class HCService(kit: Kit, worker: ActorRef, sync: ActorRef, vals: Vals) extends AbstractService {
+class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: ActorRef, vals: Vals) extends AbstractService {
 
   override val password: String = vals.apiParams.password
 
@@ -36,9 +37,17 @@ class HCService(kit: Kit, worker: ActorRef, sync: ActorRef, vals: Vals) extends 
           complete(worker ? HC_CMD_EXTERNAL_FULFILL(remoteNodeId, htlcId, paymentPreimage))
         }
       } ~
-      path("details") {
+      path("byremoteid") {
         formFields(nodeIdFormParam) { remoteNodeId =>
           complete(worker ? HC_CMD_GET_INFO(remoteNodeId))
+        }
+      } ~
+      path("bysecret") {
+        formFields("secret".as[ByteVector](binaryDataUnmarshaller)) { secret =>
+          channelsDb.getChannelBySecret(secret) match {
+            case Some(data) => complete(worker ? HC_CMD_GET_INFO(data.commitments.remoteNodeId))
+            case None => complete(s"Could not find and HC with secret: $secret")
+          }
         }
       } ~
       path("overridepropose") {
@@ -74,6 +83,11 @@ class HCService(kit: Kit, worker: ActorRef, sync: ActorRef, vals: Vals) extends 
       path("suspend") {
         formFields(nodeIdFormParam) { remoteNodeId =>
           complete(worker ? HC_CMD_SUSPEND(remoteNodeId))
+        }
+      } ~
+      path("drop") {
+        formFields(nodeIdFormParam) { remoteNodeId =>
+          complete(worker ? HC_CMD_DROP(remoteNodeId))
         }
       } ~
       path("verifystate") {

@@ -478,6 +478,10 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_MANUAL_SUSPEND)
       goto(CLOSED) StoringAndUsing data1 replying CMDResSuccess(cmd) SendingHasChannelId error
 
+    case Event(cmd: HC_CMD_DROP, data: HC_DATA_ESTABLISHED) =>
+      if (data.pendingHtlcs.isEmpty) stop(FSM.Normal).DroppingChannel replying CMDResSuccess(cmd)
+      else stay replying CMDResFailure("Dropping declined: in-flight HTLCs are present")
+
     case Event(cmd: HC_CMD_EXTERNAL_FULFILL, data: HC_DATA_ESTABLISHED) => processExternalFulfill(goto(CLOSED), cmd, data)
 
     case Event(HC_CMD_GET_INFO, data: HC_DATA_ESTABLISHED) => stay replying CMDResInfo(stateName, data, data.commitments.nextLocalSpec)
@@ -589,6 +593,11 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     def StoringAndUsing(data: HC_DATA_ESTABLISHED): HostedFsmState = {
       channelsDb.updateOrAddNewChannel(data)
       state using data
+    }
+
+    def DroppingChannel: HostedFsmState = {
+      channelsDb.dropChannel(remoteNodeId)
+      state
     }
 
     def RelayingRemoteUpdates(commits: HostedCommitments): HostedFsmState = {

@@ -41,12 +41,11 @@ class HostedChannelsDb(db: PostgresProfile.backend.Database) {
     (_, _, _, _, _, data) <- Blocking.txRead(Channels.findByRemoteNodeIdUpdatableCompiled(remoteNodeId.value.toArray).result.headOption, db)
   } yield decode(data)
 
-  def getChannelBySecret(secret: ByteVector): Option[HC_DATA_ESTABLISHED] =
-    Blocking.txRead(Channels.findBySecretCompiled(secret.toArray).result.headOption, db).map(decode)
+  def getChannelBySecret(secret: ByteVector): Option[HC_DATA_ESTABLISHED] = Blocking.txRead(Channels.findBySecretCompiled(secret.toArray).result.headOption, db).map(decode)
 
-  def listHotChannels: Seq[HC_DATA_ESTABLISHED] =
-    Blocking.txRead(Channels.listHotChannelsCompiled.result, db).map(decode)
+  def listHotChannels: Seq[HC_DATA_ESTABLISHED] = Blocking.txRead(Channels.listHotChannelsCompiled.result, db).map(decode)
 
-  def listClientChannels: Seq[HC_DATA_ESTABLISHED] =
-    Blocking.txRead(Channels.listClientChannelsCompiled.result, db).map(decode)
+  def listClientChannels: Seq[HC_DATA_ESTABLISHED] = Blocking.txRead(Channels.listClientChannelsCompiled.result, db).map(decode)
+
+  def dropChannel(remoteNodeId: PublicKey): Int = Blocking.txWrite(Channels.findByRemoteNodeIdUpdatableCompiled(remoteNodeId.value.toArray).delete, db)
 }

@@ -134,7 +134,7 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, channelsDb: HostedChannelsDb
   }
 
   def restore(onNotFound: => Unit, onFound: ActorRef => Unit)(nodeId: PublicKey): Unit =
-    channelsDb.getChannelByRemoteNodeId(remoteNodeId = nodeId) match {
+    channelsDb.getChannelByRemoteNodeId(nodeId) match {
       case Some(data) => onFound(me spawnPreparedChannel data)
       case None => onNotFound
     }
