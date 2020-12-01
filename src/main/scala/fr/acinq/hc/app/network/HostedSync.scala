@@ -140,29 +140,8 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
     case Event(TickSendGossip, data: OperationalData) =>
       val phcNetwork1 = data.phcNetwork.copy(unsaved = PHCNetwork.emptyUnsaved)
       val data1 = data.copy(phcGossip = CollectedGossip(Map.empty), phcNetwork = phcNetwork1)
-
-      Future {
-        val currentPublicPeers = randomPublicPeers(data)
-        val allUpdates = data.phcGossip.updates1.values ++ data.phcGossip.updates2.values
-        log.info(s"PLGN PHC, TickSendGossip, sending to peers num=${currentPublicPeers.size}")
-
-        for {
-          (_, wrap) <- data.phcGossip.announces
-          publicPeerConnectedWrap <- currentPublicPeers
-          if !wrap.seenFrom.contains(publicPeerConnectedWrap.info.nodeId)
-        } publicPeerConnectedWrap sendRoutingMsg wrap.announcement
-
-        for {
-          wrap <- allUpdates
-          publicPeerConnectedWrap <- currentPublicPeers
-          if !wrap.seenFrom.contains(publicPeerConnectedWrap.info.nodeId)
-        } publicPeerConnectedWrap sendRoutingMsg wrap.update
-      } onComplete {
-        case Failure(err) => log.info(s"PLGN PHC, TickSendGossip, fail, error=${err.getMessage}")
-        case _ => log.info(s"PLGN PHC, TickSendGossip, success, ${data.phcGossip.asString}")
-      }
-
       tryPersistLog(data.phcNetwork)
+      broadcastGossip(data)
       stay using data1
 
     case Event(SendSyncTo(wrap), data: OperationalData) =>
@@ -269,6 +248,27 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
     }.toSeq), updatesDb.db)
   }
 
+  private def broadcastGossip(data: OperationalData): Unit = Future {
+    val currentPublicPeers: Seq[PeerConnectedWrap] = randomPublicPeers(data)
+    val allUpdates = data.phcGossip.updates1.values ++ data.phcGossip.updates2.values
+    log.info(s"PLGN PHC, TickSendGossip, sending to peers num=${currentPublicPeers.size}")
+
+    for {
+      (_, wrap) <- data.phcGossip.announces
+      publicPeerConnectedWrap <- currentPublicPeers
+      if !wrap.seenFrom.contains(publicPeerConnectedWrap.info.nodeId)
+    } publicPeerConnectedWrap sendRoutingMsg wrap.announcement
+
+    for {
+      wrap <- allUpdates
+      publicPeerConnectedWrap <- currentPublicPeers
+      if !wrap.seenFrom.contains(publicPeerConnectedWrap.info.nodeId)
+    } publicPeerConnectedWrap sendRoutingMsg wrap.update
+  } onComplete {
+    case Failure(err) => log.info(s"PLGN PHC, TickSendGossip, fail, error=${err.getMessage}")
+    case _ => log.info(s"PLGN PHC, TickSendGossip, success, ${data.phcGossip.asString}")
+  }
+
   private def tryPersistLog(phcNetwork: PHCNetwork): Unit = tryPersist(phcNetwork) match {
     case Failure(error) => log.info(s"PLGN PHC, TickSendGossip, db fail=${error.getMessage}")
     case Success(adds) => log.info(s"PLGN PHC, TickSendGossip, db adds=${adds.sum}")
@@ -284,25 +284,26 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
       data.tooFewNormalChans(ann.nodeId1, ann.nodeId2, phcConfig).isEmpty &&
         data.phcNetwork.isAnnounceAcceptable(ann)
 
-    def process(fromNodeId: PublicKey, receivedMessage: UnknownMessage, data: OperationalData): OperationalData = Codecs.decodeAnnounceMessage(receivedMessage) match {
-      case Attempt.Successful(msg: ChannelAnnouncement) if baseCheck(msg, data) && data.phcNetwork.channels.contains(msg.shortChannelId) =>
-        // This is an update of an already existing PHC because it's contained in channels map
-        processKnownAnnounce(msg, data, fromNodeId)
+    def process(fromNodeId: PublicKey, receivedMessage: UnknownMessage, data: OperationalData): OperationalData =
+      Codecs.decodeAnnounceMessage(receivedMessage) match {
+        case Attempt.Successful(msg: ChannelAnnouncement) if baseCheck(msg, data) && data.phcNetwork.channels.contains(msg.shortChannelId) =>
+          // This is an update of an already existing PHC because it's contained in channels map
+          processKnownAnnounce(msg, data, fromNodeId)
 
-      case Attempt.Successful(msg: ChannelAnnouncement) if baseCheck(msg, data) && data.phcNetwork.tooManyPHCs(msg.nodeId1, msg.nodeId2, phcConfig).isEmpty =>
-        // This is a new PHC so we must check if any of related nodes already has too many PHCs before proceeding
-        processNewAnnounce(msg, data, fromNodeId)
+        case Attempt.Successful(msg: ChannelAnnouncement) if baseCheck(msg, data) && data.phcNetwork.tooManyPHCs(msg.nodeId1, msg.nodeId2, phcConfig).isEmpty =>
+          // This is a new PHC so we must check if any of related nodes already has too many PHCs before proceeding
+          processNewAnnounce(msg, data, fromNodeId)
 
-      case Attempt.Successful(msg: ChannelUpdate) if isUpdateAcceptable(msg, data) =>
-        processUpdate(msg, data, fromNodeId)
+        case Attempt.Successful(msg: ChannelUpdate) if isUpdateAcceptable(msg, data) =>
+          processUpdate(msg, data, fromNodeId)
 
-      case Attempt.Successful(something) =>
-        log.info(s"PLGN PHC, HostedSync, unacceptable message=$something, peer=$fromNodeId")
-        data
+        case Attempt.Successful(something) =>
+          log.info(s"PLGN PHC, HostedSync, unacceptable message=$something, peer=$fromNodeId")
+          data
 
-      case _: Attempt.Failure =>
-        log.info(s"PLGN PHC, HostedSync, parsing fail, peer=$fromNodeId")
-        data
-    }
+        case _: Attempt.Failure =>
+          log.info(s"PLGN PHC, HostedSync, parsing fail, peer=$fromNodeId")
+          data
+      }
   }
 }
