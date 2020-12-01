@@ -1,4 +1,4 @@
-package fr.acinq.hc.app.dbo
+package fr.acinq.hc.app.db
 
 import slick.jdbc.PostgresProfile.api._
 import fr.acinq.eclair.wire.LightningMessageCodecs._

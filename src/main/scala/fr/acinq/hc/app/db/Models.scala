@@ -1,7 +1,7 @@
-package fr.acinq.hc.app.dbo
+package fr.acinq.hc.app.db
 
 import scala.concurrent.duration._
-import fr.acinq.hc.app.dbo.Blocking._
+import fr.acinq.hc.app.db.Blocking._
 import slick.jdbc.PostgresProfile.api._
 import slick.lifted.{Index, Tag}
 

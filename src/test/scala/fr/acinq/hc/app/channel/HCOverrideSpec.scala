@@ -61,8 +61,11 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     alice ! bob2alice.expectMsgType[StateUpdate]
     awaitCond(alice.stateName == NORMAL)
     awaitCond(bob.stateName == NORMAL)
-    assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal === 100001L.msat)
-    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal === 9999899999L.msat)
+    val bobCommits = bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments
+    val aliceCommits = alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments
+    assert(bobCommits.localSpec.toLocal === 100001L.msat)
+    assert(aliceCommits.nextLocalSpec.toLocal === 9999899999L.msat)
+    assert(bobCommits.lastCrossSignedState === aliceCommits.lastCrossSignedState.reverse)
   }
 
   test("Override started while client is offline, finished later") { f =>
@@ -102,8 +105,11 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     aliceRelayer.expectNoMessage()
     awaitCond(alice.stateName == NORMAL)
     awaitCond(bob.stateName == NORMAL)
-    assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal === 100001L.msat)
-    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal === 9999899999L.msat)
+    val bobCommits = bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments
+    val aliceCommits = alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments
+    assert(bobCommits.localSpec.toLocal === 100001L.msat)
+    assert(aliceCommits.nextLocalSpec.toLocal === 9999899999L.msat)
+    assert(bobCommits.lastCrossSignedState === aliceCommits.lastCrossSignedState.reverse)
   }
 
   test("Override with pending htlc timed out") { f =>

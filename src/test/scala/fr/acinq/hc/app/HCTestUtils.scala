@@ -15,10 +15,10 @@ import scala.concurrent.Await
 object HCTestUtils {
   def resetEntireDatabase(db: PostgresProfile.backend.Database): Unit = {
     val setup = DBIO.seq(
-      fr.acinq.hc.app.dbo.Channels.model.schema.dropIfExists,
-      fr.acinq.hc.app.dbo.Updates.model.schema.dropIfExists,
-      fr.acinq.hc.app.dbo.Channels.model.schema.create,
-      fr.acinq.hc.app.dbo.Updates.model.schema.create
+      fr.acinq.hc.app.db.Channels.model.schema.dropIfExists,
+      fr.acinq.hc.app.db.Updates.model.schema.dropIfExists,
+      fr.acinq.hc.app.db.Channels.model.schema.create,
+      fr.acinq.hc.app.db.Updates.model.schema.create
     )
     Await.result(db.run(setup.transactionally), 10.seconds)
   }

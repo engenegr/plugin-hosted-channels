@@ -2,13 +2,15 @@ package fr.acinq.hc.app
 
 import fr.acinq.eclair._
 import fr.acinq.hc.app.HC._
+
 import scala.concurrent.stm._
 import akka.actor.{ActorSystem, Props}
-import fr.acinq.hc.app.dbo.{Blocking, HostedChannelsDb, HostedUpdatesDb}
+import fr.acinq.hc.app.db.{Blocking, HostedChannelsDb, HostedUpdatesDb}
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner.IncomingHtlc
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner
 import fr.acinq.hc.app.channel.HC_DATA_ESTABLISHED
 import fr.acinq.eclair.transactions.DirectedHtlc
+
 import scala.concurrent.ExecutionContextExecutor
 import fr.acinq.eclair.payment.IncomingPacket
 import fr.acinq.hc.app.network.HostedSync
@@ -16,8 +18,10 @@ import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.channel.Origin
 import fr.acinq.hc.app.api.HCService
 import akka.event.LoggingAdapter
+
 import scala.collection.mutable
 import akka.http.scaladsl.Http
+import fr.acinq.bitcoin.ByteVector32
 
 
 object HC {
@@ -102,8 +106,11 @@ class HC extends Plugin {
       origin <- data.commitments.originChannels.get(outgoingAdd.id)
     } yield (origin, data.commitments.channelId, outgoingAdd.id)
 
-    type PaymentLocations = Set[PostRestartHtlcCleaner.ChannelIdAndHtlcId]
-    override def getHtlcsRelayedOut(htlcsIn: Seq[IncomingHtlc] = Nil): Map[Origin, PaymentLocations] =
+    type PaymentHashAndHtlcId = (ByteVector32, Long)
+    type PaymentLocations = Set[PaymentHashAndHtlcId]
+    type OriginMap = Map[Origin, PaymentLocations]
+
+    override def getHtlcsRelayedOut(htlcsIn: Seq[IncomingHtlc] = Nil): OriginMap =
       PostRestartHtlcCleaner.groupByOrigin(htlcsOut, htlcsIn)
   }
 }

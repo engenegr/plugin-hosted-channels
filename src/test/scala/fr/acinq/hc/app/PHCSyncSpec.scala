@@ -5,21 +5,20 @@ import java.net.InetSocketAddress
 import akka.actor.ActorSystem
 import akka.testkit.{TestFSMRef, TestProbe}
 import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.eclair.Kit
-import fr.acinq.eclair._
 import fr.acinq.bitcoin.{Block, ByteVector64, Crypto}
+import fr.acinq.eclair._
 import fr.acinq.eclair.channel.Channel.OutgoingMessage
 import fr.acinq.eclair.io.{ConnectionInfo, PeerConnected, UnknownMessageReceived}
 import fr.acinq.eclair.router.Router.Data
 import fr.acinq.eclair.router.{Announcements, BaseRouterSpec, Router, SyncProgress}
 import fr.acinq.eclair.wire.UnknownMessage
-import fr.acinq.hc.app.dbo.HostedUpdatesDb
+import fr.acinq.hc.app.db.HostedUpdatesDb
 import fr.acinq.hc.app.network.HostedSync.{GotAllSyncFrom, SendSyncTo, TickSendGossip}
 import fr.acinq.hc.app.network._
 import fr.acinq.hc.app.wire.Codecs
 
 
-class NetworkSpec extends BaseRouterSpec {
+class PHCSyncSpec extends BaseRouterSpec {
   private def createPeer(nodeId: PublicKey)(implicit system: ActorSystem) = {
     val connection = TestProbe()
     val peer = TestProbe()

@@ -1,11 +1,11 @@
-package fr.acinq.hc.app.dbo
+package fr.acinq.hc.app.db
 
 import slick.jdbc.PostgresProfile.api._
 import fr.acinq.hc.app.wire.HostedChannelCodecs._
 import scodec.bits.{BitVector, ByteVector}
 
 import fr.acinq.hc.app.channel.HC_DATA_ESTABLISHED
-import fr.acinq.hc.app.dbo.Blocking.ByteArray
+import fr.acinq.hc.app.db.Blocking.ByteArray
 import fr.acinq.bitcoin.Crypto.PublicKey
 import slick.jdbc.PostgresProfile
 

@@ -6,7 +6,7 @@ import fr.acinq.hc.app.channel._
 import scala.concurrent.duration._
 import akka.actor.{Actor, ActorRef, Props, Terminated}
 import scala.concurrent.ExecutionContext.Implicits.global
-import fr.acinq.hc.app.dbo.HostedChannelsDb
+import fr.acinq.hc.app.db.HostedChannelsDb
 import com.google.common.collect.HashBiMap
 import fr.acinq.hc.app.network.HostedSync
 import fr.acinq.bitcoin.Crypto.PublicKey

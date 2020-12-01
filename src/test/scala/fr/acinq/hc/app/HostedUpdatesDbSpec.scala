@@ -6,7 +6,7 @@ import slick.jdbc.PostgresProfile.api._
 import fr.acinq.eclair.wire.LightningMessageCodecs._
 import fr.acinq.bitcoin.{Block, ByteVector64, Crypto}
 import fr.acinq.eclair.router.Announcements
-import fr.acinq.hc.app.dbo.{Blocking, HostedUpdatesDb, Updates}
+import fr.acinq.hc.app.db.{Blocking, HostedUpdatesDb, Updates}
 import fr.acinq.hc.app.network.{CollectedGossip, PHC}
 import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits.BitVector

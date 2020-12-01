@@ -7,7 +7,7 @@ import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.transactions.CommitmentSpec
 import fr.acinq.hc.app.Tools.{DuplicateHandler, DuplicateShortId}
 import fr.acinq.hc.app.channel.HC_DATA_ESTABLISHED
-import fr.acinq.hc.app.dbo.HostedChannelsDb
+import fr.acinq.hc.app.db.HostedChannelsDb
 import org.scalatest.funsuite.AnyFunSuite
 
 import scala.util.{Failure, Random}

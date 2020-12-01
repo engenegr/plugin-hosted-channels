@@ -8,7 +8,7 @@ import fr.acinq.hc.app.network.HostedSync._
 
 import fr.acinq.eclair.wire.{ChannelAnnouncement, ChannelUpdate, UnknownMessage}
 import fr.acinq.eclair.{FSMDiagnosticActorLogging, Kit}
-import fr.acinq.hc.app.dbo.{Blocking, HostedUpdatesDb}
+import fr.acinq.hc.app.db.{Blocking, HostedUpdatesDb}
 import fr.acinq.eclair.router.{Router, SyncProgress}
 import scala.util.{Failure, Random, Success, Try}
 
@@ -93,13 +93,10 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
       log.info("PLGN PHC, HostedSync, sync timeout, rescheduling sync")
       goto(WAIT_FOR_PHC_SYNC) using WaitForNormalNetworkData(data.phcNetwork)
 
-    case Event(msg: UnknownMessageReceived, data: OperationalData)
-      if syncProcessor.tagsOfInterest.contains(msg.message.tag) =>
+    case Event(msg: UnknownMessageReceived, data: OperationalData) if syncProcessor.tagsOfInterest.contains(msg.message.tag) =>
       stay using syncProcessor.process(msg.nodeId, msg.message, data)
 
-    case Event(GotAllSyncFrom(wrap), data: OperationalData)
-      if data.lastSyncNodeId.contains(wrap.info.nodeId) =>
-
+    case Event(GotAllSyncFrom(wrap), data: OperationalData) if data.lastSyncNodeId.contains(wrap.info.nodeId) =>
       tryPersist(data.phcNetwork).map { adds =>
         // Note: nodes whose NC count falls below minimum will eventually be pruned out
         val u1Count = updatesDb.pruneOldUpdates1(System.currentTimeMillis.millis.toSeconds)
@@ -202,13 +199,11 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
 
     // LISTENING TO GOSSIP
 
-    case Event(msg: UnknownMessageReceived, data: OperationalData)
-      if gossipProcessor.tagsOfInterest.contains(msg.message.tag) =>
+    case Event(msg: UnknownMessageReceived, data: OperationalData) if gossipProcessor.tagsOfInterest.contains(msg.message.tag) =>
       stay using gossipProcessor.process(msg.nodeId, msg.message, data)
 
-    case Event(msg: UnknownMessage, data: OperationalData)
-      if gossipProcessor.tagsOfInterest.contains(msg.tag) =>
-      log.info(s"PLGN PHC, got local gossip message=${msg.getClass.getSimpleName}")
+    case Event(msg: UnknownMessage, data: OperationalData) if gossipProcessor.tagsOfInterest.contains(msg.tag) =>
+      log.info(s"PLGN PHC, got locally originated gossip message=${msg.getClass.getSimpleName}")
       val data1 = gossipProcessor.process(kit.nodeParams.nodeId, msg, data)
       tryPersistLog(data1.phcNetwork)
       stay using data1
