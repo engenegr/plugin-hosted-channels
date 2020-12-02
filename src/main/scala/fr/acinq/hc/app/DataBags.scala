@@ -13,7 +13,7 @@ sealed trait HostedChannelMessage
 case class InvokeHostedChannel(chainHash: ByteVector32,
                                refundScriptPubKey: ByteVector,
                                secret: ByteVector = ByteVector.empty) extends HostedChannelMessage {
-  val finalSecret: ByteVector = secret.take(64)
+  val finalSecret: ByteVector = secret.take(128)
 }
 
 case class InitHostedChannel(maxHtlcValueInFlightMsat: UInt64,

@@ -7,7 +7,6 @@ import akka.actor.{ActorSystem, Props}
 import fr.acinq.hc.app.db.{Blocking, HostedChannelsDb, HostedUpdatesDb}
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner.IncomingHtlc
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner
-import fr.acinq.hc.app.channel.HC_DATA_ESTABLISHED
 import fr.acinq.eclair.transactions.DirectedHtlc
 import scala.concurrent.ExecutionContextExecutor
 import fr.acinq.eclair.payment.IncomingPacket
@@ -93,7 +92,7 @@ class HC extends Plugin {
 
     override def feature: Feature = HCFeature
 
-    override def getIncomingHtlcs(nodeParams: NodeParams)(implicit log: LoggingAdapter): Seq[IncomingHtlc] =
+    override def getIncomingHtlcs(nodeParams: NodeParams, log: LoggingAdapter): Seq[IncomingHtlc] =
       channelsDb.listHotChannels.flatMap(_.commitments.localSpec.htlcs).collect(DirectedHtlc.incoming)
         .map(incomingUpdateAdd => IncomingPacket.decrypt(incomingUpdateAdd, nodeParams.privateKey)(log))
         .collect(packet => PostRestartHtlcCleaner.decryptedIncomingHtlcs(nodeParams.db.payments)(packet))
@@ -108,7 +107,7 @@ class HC extends Plugin {
     type PaymentLocations = Set[PaymentHashAndHtlcId]
     type OriginMap = Map[Origin, PaymentLocations]
 
-    override def getHtlcsRelayedOut(htlcsIn: Seq[IncomingHtlc] = Nil): OriginMap =
+    override def getHtlcsRelayedOut(htlcsIn: Seq[IncomingHtlc], nodeParams: NodeParams, log: LoggingAdapter): OriginMap =
       PostRestartHtlcCleaner.groupByOrigin(htlcsOut, htlcsIn)
   }
 }
