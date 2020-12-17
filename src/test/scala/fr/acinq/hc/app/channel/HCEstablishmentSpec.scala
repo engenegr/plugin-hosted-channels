@@ -31,14 +31,6 @@ class HCEstablishmentSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     assert(aliceData.commitments.lastCrossSignedState.verifyRemoteSig(Bob.nodeParams.nodeId))
   }
 
-  test("State timeout closes unestablished channels") { f =>
-    import f._
-    alice ! Worker.HCPeerConnected
-    awaitCond(alice.stateName == SYNCING)
-    alice ! StateTimeout
-    alice2bob.expectTerminated(alice)
-  }
-
   test("Host rejects an invalid refundScriptPubKey") { f =>
     import f._
     bob ! Worker.HCPeerConnected

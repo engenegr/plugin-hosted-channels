@@ -80,6 +80,11 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
           complete(worker ? HC_CMD_PRIVATE(remoteNodeId))
         }
       } ~
+      path("resize") {
+        formFields(nodeIdFormParam, "newCapacity".as[MilliSatoshi]) { case (remoteNodeId, newCapacity) =>
+          complete(worker ? HC_CMD_RESIZE(remoteNodeId, newCapacity))
+        }
+      } ~
       path("suspend") {
         formFields(nodeIdFormParam) { remoteNodeId =>
           complete(worker ? HC_CMD_SUSPEND(remoteNodeId))

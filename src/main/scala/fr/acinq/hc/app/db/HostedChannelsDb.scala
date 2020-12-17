@@ -47,5 +47,5 @@ class HostedChannelsDb(db: PostgresProfile.backend.Database) {
 
   def listClientChannels: Seq[HC_DATA_ESTABLISHED] = Blocking.txRead(Channels.listClientChannelsCompiled.result, db).map(decode)
 
-  def dropChannel(remoteNodeId: PublicKey): Int = Blocking.txWrite(Channels.findByRemoteNodeIdUpdatableCompiled(remoteNodeId.value.toArray).delete, db)
+  def removeHostedChannelFromDb(remoteNodeId: PublicKey): Int = Blocking.txWrite(Channels.findByRemoteNodeIdUpdatableCompiled(remoteNodeId.value.toArray).delete, db)
 }

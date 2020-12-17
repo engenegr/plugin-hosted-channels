@@ -82,6 +82,13 @@ case class RefundPending(startedAt: Long) extends HostedChannelMessage
 
 case class AnnouncementSignature(nodeSignature: ByteVector64, wantsReply: Boolean) extends HostedChannelMessage
 
+case class ResizeChannel(newCapacity: MilliSatoshi, clientSig: ByteVector64 = ByteVector64.Zeroes) extends HostedChannelMessage {
+  def sign(priv: PrivateKey): ResizeChannel = ResizeChannel(clientSig = Crypto.sign(Crypto.sha256(sigMaterial), priv), newCapacity = newCapacity)
+  def verifyClientSig(pubKey: PublicKey): Boolean = Crypto.verifySignature(Crypto.sha256(sigMaterial), clientSig, pubKey)
+  lazy val sigMaterial: ByteVector = Protocol.writeUInt64(newCapacity.toLong, ByteOrder.LITTLE_ENDIAN)
+  lazy val newCapacityU64: UInt64 = UInt64(newCapacity.toLong)
+}
+
 // PHC
 
 case class QueryPublicHostedChannels(chainHash: ByteVector32) extends HostedChannelMessage

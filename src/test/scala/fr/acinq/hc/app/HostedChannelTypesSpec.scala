@@ -139,4 +139,10 @@ class HostedChannelTypesSpec extends AnyFunSuite {
     assert(aliceStateUpdatedHdc2.nextRemoteUpdates === List(bobFulfill))
     assert(aliceStateUpdatedHdc2.nextLocalUnsignedLCSS(blockDay = 201).withLocalSigOfRemote(alicePrivKey).stateUpdate.remoteUpdates === 104) // Fail/Fulfill also increase an update counter
   }
+
+  test("Resize message sig check") {
+    val clientKey = randomKey
+    val msg = ResizeChannel(newCapacity = 100000000L.msat)
+    assert(msg.sign(clientKey).verifyClientSig(clientKey.publicKey))
+  }
 }

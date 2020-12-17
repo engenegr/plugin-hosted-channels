@@ -6,7 +6,6 @@ import fr.acinq.eclair.channel._
 import fr.acinq.eclair.io.PeerDisconnected
 import fr.acinq.eclair.payment.relay.Relayer
 import fr.acinq.eclair.wire.{TemporaryNodeFailure, UpdateAddHtlc, UpdateFailHtlc, UpdateFulfillHtlc}
-import fr.acinq.hc.app.channel.{HC_CMD_EXTERNAL_FULFILL, HC_CMD_SUSPEND, HC_DATA_ESTABLISHED}
 import fr.acinq.hc.app.{HCTestUtils, StateUpdate, Worker}
 import org.scalatest.Outcome
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike

@@ -69,6 +69,11 @@ object Codecs {
       (bool withContext "wantsReply")
   }.as[AnnouncementSignature]
 
+  val resizeChannelCodec: Codec[ResizeChannel] = {
+    (millisatoshi withContext "newCapacity") ::
+      (bytes64 withContext "clientSig")
+  }.as[ResizeChannel]
+
   val queryPublicHostedChannelsCodec: Codec[QueryPublicHostedChannels] =
     (bytes32 withContext "chainHash").as[QueryPublicHostedChannels]
 
@@ -89,6 +94,7 @@ object Codecs {
     case HC_HOSTED_CHANNEL_BRANDING_TAG => hostedChannelBrandingCodec.decode(wrap.data.toBitVector).map(_.value)
     case HC_REFUND_PENDING_TAG => refundPendingCodec.decode(wrap.data.toBitVector).map(_.value)
     case HC_ANNOUNCEMENT_SIGNATURE_TAG => announcementSignatureCodec.decode(wrap.data.toBitVector).map(_.value)
+    case HC_RESIZE_CHANNEL_TAG => resizeChannelCodec.decode(wrap.data.toBitVector).map(_.value)
     case HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG => queryPublicHostedChannelsCodec.decode(wrap.data.toBitVector).map(_.value)
     case HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG => replyPublicHostedChannelsEndCodec.decode(wrap.data.toBitVector).map(_.value)
   }
@@ -102,6 +108,7 @@ object Codecs {
     case msg: HostedChannelBranding => UnknownMessage(HC_HOSTED_CHANNEL_BRANDING_TAG, hostedChannelBrandingCodec.encode(msg).require.toByteVector)
     case msg: RefundPending => UnknownMessage(HC_REFUND_PENDING_TAG, refundPendingCodec.encode(msg).require.toByteVector)
     case msg: AnnouncementSignature => UnknownMessage(HC_ANNOUNCEMENT_SIGNATURE_TAG, announcementSignatureCodec.encode(msg).require.toByteVector)
+    case msg: ResizeChannel => UnknownMessage(HC_RESIZE_CHANNEL_TAG, resizeChannelCodec.encode(msg).require.toByteVector)
     case msg: QueryPublicHostedChannels => UnknownMessage(HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG, queryPublicHostedChannelsCodec.encode(msg).require.toByteVector)
     case msg: ReplyPublicHostedChannelsEnd => UnknownMessage(HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG, replyPublicHostedChannelsEndCodec.encode(msg).require.toByteVector)
   }

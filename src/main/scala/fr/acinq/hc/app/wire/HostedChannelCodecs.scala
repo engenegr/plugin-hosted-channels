@@ -34,6 +34,7 @@ object HostedChannelCodecs {
       (lengthDelimited(channelUpdateCodec) withContext "channelUpdate") ::
       (listOfN(uint8, errorExtCodec) withContext "localErrors") ::
       (optional(bool8, errorExtCodec) withContext "remoteError") ::
+      (optional(bool8, resizeChannelCodec) withContext "resizeProposal") ::
       (optional(bool8, stateOverrideCodec) withContext "overrideProposal") ::
       (optional(bool8, refundPendingCodec) withContext "refundPendingInfo") ::
       (optional(bool8, variableSizeBytes(uint16, utf8)) withContext "refundCompleteInfo") ::
