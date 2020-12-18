@@ -168,17 +168,23 @@ class HCResizeSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     bob ! alice2bob.expectMsgType[LastCrossSignedState]
     alice ! bob2alice.expectMsgType[LastCrossSignedState]
     alice ! bob2alice.expectMsgType[ResizeChannel]
-    alice ! bob2alice.expectMsgType[ChannelUpdate]
-    alice ! bob2alice.expectMsgType[StateUpdate]
     bob ! alice2bob.expectMsgType[LastCrossSignedState]
+    alice ! bob2alice.expectMsgType[ChannelUpdate]
     bob ! alice2bob.expectMsgType[ResizeChannel]
+    alice ! bob2alice.expectMsgType[StateUpdate]
     bob ! alice2bob.expectMsgType[ChannelUpdate]
     bob ! alice2bob.expectMsgType[StateUpdate]
+    bob ! CMD_FULFILL_HTLC(alice2bobUpdateAdd0.id, preimage0)
+    bob ! CMD_SIGN(None)
     alice ! bob2alice.expectMsgType[StateUpdate]
     bob ! alice2bob.expectMsgType[StateUpdate]
+    alice ! bob2alice.expectMsgType[UpdateFulfillHtlc]
+    alice ! bob2alice.expectMsgType[StateUpdate]
+    bob ! alice2bob.expectMsgType[StateUpdate]
+    alice ! bob2alice.expectMsgType[StateUpdate]
+
     bob2alice.expectNoMessage()
     alice2bob.expectNoMessage()
-    fulfillAliceHtlcByBob(alice2bobUpdateAdd0.id, preimage0, f)
     awaitCond(alice.stateName == NORMAL)
     awaitCond(bob.stateName == NORMAL)
     awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 15000000000L.msat)
