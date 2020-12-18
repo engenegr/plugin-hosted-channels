@@ -60,7 +60,7 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
           complete(worker ? HC_CMD_OVERRIDE_ACCEPT(remoteNodeId))
         }
       } ~
-      path("initrefund") {
+      path("startrefund") {
         formFields(nodeIdFormParam) { remoteNodeId =>
           complete(worker ? HC_CMD_INIT_PENDING_REFUND(remoteNodeId))
         }
