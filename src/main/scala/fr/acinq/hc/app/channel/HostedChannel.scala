@@ -704,6 +704,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       log.info(s"PLGN PHC, resize signature check fail, peer=$remoteNodeId")
       errorState StoringAndUsing data1 SendingHasChannelId error
     } else {
+      log.info(s"PLGN PHC, channel resize successfully accepted, peer=$remoteNodeId")
       stay StoringAndUsing data.copy(resizeProposal = Some(resize), overrideProposal = None)
     }
   }
