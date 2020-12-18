@@ -1,7 +1,7 @@
 package fr.acinq.hc.app.channel
 
 import fr.acinq.eclair._
-import fr.acinq.eclair.channel.{CMD_FULFILL_HTLC, CMD_SIGN, NORMAL, OFFLINE}
+import fr.acinq.eclair.channel.{CMD_FULFILL_HTLC, CMD_SIGN, NORMAL, OFFLINE, RES_ADD_SETTLED}
 import fr.acinq.eclair.io.PeerDisconnected
 import fr.acinq.eclair.wire.{ChannelUpdate, UpdateFulfillHtlc}
 import fr.acinq.hc.app.{HCTestUtils, InvokeHostedChannel, LastCrossSignedState, ResizeChannel, StateUpdate, Worker}
@@ -73,6 +73,9 @@ class HCResizeSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     awaitCond(bob.stateName == NORMAL)
     awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 15000000000L.msat)
     awaitCond(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 5000000000L.msat)
+    bobRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
+    val (preimage3, alice2bobUpdateAdd3) = addHtlcFromAliceToBob(1000000000L.msat, f, currentBlockHeight)
+    fulfillAliceHtlcByBob(alice2bobUpdateAdd3.id, preimage3, f)
   }
 
   test("Host does not get resize proposal before restart") { f =>
@@ -132,28 +135,53 @@ class HCResizeSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     alice ! bob2alice.expectMsgType[InvokeHostedChannel]
     bob ! alice2bob.expectMsgType[LastCrossSignedState]
     alice ! bob2alice.expectMsgType[LastCrossSignedState]
+    alice ! bob2alice.expectMsgType[ChannelUpdate]
+    bob ! alice2bob.expectMsgType[LastCrossSignedState]
+    bob ! alice2bob.expectMsgType[ChannelUpdate]
+    bob2alice.expectNoMessage()
+    alice2bob.expectNoMessage()
+    fulfillAliceHtlcByBob(alice2bobUpdateAdd0.id, preimage0, f)
+    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 15000000000L.msat)
+    awaitCond(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 5000000000L.msat)
+  }
+
+  test("Host gets resize without update") { f =>
+    import f._
+    HCTestUtils.resetEntireDatabase(aliceDB)
+    HCTestUtils.resetEntireDatabase(bobDB)
+    reachNormal(f)
+    val (preimage0, alice2bobUpdateAdd0) = addHtlcFromAliceToBob(5000000000L.msat, f, currentBlockHeight)
+    bob ! HC_CMD_RESIZE(bobKit.nodeParams.nodeId, 20000000000L.msat)
+    alice ! bob2alice.expectMsgType[ResizeChannel]
+    bob2alice.expectMsgType[StateUpdate] // Alice does not get it
+    bob2alice.expectNoMessage()
+    alice2bob.expectNoMessage()
+
+    alice ! PeerDisconnected(null, null)
+    bob ! PeerDisconnected(null, null)
+    awaitCond(alice.stateName == OFFLINE)
+    awaitCond(bob.stateName == OFFLINE)
+
+    bob ! Worker.HCPeerConnected
+    alice ! Worker.HCPeerConnected
+    alice ! bob2alice.expectMsgType[InvokeHostedChannel]
+    bob ! alice2bob.expectMsgType[LastCrossSignedState]
+    alice ! bob2alice.expectMsgType[LastCrossSignedState]
     alice ! bob2alice.expectMsgType[ResizeChannel]
     alice ! bob2alice.expectMsgType[ChannelUpdate]
     alice ! bob2alice.expectMsgType[StateUpdate]
-
     bob ! alice2bob.expectMsgType[LastCrossSignedState]
+    bob ! alice2bob.expectMsgType[ResizeChannel]
     bob ! alice2bob.expectMsgType[ChannelUpdate]
     bob ! alice2bob.expectMsgType[StateUpdate]
-//    bob ! alice2bob.expectMsgType[ResizeChannel]
-
-//    alice ! bob2alice.expectMsgType[LastCrossSignedState]
-//    alice ! bob2alice.expectMsgType[ResizeChannel]
-//    alice ! bob2alice.expectMsgType[ChannelUpdate]
-//
-//    bob ! alice2bob.expectMsgType[LastCrossSignedState]
-//    alice ! bob2alice.expectMsgType[StateUpdate]
-//    bob ! alice2bob.expectMsgType[ChannelUpdate]
-//    bob ! alice2bob.expectMsgType[StateUpdate]
-//    alice ! bob2alice.expectMsgType[StateUpdate]
-//    bob2alice.expectNoMessage()
-//    alice2bob.expectNoMessage()
-//    fulfillAliceHtlcByBob(alice2bobUpdateAdd0.id, preimage0, f)
-//    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 15000000000L.msat)
-//    awaitCond(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 5000000000L.msat)
+    alice ! bob2alice.expectMsgType[StateUpdate]
+    bob ! alice2bob.expectMsgType[StateUpdate]
+    bob2alice.expectNoMessage()
+    alice2bob.expectNoMessage()
+    fulfillAliceHtlcByBob(alice2bobUpdateAdd0.id, preimage0, f)
+    awaitCond(alice.stateName == NORMAL)
+    awaitCond(bob.stateName == NORMAL)
+    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 15000000000L.msat)
+    awaitCond(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 5000000000L.msat)
   }
 }
