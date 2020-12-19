@@ -303,8 +303,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     case Event(_: CMD_SIGN, data: HC_DATA_ESTABLISHED) if data.commitments.nextLocalUpdates.nonEmpty || data.resizeProposal.isDefined =>
       val nextLocalLCSS = data.resizeProposal.map(data.withResize).getOrElse(data).commitments.nextLocalUnsignedLCSS(currentBlockDay)
-      val localSU = nextLocalLCSS.withLocalSigOfRemote(kit.nodeParams.privateKey).stateUpdate
-      stay SendingHosted localSU
+      stay SendingHosted nextLocalLCSS.withLocalSigOfRemote(kit.nodeParams.privateKey).stateUpdate
 
     case Event(remoteSU: StateUpdate, data: HC_DATA_ESTABLISHED) if remoteSU.localSigOfRemoteLCSS != data.commitments.lastCrossSignedState.remoteSigOfLocal =>
       attemptStateUpdate(remoteSU, data)
