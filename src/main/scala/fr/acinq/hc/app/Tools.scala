@@ -94,11 +94,10 @@ object Config {
 
 
 case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDeltaBlocks: Int, onChainRefundThresholdSat: Long,
-                    liabilityDeadlineBlockdays: Int, defaultCapacityMsat: Long, maxHtlcValueInFlightMsat: Long,
-                    htlcMinimumMsat: Long, maxAcceptedHtlcs: Int) {
+                    liabilityDeadlineBlockdays: Int, defaultCapacityMsat: Long, htlcMinimumMsat: Long, maxAcceptedHtlcs: Int) {
 
   val initMsg: InitHostedChannel =
-    InitHostedChannel(UInt64(maxHtlcValueInFlightMsat), htlcMinimumMsat.msat, maxAcceptedHtlcs,
+    InitHostedChannel(UInt64(defaultCapacityMsat), htlcMinimumMsat.msat, maxAcceptedHtlcs,
       defaultCapacityMsat.msat, liabilityDeadlineBlockdays, onChainRefundThresholdSat.sat,
       initialClientBalanceMsat = 0L.msat)
 }
