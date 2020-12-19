@@ -112,7 +112,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
         val localUnsignedLCSS = LastCrossSignedState(data.refundScriptPubKey, initHostedChannel = hostInit, blockDay = currentBlockDay,
           localBalanceMsat = hostInit.initialClientBalanceMsat, remoteBalanceMsat = hostInit.channelCapacityMsat - hostInit.initialClientBalanceMsat,
           localUpdates = 0L, remoteUpdates = 0L, incomingHtlcs = Nil, outgoingHtlcs = Nil, localSigOfRemote = ByteVector64.Zeroes, remoteSigOfLocal = ByteVector64.Zeroes)
-        val commitments: HostedCommitments = restoreEmptyData(localUnsignedLCSS.withLocalSigOfRemote(kit.nodeParams.privateKey), isHost = false).commitments
+        val commitments = restoreEmptyData(localUnsignedLCSS.withLocalSigOfRemote(kit.nodeParams.privateKey), isHost = false).commitments
         stay using HC_DATA_CLIENT_WAIT_HOST_STATE_UPDATE(commitments) SendingHosted commitments.lastCrossSignedState.stateUpdate
       }
 
@@ -174,26 +174,23 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     // NORMAL PATHWAY
 
     case Event(remoteLCSS: LastCrossSignedState, data: HC_DATA_ESTABLISHED) =>
-      val isRemoteResized = data.resizeProposal.exists(remoteLCSS.initHostedChannel.channelCapacityMsat == _.newCapacity)
-      val data1 = if (isRemoteResized) applyResize(data, data.resizeProposal.get).copy(resizeProposal = None) else data
-      val localLCSS = data.commitments.lastCrossSignedState
-
+      val localLCSS: LastCrossSignedState = data.commitments.lastCrossSignedState // In any case our LCSS is the current one
+      val data1 = data.resizeProposal.filter(_ isRemoteResized remoteLCSS).map(data.withResize).getOrElse(data) // But they may have a resized one
       val weAreEven = localLCSS.remoteUpdates == remoteLCSS.localUpdates && localLCSS.localUpdates == remoteLCSS.remoteUpdates
       val weAreAhead = localLCSS.remoteUpdates > remoteLCSS.localUpdates || localLCSS.localUpdates > remoteLCSS.remoteUpdates
-
       val isLocalSigOk = remoteLCSS.verifyRemoteSig(kit.nodeParams.nodeId)
       val isRemoteSigOk = remoteLCSS.reverse.verifyRemoteSig(remoteNodeId)
 
       if (!isRemoteSigOk) {
-        val (data2, error) = withLocalError(data1, ErrorCodes.ERR_HOSTED_WRONG_REMOTE_SIG)
-        goto(CLOSED) StoringAndUsing data2 SendingHasChannelId error
+        val (finalData, error) = withLocalError(data1, ErrorCodes.ERR_HOSTED_WRONG_REMOTE_SIG)
+        goto(CLOSED) StoringAndUsing finalData SendingHasChannelId error
       } else if (!isLocalSigOk) {
-        val (data2, error) = withLocalError(data1, ErrorCodes.ERR_HOSTED_WRONG_LOCAL_SIG)
-        goto(CLOSED) StoringAndUsing data2 SendingHasChannelId error
+        val (finalData, error) = withLocalError(data1, ErrorCodes.ERR_HOSTED_WRONG_LOCAL_SIG)
+        goto(CLOSED) StoringAndUsing finalData SendingHasChannelId error
       } else if (weAreEven || weAreAhead) {
         val retransmit = Vector(localLCSS) ++ data1.resizeProposal
-        val data2 = data1.copy(commitments = data1.commitments.copy(nextRemoteUpdates = Nil), overrideProposal = None)
-        goto(NORMAL) using data2 SendingManyHosted retransmit SendingManyHasChannelId data1.commitments.nextLocalUpdates Receiving CMD_SIGN(None)
+        val finalData = data1.copy(commitments = data1.commitments.copy(nextRemoteUpdates = Nil), overrideProposal = None)
+        goto(NORMAL) using finalData SendingManyHosted retransmit SendingManyHasChannelId data1.commitments.nextLocalUpdates Receiving CMD_SIGN(None)
       } else {
         val localUpdatesAcked = remoteLCSS.remoteUpdates - localLCSS.localUpdates
         val remoteUpdatesAcked = remoteLCSS.localUpdates - localLCSS.remoteUpdates
@@ -253,20 +250,20 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     case Event(HC_CMD_PUBLIC(remoteNodeId, false), data: HC_DATA_ESTABLISHED) =>
       val syncData = Await.result(hostedSync ? HostedSync.GetHostedSyncData, span).asInstanceOf[OperationalData]
-      val tooFewNormal: Option[PublicKey] = syncData.tooFewNormalChans(kit.nodeParams.nodeId, remoteNodeId, vals.phcConfig)
-      val tooManyPHC: Option[PublicKey] = syncData.phcNetwork.tooManyPHCs(kit.nodeParams.nodeId, remoteNodeId, vals.phcConfig)
-      if (tooManyPHC.isDefined) stay replying CMDResFailure(s"Can't proceed: nodeId=${tooManyPHC.get} has too many PHCs already, max=${vals.phcConfig.maxPerNode}")
-      else if (tooFewNormal.isDefined) stay replying CMDResFailure(s"Can't proceed: nodeId=${tooFewNormal.get} has too few normal channels, min=${vals.phcConfig.minNormalChans}")
-      else if (vals.phcConfig.minCapacity > data.commitments.capacity) stay replying CMDResFailure(s"Can't proceed: HC capacity is below, min=${vals.phcConfig.minCapacity}")
-      else if (vals.phcConfig.maxCapacity < data.commitments.capacity) stay replying CMDResFailure(s"Can't proceed: HC capacity is above, max=${vals.phcConfig.maxCapacity}")
+      val notEnoughNormalChannels = syncData.tooFewNormalChans(kit.nodeParams.nodeId, remoteNodeId, vals.phcConfig)
+      val tooManyPublicHostedChannels = syncData.phcNetwork.tooManyPHCs(kit.nodeParams.nodeId, remoteNodeId, vals.phcConfig)
+      if (tooManyPublicHostedChannels.isDefined) stay replying CMDResFailure(s"Can't proceed: nodeId=${tooManyPublicHostedChannels.get} has too many PHCs already, max=${vals.phcConfig.maxPerNode}")
+      else if (notEnoughNormalChannels.isDefined) stay replying CMDResFailure(s"Can't proceed: nodeId=${notEnoughNormalChannels.get} has too few normal channels, min=${vals.phcConfig.minNormalChans}")
+      else if (vals.phcConfig.minCapacity > data.commitments.capacity) stay replying CMDResFailure(s"Can't proceed: HC capacity is below min=${vals.phcConfig.minCapacity}")
+      else if (vals.phcConfig.maxCapacity < data.commitments.capacity) stay replying CMDResFailure(s"Can't proceed: HC capacity is above max=${vals.phcConfig.maxCapacity}")
       else stay Receiving HC_CMD_PUBLIC(remoteNodeId, force = true)
 
     case Event(cmd: HC_CMD_PUBLIC, data: HC_DATA_ESTABLISHED) =>
-      val data1 = data.copy(commitments = data.commitments.copy(announceChannel = true), channelAnnouncement = None)
+      val data1 = data.modify(_.commitments.announceChannel).setTo(true).copy(channelAnnouncement = None)
       stay StoringAndUsing data1 replying CMDResSuccess(cmd) Receiving HostedChannel.SendAnnouncements(force = false)
 
     case Event(cmd: HC_CMD_PRIVATE, data: HC_DATA_ESTABLISHED) =>
-      val data1 = data.copy(commitments = data.commitments.copy(announceChannel = false), channelAnnouncement = None)
+      val data1 = data.modify(_.commitments.announceChannel).setTo(false).copy(channelAnnouncement = None)
       stay StoringAndUsing data1 replying CMDResSuccess(cmd)
 
     // Payments
@@ -304,11 +301,10 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
           goto(CLOSED) StoringAndUsing data1 SendingHasChannelId error
       }
 
-    case Event(_: CMD_SIGN, data: HC_DATA_ESTABLISHED) if data.resizeProposal.isDefined =>
-      stay SendingHosted applyResize(data, data.resizeProposal.get).commitments.nextLocalUnsignedLCSS(currentBlockDay).withLocalSigOfRemote(kit.nodeParams.privateKey).stateUpdate
-
-    case Event(_: CMD_SIGN, data: HC_DATA_ESTABLISHED) if data.commitments.nextLocalUpdates.nonEmpty =>
-      stay SendingHosted data.commitments.nextLocalUnsignedLCSS(currentBlockDay).withLocalSigOfRemote(kit.nodeParams.privateKey).stateUpdate
+    case Event(_: CMD_SIGN, data: HC_DATA_ESTABLISHED) if data.commitments.nextLocalUpdates.nonEmpty || data.resizeProposal.isDefined =>
+      val nextLocalLCSS = data.resizeProposal.map(data.withResize).getOrElse(data).commitments.nextLocalUnsignedLCSS(currentBlockDay)
+      val localSU = nextLocalLCSS.withLocalSigOfRemote(kit.nodeParams.privateKey).stateUpdate
+      stay SendingHosted localSU
 
     case Event(remoteSU: StateUpdate, data: HC_DATA_ESTABLISHED) if remoteSU.localSigOfRemoteLCSS != data.commitments.lastCrossSignedState.remoteSigOfLocal =>
       attemptStateUpdate(remoteSU, data)
@@ -441,21 +437,22 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
         log.info(s"PLGN PHC, scheduling override proposal for peer=$remoteNodeId")
         val newLocalUpdates = data.commitments.lastCrossSignedState.localUpdates + data.commitments.nextLocalUpdates.size + 1
         val newRemoteUpdates = data.commitments.lastCrossSignedState.remoteUpdates + data.commitments.nextRemoteUpdates.size + 1
-        val overridingLocallySignedLCSS = makeOverridingLocallySignedLCSS(data.commitments, cmd.newLocalBalance, newLocalUpdates, newRemoteUpdates, currentBlockDay)
-        val localSO = StateOverride(overridingLocallySignedLCSS.blockDay, overridingLocallySignedLCSS.localBalanceMsat, overridingLocallySignedLCSS.localUpdates,
-          overridingLocallySignedLCSS.remoteUpdates, overridingLocallySignedLCSS.localSigOfRemote)
+        val overrideLCSS = makeOverridingLocallySignedLCSS(data.commitments, cmd.newLocalBalance, newLocalUpdates, newRemoteUpdates, currentBlockDay)
+        val localSO = StateOverride(overrideLCSS.blockDay, overrideLCSS.localBalanceMsat, overrideLCSS.localUpdates, overrideLCSS.remoteUpdates, overrideLCSS.localSigOfRemote)
         val data1 = data.copy(overrideProposal = Some(localSO), refundPendingInfo = None)
         stay StoringAndUsing data1 replying CMDResSuccess(cmd) SendingHosted localSO
       }
 
     // Misc
 
-    case Event(_: HC_CMD_DROP, data: HC_DATA_ESTABLISHED) if data.pendingHtlcs.nonEmpty =>
-      stay replying CMDResFailure("Dropping declined: in-flight HTLCs are present")
-
-    case Event(cmd: HC_CMD_DROP, _: HC_DATA_ESTABLISHED) =>
-      channelsDb.removeHostedChannelFromDb(remoteNodeId)
-      stop(FSM.Normal) replying CMDResSuccess(cmd)
+    case Event(cmd: HC_CMD_DROP, data: HC_DATA_ESTABLISHED) =>
+      if (data.pendingHtlcs.nonEmpty) {
+        channelsDb.removeHostedChannelFromDb(remoteNodeId)
+        stop(FSM.Normal) replying CMDResSuccess(cmd)
+      } else {
+        // Only cold channel can be dropped, otherwise we'd have dangling HTLCs
+        stay replying CMDResFailure("Dropping declined: in-flight HTLCs are present")
+      }
 
     case Event(cmd: HC_CMD_SUSPEND, data: HC_DATA_ESTABLISHED) =>
       val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_MANUAL_SUSPEND)
@@ -543,19 +540,19 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     }
 
     def AckingSuccess(command: HtlcSettlementCommand): HostedFsmState = {
-      Channel.replyToCommand(self, RES_SUCCESS(command, channelId), command)
+      replyToCommand(self, reply = RES_SUCCESS(command, channelId), command)
       ackCommand(kit.nodeParams.db.pendingRelay, channelId, command)
       state
     }
 
     def AckingFail(cause: Throwable, command: HtlcSettlementCommand): HostedFsmState = {
-      Channel.replyToCommand(self, RES_FAILURE(command, cause), command)
+      replyToCommand(self, reply = RES_FAILURE(command, cause), command)
       ackCommand(kit.nodeParams.db.pendingRelay, channelId, command)
       state
     }
 
-    def AckingAddSuccess(cmd: CMD_ADD_HTLC): HostedFsmState = {
-      Channel.replyToCommand(self, RES_SUCCESS(cmd, channelId), cmd)
+    def AckingAddSuccess(command: CMD_ADD_HTLC): HostedFsmState = {
+      replyToCommand(self, reply = RES_SUCCESS(command, channelId), command)
       state
     }
 
@@ -625,7 +622,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
   def ackAddFail(cmd: CMD_ADD_HTLC, cause: ChannelException, channelUpdate: wire.ChannelUpdate): HostedFsmState = {
     log.warning(s"PLGN PHC, ${cause.getMessage} while processing cmd=${cmd.getClass.getSimpleName} in state=$stateName")
-    Channel.replyToCommand(self, RES_ADD_FAILED(channelUpdate = Some(channelUpdate), t = cause, c = cmd), cmd)
+    replyToCommand(self, RES_ADD_FAILED(channelUpdate = Some(channelUpdate), t = cause, c = cmd), cmd)
     stay
   }
 
@@ -709,7 +706,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     }
   }
 
-  def attemptStateUpdate(remoteSU: StateUpdate, data: HC_DATA_ESTABLISHED): HostedFsmState = {
+  def attemptStateUpdate(remoteSU: StateUpdate, data: HC_DATA_ESTABLISHED, isRetrying: Boolean = false): HostedFsmState = {
     val lcss1 = data.commitments.nextLocalUnsignedLCSS(remoteSU.blockDay).copy(remoteSigOfLocal = remoteSU.localSigOfRemoteLCSS).withLocalSigOfRemote(kit.nodeParams.privateKey)
     val commits1 = data.commitments.copy(lastCrossSignedState = lcss1, localSpec = data.commitments.nextLocalSpec, nextLocalUpdates = Nil, nextRemoteUpdates = Nil)
     val isRemoteSigOk = lcss1.verifyRemoteSig(remoteNodeId)
@@ -719,12 +716,11 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_WRONG_BLOCKDAY)
       goto(CLOSED) StoringAndUsing data1 SendingHasChannelId error
     } else if (remoteSU.remoteUpdates < lcss1.localUpdates) {
-      // We persist their unsigned remote updates to maybe use them on re-sync
-      stay StoringAndUsing data SendingHosted commits1.lastCrossSignedState.stateUpdate
+      // Persist unsigned remote updates to use them on re-sync
+      stay StoringAndUsing data Receiving CMD_SIGN(None)
     } else if (!isRemoteSigOk && data.resizeProposal.isDefined) {
       // Wrong signature, but resize proposal is present, try once again with new capacity
-      val data1 = applyResize(data, data.resizeProposal.get).copy(resizeProposal = None)
-      attemptStateUpdate(remoteSU, data1)
+      attemptStateUpdate(remoteSU, data.withResize(data.resizeProposal.get), isRetrying = true)
     } else if (!isRemoteSigOk) {
       val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_WRONG_REMOTE_SIG)
       goto(CLOSED) StoringAndUsing data1 SendingHasChannelId error
@@ -735,17 +731,15 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     }
   }
 
-  private def applyResize(data: HC_DATA_ESTABLISHED, resize: ResizeChannel): HC_DATA_ESTABLISHED =
-    data.modify(_.commitments.lastCrossSignedState.initHostedChannel.channelCapacityMsat).setTo(resize.newCapacity)
-      .modify(_.commitments.lastCrossSignedState.initHostedChannel.maxHtlcValueInFlightMsat).setTo(resize.newCapacityU64)
-      .modify(_.commitments.localSpec.toLocal).usingIf(data.commitments.isHost)(_ + resize.newCapacity - data.commitments.capacity)
-      .modify(_.commitments.localSpec.toRemote).usingIf(!data.commitments.isHost)(_ + resize.newCapacity - data.commitments.capacity)
-      .modify(_.channelAnnouncement).setTo(None)
-
   private def fulfillsAndFakeFails(data: HC_DATA_ESTABLISHED) =
     data.commitments.nextRemoteUpdates.filter {
       case fail: UpdateFailHtlc => fail.reason == fakeFailSecret
       case _: UpdateFulfillHtlc => true
       case _ => false
     }
+  
+  private def replyToCommand(sender: ActorRef, reply: CommandResponse[Command], cmd: Command): Unit = cmd match {
+    case cmd1: HasReplyToCommand => if (cmd1.replyTo == ActorRef.noSender) sender ! reply else cmd1.replyTo ! reply
+    case cmd1: HasOptionalReplyToCommand => cmd1.replyTo_opt.foreach(_ ! reply)
+  }
 }

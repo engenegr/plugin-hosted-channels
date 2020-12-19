@@ -3,6 +3,7 @@ package fr.acinq.hc.app.channel
 import fr.acinq.eclair._
 import fr.acinq.hc.app._
 import fr.acinq.eclair.channel._
+import com.softwaremill.quicklens._
 import scala.util.{Failure, Success, Try}
 import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
 import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc}
@@ -84,6 +85,13 @@ case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
 
   def timedOutOutgoingHtlcs(blockHeight: Long): Set[wire.UpdateAddHtlc] =
     pendingHtlcs.collect(DirectedHtlc.outgoing).filter(blockHeight > _.cltvExpiry.toLong)
+
+  def withResize(resize: ResizeChannel): HC_DATA_ESTABLISHED =
+    this.modify(_.commitments.lastCrossSignedState.initHostedChannel.channelCapacityMsat).setTo(resize.newCapacity)
+      .modify(_.commitments.lastCrossSignedState.initHostedChannel.maxHtlcValueInFlightMsat).setTo(resize.newCapacityU64)
+      .modify(_.commitments.localSpec.toLocal).usingIf(commitments.isHost)(_ + resize.newCapacity - commitments.capacity)
+      .modify(_.commitments.localSpec.toRemote).usingIf(!commitments.isHost)(_ + resize.newCapacity - commitments.capacity)
+      .modify(_.resizeProposal).setTo(None)
 }
 
 case class HostedCommitments(isHost: Boolean,
