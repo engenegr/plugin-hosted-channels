@@ -669,11 +669,11 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     else stay replying CMDResFailure(s"Not enough days passed since=${data.commitments.lastCrossSignedState.blockDay} blockday")
   }
 
-  def processBlockCount(errorState: FsmStateExt, failedIds: Set[UpdateAddHtlc], data: HC_DATA_ESTABLISHED): HostedFsmState =
-    if (failedIds.nonEmpty) {
-      failTimedoutOutgoing(localAdds = failedIds, data)
+  def processBlockCount(errorState: FsmStateExt, failedAdds: Set[UpdateAddHtlc], data: HC_DATA_ESTABLISHED): HostedFsmState =
+    if (failedAdds.nonEmpty) {
+      failTimedoutOutgoing(localAdds = failedAdds, data)
       val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_TIMED_OUT_OUTGOING_HTLC)
-      val fakeFailsForOutgoingAdds = for (add <- failedIds) yield UpdateFailHtlc(channelId, add.id, fakeFailSecret)
+      val fakeFailsForOutgoingAdds = for (add <- failedAdds) yield UpdateFailHtlc(channelId, add.id, fakeFailSecret)
       val commits1 = data1.commitments.copy(nextRemoteUpdates = data1.commitments.nextRemoteUpdates ++ fakeFailsForOutgoingAdds)
       errorState StoringAndUsing data1.copy(commitments = commits1) SendingHasChannelId error
     } else stay
