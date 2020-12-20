@@ -85,62 +85,80 @@ object Codecs {
 
   // HC messages which don't have channel id
 
-  def decodeHostedMessage(wrap: UnknownMessage): Attempt[HostedChannelMessage] = wrap.tag match {
-    case HC_INVOKE_HOSTED_CHANNEL_TAG => invokeHostedChannelCodec.decode(wrap.data.toBitVector).map(_.value)
-    case HC_INIT_HOSTED_CHANNEL_TAG => initHostedChannelCodec.decode(wrap.data.toBitVector).map(_.value)
-    case HC_LAST_CROSS_SIGNED_STATE_TAG => lastCrossSignedStateCodec.decode(wrap.data.toBitVector).map(_.value)
-    case HC_STATE_UPDATE_TAG => stateUpdateCodec.decode(wrap.data.toBitVector).map(_.value)
-    case HC_STATE_OVERRIDE_TAG => stateOverrideCodec.decode(wrap.data.toBitVector).map(_.value)
-    case HC_HOSTED_CHANNEL_BRANDING_TAG => hostedChannelBrandingCodec.decode(wrap.data.toBitVector).map(_.value)
-    case HC_REFUND_PENDING_TAG => refundPendingCodec.decode(wrap.data.toBitVector).map(_.value)
-    case HC_ANNOUNCEMENT_SIGNATURE_TAG => announcementSignatureCodec.decode(wrap.data.toBitVector).map(_.value)
-    case HC_RESIZE_CHANNEL_TAG => resizeChannelCodec.decode(wrap.data.toBitVector).map(_.value)
-    case HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG => queryPublicHostedChannelsCodec.decode(wrap.data.toBitVector).map(_.value)
-    case HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG => replyPublicHostedChannelsEndCodec.decode(wrap.data.toBitVector).map(_.value)
+  def decodeHostedMessage(wrap: UnknownMessage): Attempt[HostedChannelMessage] = {
+    val bitVector = wrap.data.toBitVector
+
+    val decodeAttempt = wrap.tag match {
+      case HC_STATE_UPDATE_TAG => stateUpdateCodec.decode(bitVector)
+      case HC_STATE_OVERRIDE_TAG => stateOverrideCodec.decode(bitVector)
+      case HC_REFUND_PENDING_TAG => refundPendingCodec.decode(bitVector)
+      case HC_RESIZE_CHANNEL_TAG => resizeChannelCodec.decode(bitVector)
+      case HC_INIT_HOSTED_CHANNEL_TAG => initHostedChannelCodec.decode(bitVector)
+      case HC_INVOKE_HOSTED_CHANNEL_TAG => invokeHostedChannelCodec.decode(bitVector)
+      case HC_LAST_CROSS_SIGNED_STATE_TAG => lastCrossSignedStateCodec.decode(bitVector)
+      case HC_ANNOUNCEMENT_SIGNATURE_TAG => announcementSignatureCodec.decode(bitVector)
+      case HC_HOSTED_CHANNEL_BRANDING_TAG => hostedChannelBrandingCodec.decode(bitVector)
+      case HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG => queryPublicHostedChannelsCodec.decode(bitVector)
+      case HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG => replyPublicHostedChannelsEndCodec.decode(bitVector)
+    }
+
+    decodeAttempt.map(_.value)
   }
 
   def toUnknownHostedMessage(message: HostedChannelMessage): UnknownMessage = message match {
-    case msg: InvokeHostedChannel => UnknownMessage(HC_INVOKE_HOSTED_CHANNEL_TAG, invokeHostedChannelCodec.encode(msg).require.toByteVector)
-    case msg: InitHostedChannel => UnknownMessage(HC_INIT_HOSTED_CHANNEL_TAG, initHostedChannelCodec.encode(msg).require.toByteVector)
-    case msg: LastCrossSignedState => UnknownMessage(HC_LAST_CROSS_SIGNED_STATE_TAG, lastCrossSignedStateCodec.encode(msg).require.toByteVector)
     case msg: StateUpdate => UnknownMessage(HC_STATE_UPDATE_TAG, stateUpdateCodec.encode(msg).require.toByteVector)
     case msg: StateOverride => UnknownMessage(HC_STATE_OVERRIDE_TAG, stateOverrideCodec.encode(msg).require.toByteVector)
-    case msg: HostedChannelBranding => UnknownMessage(HC_HOSTED_CHANNEL_BRANDING_TAG, hostedChannelBrandingCodec.encode(msg).require.toByteVector)
     case msg: RefundPending => UnknownMessage(HC_REFUND_PENDING_TAG, refundPendingCodec.encode(msg).require.toByteVector)
-    case msg: AnnouncementSignature => UnknownMessage(HC_ANNOUNCEMENT_SIGNATURE_TAG, announcementSignatureCodec.encode(msg).require.toByteVector)
     case msg: ResizeChannel => UnknownMessage(HC_RESIZE_CHANNEL_TAG, resizeChannelCodec.encode(msg).require.toByteVector)
+    case msg: InitHostedChannel => UnknownMessage(HC_INIT_HOSTED_CHANNEL_TAG, initHostedChannelCodec.encode(msg).require.toByteVector)
+    case msg: InvokeHostedChannel => UnknownMessage(HC_INVOKE_HOSTED_CHANNEL_TAG, invokeHostedChannelCodec.encode(msg).require.toByteVector)
+    case msg: LastCrossSignedState => UnknownMessage(HC_LAST_CROSS_SIGNED_STATE_TAG, lastCrossSignedStateCodec.encode(msg).require.toByteVector)
+    case msg: AnnouncementSignature => UnknownMessage(HC_ANNOUNCEMENT_SIGNATURE_TAG, announcementSignatureCodec.encode(msg).require.toByteVector)
+    case msg: HostedChannelBranding => UnknownMessage(HC_HOSTED_CHANNEL_BRANDING_TAG, hostedChannelBrandingCodec.encode(msg).require.toByteVector)
     case msg: QueryPublicHostedChannels => UnknownMessage(HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG, queryPublicHostedChannelsCodec.encode(msg).require.toByteVector)
     case msg: ReplyPublicHostedChannelsEnd => UnknownMessage(HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG, replyPublicHostedChannelsEndCodec.encode(msg).require.toByteVector)
   }
 
   // Normal channel messages which are also used in HC
 
-  def decodeHasChanIdMessage(wrap: UnknownMessage): Attempt[HasChannelId] = wrap.tag match {
-    case HC_UPDATE_ADD_HTLC_TAG => updateAddHtlcCodec.decode(wrap.data.toBitVector).map(_.value)
-    case HC_UPDATE_FULFILL_HTLC_TAG => updateFulfillHtlcCodec.decode(wrap.data.toBitVector).map(_.value)
-    case HC_UPDATE_FAIL_HTLC_TAG => updateFailHtlcCodec.decode(wrap.data.toBitVector).map(_.value)
-    case HC_UPDATE_FAIL_MALFORMED_HTLC_TAG => updateFailMalformedHtlcCodec.decode(wrap.data.toBitVector).map(_.value)
-    case HC_ERROR_TAG => errorCodec.decode(wrap.data.toBitVector).map(_.value)
-    case tag => Attempt failure Err(s"PLGN PHC, unsupported chan tag=$tag")
+  def decodeHasChanIdMessage(wrap: UnknownMessage): Attempt[HasChannelId] = {
+    val bitVector = wrap.data.toBitVector
+
+    val decodeAttempt = wrap.tag match {
+      case HC_ERROR_TAG => errorCodec.decode(bitVector)
+      case HC_UPDATE_ADD_HTLC_TAG => updateAddHtlcCodec.decode(bitVector)
+      case HC_UPDATE_FAIL_HTLC_TAG => updateFailHtlcCodec.decode(bitVector)
+      case HC_UPDATE_FULFILL_HTLC_TAG => updateFulfillHtlcCodec.decode(bitVector)
+      case HC_UPDATE_FAIL_MALFORMED_HTLC_TAG => updateFailMalformedHtlcCodec.decode(bitVector)
+      case tag => Attempt failure Err(s"PLGN PHC, unsupported HasChannelId tag=$tag")
+    }
+
+    decodeAttempt.map(_.value)
   }
 
   def toUnknownHasChanIdMessage(message: HasChannelId): UnknownMessage = message match {
-    case msg: UpdateAddHtlc => UnknownMessage(HC_UPDATE_ADD_HTLC_TAG, LightningMessageCodecs.updateAddHtlcCodec.encode(msg).require.toByteVector)
-    case msg: UpdateFulfillHtlc => UnknownMessage(HC_UPDATE_FULFILL_HTLC_TAG, LightningMessageCodecs.updateFulfillHtlcCodec.encode(msg).require.toByteVector)
-    case msg: UpdateFailHtlc => UnknownMessage(HC_UPDATE_FAIL_HTLC_TAG, LightningMessageCodecs.updateFailHtlcCodec.encode(msg).require.toByteVector)
-    case msg: UpdateFailMalformedHtlc => UnknownMessage(HC_UPDATE_FAIL_MALFORMED_HTLC_TAG, LightningMessageCodecs.updateFailMalformedHtlcCodec.encode(msg).require.toByteVector)
     case msg: Error => UnknownMessage(HC_ERROR_TAG, LightningMessageCodecs.errorCodec.encode(msg).require.toByteVector)
-    case msg => throw new RuntimeException(s"PLGN PHC, unacceptable chan message=${msg.getClass.toString}")
+    case msg: UpdateAddHtlc => UnknownMessage(HC_UPDATE_ADD_HTLC_TAG, LightningMessageCodecs.updateAddHtlcCodec.encode(msg).require.toByteVector)
+    case msg: UpdateFailHtlc => UnknownMessage(HC_UPDATE_FAIL_HTLC_TAG, LightningMessageCodecs.updateFailHtlcCodec.encode(msg).require.toByteVector)
+    case msg: UpdateFulfillHtlc => UnknownMessage(HC_UPDATE_FULFILL_HTLC_TAG, LightningMessageCodecs.updateFulfillHtlcCodec.encode(msg).require.toByteVector)
+    case msg: UpdateFailMalformedHtlc => UnknownMessage(HC_UPDATE_FAIL_MALFORMED_HTLC_TAG, LightningMessageCodecs.updateFailMalformedHtlcCodec.encode(msg).require.toByteVector)
+    case msg => throw new RuntimeException(s"PLGN PHC, unacceptable HasChannelId message=${msg.getClass.toString}")
   }
 
   // Normal gossip messages which are also used in PHC gossip
 
-  def decodeAnnounceMessage(wrap: UnknownMessage): Attempt[AnnouncementMessage] = wrap.tag match {
-    case PHC_ANNOUNCE_GOSSIP_TAG => LightningMessageCodecs.channelAnnouncementCodec.decode(wrap.data.toBitVector).map(_.value)
-    case PHC_ANNOUNCE_SYNC_TAG => LightningMessageCodecs.channelAnnouncementCodec.decode(wrap.data.toBitVector).map(_.value)
-    case PHC_UPDATE_GOSSIP_TAG => LightningMessageCodecs.channelUpdateCodec.decode(wrap.data.toBitVector).map(_.value)
-    case PHC_UPDATE_SYNC_TAG => LightningMessageCodecs.channelUpdateCodec.decode(wrap.data.toBitVector).map(_.value)
-    case tag => Attempt failure Err(s"PLGN PHC, unsupported gossip tag=$tag")
+  def decodeAnnounceMessage(wrap: UnknownMessage): Attempt[AnnouncementMessage] = {
+    val bitVector = wrap.data.toBitVector
+
+    val decodeAttempt = wrap.tag match {
+      case PHC_ANNOUNCE_GOSSIP_TAG => LightningMessageCodecs.channelAnnouncementCodec.decode(bitVector)
+      case PHC_ANNOUNCE_SYNC_TAG => LightningMessageCodecs.channelAnnouncementCodec.decode(bitVector)
+      case PHC_UPDATE_GOSSIP_TAG => LightningMessageCodecs.channelUpdateCodec.decode(bitVector)
+      case PHC_UPDATE_SYNC_TAG => LightningMessageCodecs.channelUpdateCodec.decode(bitVector)
+      case tag => Attempt failure Err(s"PLGN PHC, unsupported Announcement tag=$tag")
+    }
+
+    decodeAttempt.map(_.value)
   }
 
   def toUnknownAnnounceMessage(message: AnnouncementMessage, isGossip: Boolean): UnknownMessage = message match {
@@ -148,6 +166,6 @@ object Codecs {
     case msg: ChannelAnnouncement => UnknownMessage(PHC_ANNOUNCE_SYNC_TAG, LightningMessageCodecs.channelAnnouncementCodec.encode(msg).require.toByteVector)
     case msg: ChannelUpdate if isGossip => UnknownMessage(PHC_UPDATE_GOSSIP_TAG, LightningMessageCodecs.channelUpdateCodec.encode(msg).require.toByteVector)
     case msg: ChannelUpdate => UnknownMessage(PHC_UPDATE_SYNC_TAG, LightningMessageCodecs.channelUpdateCodec.encode(msg).require.toByteVector)
-    case msg => throw new RuntimeException(s"PLGN PHC, unacceptable routing message=${msg.getClass.toString}")
+    case msg => throw new RuntimeException(s"PLGN PHC, unacceptable Announcement message=${msg.getClass.toString}")
   }
 }
