@@ -705,7 +705,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     }
   }
 
-  def attemptStateUpdate(remoteSU: StateUpdate, data: HC_DATA_ESTABLISHED, isRetrying: Boolean = false): HostedFsmState = {
+  def attemptStateUpdate(remoteSU: StateUpdate, data: HC_DATA_ESTABLISHED): HostedFsmState = {
     val lcss1 = data.commitments.nextLocalUnsignedLCSS(remoteSU.blockDay).copy(remoteSigOfLocal = remoteSU.localSigOfRemoteLCSS).withLocalSigOfRemote(kit.nodeParams.privateKey)
     val commits1 = data.commitments.copy(lastCrossSignedState = lcss1, localSpec = data.commitments.nextLocalSpec, nextLocalUpdates = Nil, nextRemoteUpdates = Nil)
     val isRemoteSigOk = lcss1.verifyRemoteSig(remoteNodeId)
@@ -717,12 +717,13 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     } else if (remoteSU.remoteUpdates < lcss1.localUpdates) {
       // Persist unsigned remote updates to use them on re-sync
       stay StoringAndUsing data Receiving CMD_SIGN(None)
-    } else if (!isRemoteSigOk && data.resizeProposal.isDefined) {
-      // Wrong signature, but resize proposal is present, try once again with new capacity
-      attemptStateUpdate(remoteSU, data.withResize(data.resizeProposal.get), isRetrying = true)
     } else if (!isRemoteSigOk) {
-      val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_WRONG_REMOTE_SIG)
-      goto(CLOSED) StoringAndUsing data1 SendingHasChannelId error
+      data.resizeProposal.map(data.withResize) match {
+        case Some(data1) => attemptStateUpdate(remoteSU, data1)
+        case None =>
+          val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_WRONG_REMOTE_SIG)
+          goto(CLOSED) StoringAndUsing data1 SendingHasChannelId error
+      }
     } else {
       val data1 = data.copy(commitments = clearOrigin(commits1, data.commitments), refundPendingInfo = None, overrideProposal = None)
       context.system.eventStream publish AvailableBalanceChanged(self, channelId, shortChannelId, commitments = data1.commitments)
