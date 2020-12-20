@@ -466,8 +466,8 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       if (data.errorExt.nonEmpty) stay replying CMDResFailure("Resizing declined: channel is in error state")
       else if (data.commitments.isHost) stay replying CMDResFailure("Resizing declined: only client can initiate resizing")
       else if (data.resizeProposal.nonEmpty) stay replying CMDResFailure("Resizing declined: channel is already being resized")
-      else if (msg.newCapacity < data.commitments.capacity) stay replying CMDResFailure("Resizing declined: new capacity must be larger than current capacity")
-      else if (msg.newCapacity > vals.phcConfig.maxCapacity) stay replying CMDResFailure("Resizing declined: new capacity must not exceed max capacity")
+      else if (data.commitments.capacity > msg.newCapacity) stay replying CMDResFailure("Resizing declined: new capacity must be larger than current capacity")
+      else if (vals.phcConfig.maxCapacity < msg.newCapacity) stay replying CMDResFailure("Resizing declined: new capacity must not exceed max capacity")
       else stay StoringAndUsing data.copy(resizeProposal = Some(msg), overrideProposal = None) SendingHosted msg Receiving CMD_SIGN(None)
   }
 
@@ -687,7 +687,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
   def processResizeProposal(errorState: FsmStateExt, resize: ResizeChannel, data: HC_DATA_ESTABLISHED): HostedFsmState = {
     val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_INVALID_RESIZE)
     val isLessThanCurrent = resize.newCapacity < data.commitments.capacity
-    val isMoreThanMax = resize.newCapacity > vals.phcConfig.maxCapacity
+    val isMoreThanMax = vals.phcConfig.maxCapacity < resize.newCapacity
     val isSignatureFine = resize.verifyClientSig(remoteNodeId)
 
     if (isLessThanCurrent) {

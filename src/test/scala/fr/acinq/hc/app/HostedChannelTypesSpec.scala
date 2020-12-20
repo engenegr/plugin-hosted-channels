@@ -142,7 +142,7 @@ class HostedChannelTypesSpec extends AnyFunSuite {
 
   test("Resize message sig check") {
     val clientKey = randomKey
-    val msg = ResizeChannel(newCapacity = 100000000L.msat)
+    val msg = ResizeChannel(newCapacity = 100000L.sat)
     assert(msg.sign(clientKey).verifyClientSig(clientKey.publicKey))
   }
 }

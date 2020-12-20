@@ -32,7 +32,7 @@ case class HC_CMD_FINALIZE_REFUND(remoteNodeId: PublicKey, info: String, force: 
 case class HC_CMD_PUBLIC(remoteNodeId: PublicKey, force: Boolean = false) extends HasRemoteNodeIdHostedCommand
 case class HC_CMD_PRIVATE(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 
-case class HC_CMD_RESIZE(remoteNodeId: PublicKey, newCapacity: MilliSatoshi) extends HasRemoteNodeIdHostedCommand
+case class HC_CMD_RESIZE(remoteNodeId: PublicKey, newCapacity: Satoshi) extends HasRemoteNodeIdHostedCommand
 
 case class HC_CMD_GET_INFO(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 
@@ -87,10 +87,10 @@ case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
     pendingHtlcs.collect(DirectedHtlc.outgoing).filter(blockHeight > _.cltvExpiry.toLong)
 
   def withResize(resize: ResizeChannel): HC_DATA_ESTABLISHED =
-    this.modify(_.commitments.lastCrossSignedState.initHostedChannel.channelCapacityMsat).setTo(resize.newCapacity)
-      .modify(_.commitments.lastCrossSignedState.initHostedChannel.maxHtlcValueInFlightMsat).setTo(resize.newCapacityU64)
-      .modify(_.commitments.localSpec.toLocal).usingIf(commitments.isHost)(_ + resize.newCapacity - commitments.capacity)
+    this.modify(_.commitments.lastCrossSignedState.initHostedChannel.maxHtlcValueInFlightMsat).setTo(resize.newCapacityMsatU64)
+      .modify(_.commitments.lastCrossSignedState.initHostedChannel.channelCapacityMsat).setTo(resize.newCapacity.toMilliSatoshi)
       .modify(_.commitments.localSpec.toRemote).usingIf(!commitments.isHost)(_ + resize.newCapacity - commitments.capacity)
+      .modify(_.commitments.localSpec.toLocal).usingIf(commitments.isHost)(_ + resize.newCapacity - commitments.capacity)
       .modify(_.resizeProposal).setTo(None)
 }
 

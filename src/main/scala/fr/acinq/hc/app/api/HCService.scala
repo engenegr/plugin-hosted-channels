@@ -6,7 +6,7 @@ import akka.http.scaladsl.server._
 import fr.acinq.eclair.api.FormParamExtractors._
 import fr.acinq.eclair.api.JsonSupport.{formats, marshaller, serialization}
 import fr.acinq.hc.app.network.{HostedSync, OperationalData}
-import fr.acinq.bitcoin.{ByteVector32, Script}
+import fr.acinq.bitcoin.{ByteVector32, Satoshi, Script}
 import akka.actor.{ActorRef, ActorSystem}
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -81,7 +81,7 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
         }
       } ~
       path("resize") {
-        formFields(nodeIdFormParam, "newCapacity".as[MilliSatoshi]) { case (remoteNodeId, newCapacity) =>
+        formFields(nodeIdFormParam, "newCapacitySat".as[Satoshi]) { case (remoteNodeId, newCapacity) =>
           complete(worker ? HC_CMD_RESIZE(remoteNodeId, newCapacity))
         }
       } ~

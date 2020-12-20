@@ -21,7 +21,7 @@ class HCResizeSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     reachNormal(f)
     awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.capacity == 10000000L.sat)
     awaitCond(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 0L.msat)
-    bob ! HC_CMD_RESIZE(bobKit.nodeParams.nodeId, 50000000000L.msat)
+    bob ! HC_CMD_RESIZE(bobKit.nodeParams.nodeId, 50000000L.sat)
     alice ! bob2alice.expectMsgType[ResizeChannel]
     alice ! bob2alice.expectMsgType[StateUpdate]
     bob ! alice2bob.expectMsgType[StateUpdate]
@@ -51,7 +51,7 @@ class HCResizeSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     val (preimage2, bob2aliceUpdateAdd2) = addHtlcFromBob2Alice(2000000000L.msat, f)
     alice ! CMD_FULFILL_HTLC(bob2aliceUpdateAdd2.id, preimage2)
     alice ! CMD_SIGN(None)
-    bob ! HC_CMD_RESIZE(bobKit.nodeParams.nodeId, 20000000000L.msat)
+    bob ! HC_CMD_RESIZE(bobKit.nodeParams.nodeId, 20000000L.sat)
     alice ! bob2alice.expectMsgType[ResizeChannel]
     alice ! bob2alice.expectMsgType[StateUpdate]
     bob ! alice2bob.expectMsgType[UpdateFulfillHtlc]
@@ -85,7 +85,7 @@ class HCResizeSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
     val (preimage0, alice2bobUpdateAdd0) = addHtlcFromAliceToBob(5000000000L.msat, f, currentBlockHeight)
-    bob ! HC_CMD_RESIZE(bobKit.nodeParams.nodeId, 20000000000L.msat)
+    bob ! HC_CMD_RESIZE(bobKit.nodeParams.nodeId, 20000000L.sat)
     bob2alice.expectMsgType[ResizeChannel] // Alice does not get it
     bob2alice.expectMsgType[StateUpdate]
 
@@ -119,7 +119,7 @@ class HCResizeSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
     val (preimage0, alice2bobUpdateAdd0) = addHtlcFromAliceToBob(5000000000L.msat, f, currentBlockHeight)
-    bob ! HC_CMD_RESIZE(bobKit.nodeParams.nodeId, 20000000000L.msat)
+    bob ! HC_CMD_RESIZE(bobKit.nodeParams.nodeId, 20000000L.sat)
     alice ! bob2alice.expectMsgType[ResizeChannel]
     alice ! bob2alice.expectMsgType[StateUpdate]
     alice2bob.expectMsgType[StateUpdate] // Bob does not get it
@@ -151,7 +151,7 @@ class HCResizeSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     HCTestUtils.resetEntireDatabase(aliceDB)
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
-    bob ! HC_CMD_RESIZE(bobKit.nodeParams.nodeId, 20000000000L.msat)
+    bob ! HC_CMD_RESIZE(bobKit.nodeParams.nodeId, 20000000L.sat)
     alice ! bob2alice.expectMsgType[ResizeChannel]
     bob2alice.expectMsgType[StateUpdate] // Alice does not get it
     bob2alice.expectNoMessage()
@@ -200,7 +200,7 @@ class HCResizeSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
     val (preimage0, alice2bobUpdateAdd0) = addHtlcFromAliceToBob(5000000000L.msat, f, currentBlockHeight)
-    bob ! HC_CMD_RESIZE(bobKit.nodeParams.nodeId, 20000000000L.msat)
+    bob ! HC_CMD_RESIZE(bobKit.nodeParams.nodeId, 20000000L.sat)
     alice ! bob2alice.expectMsgType[ResizeChannel]
     bob2alice.expectMsgType[StateUpdate] // Alice does not get it
     bob2alice.expectNoMessage()
