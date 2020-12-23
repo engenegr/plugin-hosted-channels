@@ -59,14 +59,14 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, channelsDb: HostedChannelsDb
 
     case UnknownMessageReceived(_, nodeId, message, _) if HC.hostedMessageTags.contains(message.tag) =>
       Tuple3(Codecs decodeHostedMessage message, HC.remoteNode2Connection get nodeId, inMemoryHostedChannels get nodeId) match {
-        case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, Hosted message decoding fail, tag=${message.tag}, peer=$nodeId")
+        case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, Hosted message decoding fail, messageTag=${message.tag}, peer=$nodeId")
         case (_, None, _) => logger.info(s"PLGN PHC, no connection found for message=${message.getClass.getSimpleName}, peer=$nodeId")
         case (Attempt.Successful(_: ReplyPublicHostedChannelsEnd), Some(wrap), _) => hostedSync ! HostedSync.GotAllSyncFrom(wrap)
         case (Attempt.Successful(_: QueryPublicHostedChannels), Some(wrap), _) => hostedSync ! HostedSync.SendSyncTo(wrap)
 
         // Special handling for InvokeHostedChannel: if chan exists neither in memory nor in db, then this is a new chan request and anti-spam rules apply
-        case (Attempt.Successful(invoke: InvokeHostedChannel), Some(wrap), null) => restore(guardSpawn(nodeId, wrap, invoke), _ !> HCPeerConnected !> invoke)(nodeId)
-        case (Attempt.Successful(_: HostedChannelMessage), _, null) => logger.info(s"PLGN PHC, no target for HostedMessage, tag=${message.tag}, peer=$nodeId")
+        case (Attempt.Successful(invoke: InvokeHostedChannel), Some(wrap), null) => restore(onNotFound = guardSpawn(nodeId, wrap, invoke), onFound = _ !> HCPeerConnected !> invoke)(nodeId)
+        case (Attempt.Successful(_: HostedChannelMessage), _, null) => logger.info(s"PLGN PHC, no target for HostedMessage, messageTag=${message.tag}, peer=$nodeId")
         case (Attempt.Successful(hosted: HostedChannelMessage), _, channelRef) => channelRef ! hosted
       }
 
@@ -121,7 +121,8 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, channelsDb: HostedChannelsDb
   }
 
   def guardSpawn(nodeId: PublicKey, wrap: PeerConnectedWrap, invoke: InvokeHostedChannel): Unit = {
-    if (ipAntiSpam(wrap.remoteIp) < vals.maxNewChansPerIpPerHour) spawnChannel(nodeId) !> HCPeerConnected !> invoke
+    // Spawn new HC requested by remote peer if that peer is in our override map (special handling) or if there are not too many such requests from remote IP
+    if (vals.hcOverrideMap.contains(nodeId) || ipAntiSpam(wrap.remoteIp) < vals.maxNewChansPerIpPerHour) spawnChannel(nodeId) !> HCPeerConnected !> invoke
     else wrap sendHasChannelIdMsg eclair.wire.Error(ByteVector32.Zeroes, ErrorCodes.ERR_HOSTED_CHANNEL_DENIED)
     // Record this request for anti-spam
     ipAntiSpam(wrap.remoteIp) += 1
