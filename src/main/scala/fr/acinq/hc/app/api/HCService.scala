@@ -13,6 +13,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import fr.acinq.hc.app.db.HostedChannelsDb
 import fr.acinq.eclair.api.AbstractService
 import fr.acinq.eclair.router.Router
+import fr.acinq.eclair.crypto.Mac32
 import scodec.bits.ByteVector
 import fr.acinq.hc.app.Vals
 import akka.util.Timeout
@@ -44,7 +45,7 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
       } ~
       path("bysecret") {
         formFields("secret".as[ByteVector](binaryDataUnmarshaller)) { secret =>
-          channelsDb.getChannelBySecret(secret) match {
+          channelsDb.getChannelBySecret(Mac32.hmac256(secret, kit.nodeParams.nodeId.value)) match {
             case Some(data) => complete(worker ? HC_CMD_GET_INFO(data.commitments.remoteNodeId))
             case None => complete(s"Could not find and HC with secret: $secret")
           }
