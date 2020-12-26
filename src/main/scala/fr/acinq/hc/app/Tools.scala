@@ -3,8 +3,8 @@ package fr.acinq.hc.app
 import fr.acinq.eclair._
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
-import fr.acinq.eclair.wire.{AnnouncementMessage, ChannelAnnouncement, Color, HasChannelId, UnknownMessage}
-import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol}
+import fr.acinq.eclair.wire.{AnnouncementMessage, ChannelAnnouncement, ChannelUpdate, Color, HasChannelId, UnknownMessage}
+import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol, Satoshi}
 import com.typesafe.config.{ConfigFactory, Config => TypesafeConfig}
 import java.io.{ByteArrayInputStream, File}
 import java.nio.file.{Files, Paths}
@@ -96,10 +96,19 @@ object Config {
 case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDeltaBlocks: Int, onChainRefundThresholdSat: Long,
                     liabilityDeadlineBlockdays: Int, defaultCapacityMsat: Long, htlcMinimumMsat: Long, maxAcceptedHtlcs: Int) {
 
+  val feeBase: MilliSatoshi = feeBaseMsat.msat
+
+  val htlcMinimum: MilliSatoshi = htlcMinimumMsat.msat
+
+  val onChainRefundThreshold: Satoshi = onChainRefundThresholdSat.sat
+
   val initMsg: InitHostedChannel =
-    InitHostedChannel(UInt64(defaultCapacityMsat), htlcMinimumMsat.msat, maxAcceptedHtlcs,
-      defaultCapacityMsat.msat, liabilityDeadlineBlockdays, onChainRefundThresholdSat.sat,
-      initialClientBalanceMsat = 0L.msat)
+    InitHostedChannel(UInt64(defaultCapacityMsat), htlcMinimum, maxAcceptedHtlcs, defaultCapacityMsat.msat,
+      liabilityDeadlineBlockdays, onChainRefundThreshold, initialClientBalanceMsat = 0L.msat)
+
+  def areDifferent(cu: ChannelUpdate): Boolean =
+    cu.cltvExpiryDelta.toInt != cltvDeltaBlocks || !cu.htlcMaximumMsat.contains(htlcMinimum) ||
+      cu.feeBaseMsat != feeBase || cu.feeProportionalMillionths != feeProportionalMillionths
 }
 
 case class HCOverrideParams(nodeId: String, params: HCParams)

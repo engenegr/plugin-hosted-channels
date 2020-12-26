@@ -32,6 +32,8 @@ import akka.pattern.ask
 
 
 object HostedChannel {
+  case object SendPrivateChannelUpdateToPeer
+
   case class SendAnnouncements(force: Boolean)
 }
 
@@ -43,7 +45,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
   lazy val shortChannelId: ShortChannelId = Tools.hostedShortChanId(kit.nodeParams.nodeId.value, remoteNodeId.value)
 
-  lazy val initParams: HCParams = vals.hcOverrideMap.get(remoteNodeId).map(_.params).getOrElse(vals.hcDefaultParams)
+  lazy val chanParams: HCParams = vals.hcOverrideMap.get(remoteNodeId).map(_.params).getOrElse(vals.hcDefaultParams)
 
   startTimerWithFixedDelay("SendAnnouncements", HostedChannel.SendAnnouncements(force = false), PHC.tickAnnounceThreshold)
 
@@ -101,7 +103,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       val isValidFinalScriptPubkey = Helpers.Closing.isValidFinalScriptPubkey(remoteInvoke.refundScriptPubKey)
       if (isWrongChain) stop(FSM.Normal) SendingHasChannelId wire.Error(channelId, InvalidChainHash(channelId, kit.nodeParams.chainHash, remoteInvoke.chainHash).getMessage)
       else if (!isValidFinalScriptPubkey) stop(FSM.Normal) SendingHasChannelId wire.Error(channelId, InvalidFinalScript(channelId).getMessage)
-      else stay using HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE(remoteInvoke) SendingHosted initParams.initMsg
+      else stay using HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE(remoteInvoke) SendingHosted chanParams.initMsg
 
     case Event(hostInit: InitHostedChannel, data: HC_DATA_CLIENT_WAIT_HOST_INIT) =>
       if (hostInit.liabilityDeadlineBlockdays < vals.hcDefaultParams.liabilityDeadlineBlockdays) stop(FSM.Normal) SendingHasChannelId wire.Error(channelId, "Proposed liability deadline is too low")
@@ -118,8 +120,8 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     case Event(clientSU: StateUpdate, data: HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE) =>
       val dh = new DuplicateHandler[HC_DATA_ESTABLISHED] { def insert(data: HC_DATA_ESTABLISHED): Boolean = channelsDb addNewChannel data }
-      val fullySignedLCSS = LastCrossSignedState(data.invoke.refundScriptPubKey, initHostedChannel = initParams.initMsg, blockDay = clientSU.blockDay,
-        localBalanceMsat = initParams.initMsg.channelCapacityMsat, remoteBalanceMsat = MilliSatoshi(0L), localUpdates = 0L, remoteUpdates = 0L, incomingHtlcs = Nil,
+      val fullySignedLCSS = LastCrossSignedState(data.invoke.refundScriptPubKey, initHostedChannel = chanParams.initMsg, blockDay = clientSU.blockDay,
+        localBalanceMsat = chanParams.initMsg.channelCapacityMsat, remoteBalanceMsat = MilliSatoshi(0L), localUpdates = 0L, remoteUpdates = 0L, incomingHtlcs = Nil,
         outgoingHtlcs = Nil, remoteSigOfLocal = clientSU.localSigOfRemoteLCSS, localSigOfRemote = ByteVector64.Zeroes).withLocalSigOfRemote(kit.nodeParams.privateKey)
 
       val data1 = restoreEmptyData(fullySignedLCSS, isHost = true)
@@ -266,6 +268,17 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       val data1 = data.modify(_.commitments.announceChannel).setTo(false).copy(channelAnnouncement = None)
       stay StoringAndUsing data1 replying CMDResSuccess(cmd)
 
+    case Event(HostedChannel.SendPrivateChannelUpdateToPeer, data: HC_DATA_ESTABLISHED) if !data.commitments.announceChannel =>
+      if (chanParams areDifferent data.channelUpdate) {
+        val update1 = makeChannelUpdate(localLCSS = data.commitments.lastCrossSignedState, enable = true)
+        HC.remoteNode2Connection.get(remoteNodeId).foreach(_ sendRoutingMsg update1)
+        stay StoringAndUsing data.copy(channelUpdate = update1)
+      } else {
+        // Routing params have not changed, just send an existing update and do nothing
+        HC.remoteNode2Connection.get(remoteNodeId).foreach(_ sendRoutingMsg data.channelUpdate)
+        stay
+      }
+
     // Payments
 
     case Event(cmd: CMD_ADD_HTLC, data: HC_DATA_ESTABLISHED) =>
@@ -403,17 +416,8 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     case Event(cmd: CMD_ADD_HTLC, data: HC_DATA_ESTABLISHED) =>
       ackAddFail(cmd, ChannelUnavailable(channelId), data.channelUpdate)
-      val isUpdateEnabled = Announcements.isEnabled(data.channelUpdate.channelFlags)
-      log.info(s"PLGN PHC, rejecting htlc request in state=$stateName, peer=$remoteNodeId")
-
-      if (data.commitments.announceChannel && isUpdateEnabled) {
-        // In order to reduce gossip spam, we don't disable the channel right away when disconnected
-        // we will only emit a new ChannelUpdate with the disable flag set if someone tries to use it
-        val disableUpdate = makeChannelUpdate(data.commitments.lastCrossSignedState, enable = false)
-        stay StoringAndUsing data.copy(channelUpdate = disableUpdate) Announcing disableUpdate
-      } else {
-        stay
-      }
+      log.info(s"PLGN PHC, rejecting htlc in state=$stateName, peer=$remoteNodeId")
+      stay
 
     // Refunds
 
@@ -513,10 +517,8 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
   onTransition {
     case (SYNCING | CLOSED) -> NORMAL =>
       nextStateData match {
-        case d1: HC_DATA_ESTABLISHED if !d1.commitments.announceChannel =>
-          HC.remoteNode2Connection.get(remoteNodeId).foreach(_ sendRoutingMsg d1.channelUpdate)
-        case d1: HC_DATA_ESTABLISHED if !Announcements.isEnabled(d1.channelUpdate.channelFlags) =>
-          self ! HostedChannel.SendAnnouncements(force = false)
+        case d1: HC_DATA_ESTABLISHED if !d1.commitments.announceChannel => self ! HostedChannel.SendPrivateChannelUpdateToPeer
+        case d1: HC_DATA_ESTABLISHED if chanParams.areDifferent(d1.channelUpdate) && d1.commitments.announceChannel => self ! HostedChannel.SendAnnouncements(force = false)
         case _ =>
       }
   }
@@ -598,8 +600,8 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
   def makeLocalUpdateEvent(update: ChannelUpdate, commits: HostedCommitments): LocalChannelUpdate = LocalChannelUpdate(self, channelId, shortChannelId, remoteNodeId, None, update, commits)
 
   def makeChannelUpdate(localLCSS: LastCrossSignedState, enable: Boolean): wire.ChannelUpdate =
-    Announcements.makeChannelUpdate(kit.nodeParams.chainHash, kit.nodeParams.privateKey, remoteNodeId, shortChannelId, CltvExpiryDelta(initParams.cltvDeltaBlocks),
-      initParams.htlcMinimumMsat.msat, MilliSatoshi(initParams.feeBaseMsat), initParams.feeProportionalMillionths, localLCSS.initHostedChannel.channelCapacityMsat, enable)
+    Announcements.makeChannelUpdate(kit.nodeParams.chainHash, kit.nodeParams.privateKey, remoteNodeId, shortChannelId, CltvExpiryDelta(chanParams.cltvDeltaBlocks),
+      chanParams.htlcMinimum, chanParams.feeBase, chanParams.feeProportionalMillionths, localLCSS.initHostedChannel.channelCapacityMsat, enable)
 
   def makeOverridingLocallySignedLCSS(commits: HostedCommitments, newLocalBalance: MilliSatoshi, newLocalUpdates: Long, newRemoteUpdates: Long, overrideBlockDay: Long): LastCrossSignedState =
     commits.lastCrossSignedState.copy(localBalanceMsat = newLocalBalance, remoteBalanceMsat = commits.lastCrossSignedState.initHostedChannel.channelCapacityMsat - newLocalBalance, incomingHtlcs = Nil,

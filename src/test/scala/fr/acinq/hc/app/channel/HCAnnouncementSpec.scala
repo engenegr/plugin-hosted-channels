@@ -71,34 +71,4 @@ class HCAnnouncementSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike wi
     aliceSync.expectNoMessage()
     bobSync.expectNoMessage()
   }
-
-  test("Announce disabled update when trying to route through an offline channel") { f =>
-    import f._
-    HCTestUtils.resetEntireDatabase(aliceDB)
-    HCTestUtils.resetEntireDatabase(bobDB)
-    reachNormal(f)
-    announcePHC(f)
-    alice ! PeerDisconnected(null, null)
-    bob ! PeerDisconnected(null, null)
-    awaitCond(alice.stateName == OFFLINE)
-    awaitCond(bob.stateName == OFFLINE)
-    val (_, cmd_add_htlc, _) = makeCmdAdd(MilliSatoshi(100000L), bobKit.nodeParams.nodeId, currentBlockHeight)
-    bob ! cmd_add_htlc
-    assert(bobSync.expectMsgType[UnknownMessage].tag == HC.PHC_UPDATE_GOSSIP_TAG)
-    assert(!Announcements.isEnabled(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].channelUpdate.channelFlags))
-    bob ! Worker.HCPeerConnected
-    alice ! Worker.HCPeerConnected
-    alice ! bob2alice.expectMsgType[InvokeHostedChannel]
-    bob ! alice2bob.expectMsgType[LastCrossSignedState]
-    alice ! bob2alice.expectMsgType[LastCrossSignedState]
-    bob ! alice2bob.expectMsgType[LastCrossSignedState]
-    awaitCond(alice.stateName == NORMAL)
-    awaitCond(bob.stateName == NORMAL)
-    bob2alice.expectNoMessage()
-    alice2bob.expectNoMessage()
-    aliceSync.expectNoMessage()
-    assert(bobSync.expectMsgType[UnknownMessage].tag == HC.PHC_UPDATE_GOSSIP_TAG)
-    assert(Announcements.isEnabled(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].channelUpdate.channelFlags))
-    bobSync.expectNoMessage()
-  }
 }

@@ -46,10 +46,11 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     bob ! alice2bob.expectMsgType[LastCrossSignedState]
     bob ! alice2bob.expectMsgType[UpdateAddHtlc]
     bob ! alice2bob.expectMsgType[UpdateAddHtlc]
+    bob ! alice2bob.expectMsgType[StateUpdate]
     bob ! alice2bob.expectMsgType[ChannelUpdate]
     alice ! bob2alice.expectMsgType[ChannelUpdate]
-    bob ! alice2bob.expectMsgType[StateUpdate]
     alice ! bob2alice.expectMsgType[StateUpdate]
+
     bobRelayer.expectMsgType[Relayer.RelayForward]
     bobRelayer.expectMsgType[Relayer.RelayForward]
     bob ! alice2bob.expectMsgType[StateUpdate]
@@ -78,8 +79,8 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     bob ! alice2bob.expectMsgType[LastCrossSignedState]
     alice ! bob2alice.expectMsgType[UpdateFulfillHtlc]
     bob ! alice2bob.expectMsgType[ChannelUpdate]
-    alice ! bob2alice.expectMsgType[ChannelUpdate]
     alice ! bob2alice.expectMsgType[StateUpdate]
+    alice ! bob2alice.expectMsgType[ChannelUpdate]
     bob ! alice2bob.expectMsgType[StateUpdate]
     alice ! bob2alice.expectMsgType[StateUpdate]
 
@@ -128,10 +129,10 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     bob ! alice2bob.expectMsgType[LastCrossSignedState]
     bob ! alice2bob.expectMsgType[UpdateAddHtlc]
     alice ! bob2alice.expectMsgType[UpdateFulfillHtlc] // Bob re-sends local fulfill it got while in OFFLINE
-    bob ! alice2bob.expectMsgType[ChannelUpdate]
-    alice ! bob2alice.expectMsgType[ChannelUpdate]
     bob ! alice2bob.expectMsgType[StateUpdate]
+    bob ! alice2bob.expectMsgType[ChannelUpdate]
     alice ! bob2alice.expectMsgType[StateUpdate]
+    alice ! bob2alice.expectMsgType[ChannelUpdate]
     bob ! alice2bob.expectMsgType[StateUpdate]
     alice ! bob2alice.expectMsgType[StateUpdate]
     bob ! alice2bob.expectMsgType[StateUpdate]
@@ -205,10 +206,10 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     alice ! bob2alice.expectMsgType[UpdateFulfillHtlc] // Bob re-sends local fulfill it got while in OFFLINE
     aliceRelayer.expectMsgType[Relayer.RelayForward]
     aliceRelayer.expectMsgType[Relayer.RelayForward]
-    bob ! alice2bob.expectMsgType[ChannelUpdate]
-    alice ! bob2alice.expectMsgType[ChannelUpdate]
     bob ! alice2bob.expectMsgType[StateUpdate]
+    bob ! alice2bob.expectMsgType[ChannelUpdate]
     alice ! bob2alice.expectMsgType[StateUpdate]
+    alice ! bob2alice.expectMsgType[ChannelUpdate]
     bob ! alice2bob.expectMsgType[StateUpdate]
     alice ! bob2alice.expectMsgType[StateUpdate]
     bob ! alice2bob.expectMsgType[StateUpdate]
@@ -262,11 +263,10 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     alice ! bob2alice.expectMsgType[LastCrossSignedState]
     bob ! alice2bob.expectMsgType[LastCrossSignedState]
     bob ! alice2bob.expectMsgType[UpdateAddHtlc]
+    bob ! alice2bob.expectMsgType[StateUpdate]
     bob ! alice2bob.expectMsgType[ChannelUpdate]
     alice ! bob2alice.expectMsgType[ChannelUpdate]
-    bob ! alice2bob.expectMsgType[StateUpdate]
     bobRelayer.expectMsgType[Relayer.RelayForward]
-
     bob2alice.expectMsgType[StateUpdate] // Goes nowhere
 
     alice ! PeerDisconnected(null, null)
@@ -354,9 +354,9 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     f2.alice ! f2.bob2alice.expectMsgType[LastCrossSignedState]
     f2.bob ! f2.alice2bob.expectMsgType[LastCrossSignedState]
     f2.bob ! f2.alice2bob.expectMsgType[ChannelUpdate]
-    f2.alice ! f2.bob2alice.expectMsgType[ChannelUpdate]
     f2.alice ! f2.bob2alice.expectMsgType[UpdateFulfillHtlc]
     f2.alice ! f2.bob2alice.expectMsgType[StateUpdate]
+    f2.alice ! f2.bob2alice.expectMsgType[ChannelUpdate]
     f2.bob ! f2.alice2bob.expectMsgType[StateUpdate]
     f2.alice ! f2.bob2alice.expectMsgType[StateUpdate]
 
