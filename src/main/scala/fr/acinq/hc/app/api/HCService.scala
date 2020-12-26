@@ -44,8 +44,9 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
         }
       } ~
       path("bysecret") {
-        formFields("secret".as[ByteVector](binaryDataUnmarshaller)) { secret =>
-          channelsDb.getChannelBySecret(Mac32.hmac256(secret, kit.nodeParams.nodeId.value)) match {
+        formFields("plainUserSecret".as[String]) { secret =>
+          val trimmedUserSecret = ByteVector.view(secret.toLowerCase.trim getBytes "UTF-8")
+          channelsDb.getChannelBySecret(Mac32.hmac256(trimmedUserSecret, kit.nodeParams.nodeId.value)) match {
             case Some(data) => complete(worker ? HC_CMD_GET_INFO(data.commitments.remoteNodeId))
             case None => complete(s"Could not find and HC with secret: $secret")
           }
