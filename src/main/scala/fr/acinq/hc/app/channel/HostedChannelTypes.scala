@@ -4,13 +4,14 @@ import fr.acinq.eclair._
 import fr.acinq.hc.app._
 import fr.acinq.eclair.channel._
 import com.softwaremill.quicklens._
+
 import scala.util.{Failure, Success, Try}
 import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
 import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc}
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, Satoshi}
 import fr.acinq.eclair.payment.OutgoingPacket
 import fr.acinq.eclair.MilliSatoshi
-import scodec.bits.ByteVector
+import scodec.bits.{BitVector, ByteVector}
 import fr.acinq.eclair.wire
 
 // Commands
@@ -94,9 +95,24 @@ case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
       .modify(_.resizeProposal).setTo(None)
 }
 
+object HostedChannelVersion {
+  import fr.acinq.eclair.channel.ChannelVersion._
+
+  def setBit(bit: Int): ChannelVersion = ChannelVersion(BitVector.low(LENGTH_BITS).set(bit).reverse)
+
+  def isSet(version: ChannelVersion, bit: Int): Boolean = version.bits.reverse.get(bit)
+
+  val USE_RESIZE = 0
+
+  val STANDARD: ChannelVersion = ZEROES
+
+  val RESIZABLE: ChannelVersion = STANDARD | setBit(USE_RESIZE)
+}
+
 case class HostedCommitments(isHost: Boolean,
                              localNodeId: PublicKey,
                              remoteNodeId: PublicKey,
+                             version: ChannelVersion,
                              channelId: ByteVector32,
                              localSpec: CommitmentSpec,
                              originChannels: Map[Long, Origin],

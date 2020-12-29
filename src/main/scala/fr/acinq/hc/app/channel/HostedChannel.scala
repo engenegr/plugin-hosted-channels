@@ -51,6 +51,8 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
   context.system.eventStream.subscribe(channel = classOf[CurrentBlockCount], subscriber = self)
 
+  println(chanParams.isResizable)
+
   startWith(OFFLINE, HC_NOTHING)
 
   when(OFFLINE) {
@@ -608,10 +610,9 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       outgoingHtlcs = Nil, localUpdates = newLocalUpdates, remoteUpdates = newRemoteUpdates, blockDay = overrideBlockDay, remoteSigOfLocal = ByteVector64.Zeroes).withLocalSigOfRemote(kit.nodeParams.privateKey)
 
   def restoreEmptyData(localLCSS: LastCrossSignedState, isHost: Boolean): HC_DATA_ESTABLISHED =
-    HC_DATA_ESTABLISHED(HostedCommitments(isHost, localNodeId = kit.nodeParams.nodeId, remoteNodeId, channelId,
-      CommitmentSpec(htlcs = Set.empty, FeeratePerKw(0L.sat), localLCSS.localBalanceMsat, localLCSS.remoteBalanceMsat),
-      originChannels = Map.empty, lastCrossSignedState = localLCSS, nextLocalUpdates = Nil, nextRemoteUpdates = Nil,
-      announceChannel = false), makeChannelUpdate(localLCSS, enable = true), localErrors = Nil)
+    HC_DATA_ESTABLISHED(HostedCommitments(isHost, localNodeId = kit.nodeParams.nodeId, remoteNodeId, localLCSS.initHostedChannel.version, channelId,
+      CommitmentSpec(htlcs = Set.empty, FeeratePerKw(0L.sat), localLCSS.localBalanceMsat, localLCSS.remoteBalanceMsat), originChannels = Map.empty, localLCSS,
+      nextLocalUpdates = Nil, nextRemoteUpdates = Nil, announceChannel = false), makeChannelUpdate(localLCSS, enable = true), localErrors = Nil)
 
   def withLocalError(data: HC_DATA_ESTABLISHED, errorCode: String): (HC_DATA_ESTABLISHED, wire.Error) = {
     val theirFulfillsAndOurFakeFails: List[wire.UpdateMessage with wire.HasChannelId] = fulfillsAndFakeFails(data)

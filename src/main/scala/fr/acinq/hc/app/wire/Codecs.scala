@@ -5,6 +5,7 @@ import fr.acinq.hc.app.HC._
 import fr.acinq.eclair.wire._
 import fr.acinq.eclair.wire.CommonCodecs._
 import fr.acinq.eclair.wire.LightningMessageCodecs._
+import fr.acinq.eclair.wire.ChannelCodecs.channelVersionCodec
 import scodec.codecs.{bool, listOfN, uint16, uint32, variableSizeBytes, utf8}
 import scodec.{Attempt, Codec, Err}
 
@@ -23,7 +24,8 @@ object Codecs {
       (millisatoshi withContext "channelCapacityMsat") ::
       (uint16 withContext "liabilityDeadlineBlockdays") ::
       (satoshi withContext "minimalOnchainRefundAmountSatoshis") ::
-      (millisatoshi withContext "initialClientBalanceMsat")
+      (millisatoshi withContext "initialClientBalanceMsat") ::
+      (channelVersionCodec withContext "version")
   }.as[InitHostedChannel]
 
   val hostedChannelBrandingCodec: Codec[HostedChannelBranding] = {

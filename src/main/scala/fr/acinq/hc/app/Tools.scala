@@ -10,7 +10,7 @@ import java.io.{ByteArrayInputStream, File}
 import java.nio.file.{Files, Paths}
 
 import fr.acinq.eclair.channel.Channel.OutgoingMessage
-import fr.acinq.hc.app.channel.HostedCommitments
+import fr.acinq.hc.app.channel.{HostedChannelVersion, HostedCommitments}
 import net.ceedubs.ficus.readers.ValueReader
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.bitcoin.Crypto.PublicKey
@@ -20,6 +20,9 @@ import fr.acinq.hc.app.wire.Codecs
 import slick.jdbc.PostgresProfile
 import scodec.bits.ByteVector
 import java.nio.ByteOrder
+
+import fr.acinq.eclair.channel.ChannelVersion
+
 import scala.util.Try
 
 
@@ -93,8 +96,9 @@ object Config {
 }
 
 
-case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDeltaBlocks: Int, onChainRefundThresholdSat: Long,
-                    liabilityDeadlineBlockdays: Int, defaultCapacityMsat: Long, htlcMinimumMsat: Long, maxAcceptedHtlcs: Int) {
+case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long,
+                    cltvDeltaBlocks: Int, onChainRefundThresholdSat: Long, liabilityDeadlineBlockdays: Int,
+                    defaultCapacityMsat: Long, htlcMinimumMsat: Long, maxAcceptedHtlcs: Int, isResizable: Boolean) {
 
   val feeBase: MilliSatoshi = feeBaseMsat.msat
 
@@ -102,9 +106,11 @@ case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDelt
 
   val onChainRefundThreshold: Satoshi = onChainRefundThresholdSat.sat
 
+  val channelVersion: ChannelVersion = if (isResizable) HostedChannelVersion.RESIZABLE else HostedChannelVersion.STANDARD
+
   val initMsg: InitHostedChannel =
     InitHostedChannel(UInt64(defaultCapacityMsat), htlcMinimum, maxAcceptedHtlcs, defaultCapacityMsat.msat,
-      liabilityDeadlineBlockdays, onChainRefundThreshold, initialClientBalanceMsat = 0L.msat)
+      liabilityDeadlineBlockdays, onChainRefundThreshold, initialClientBalanceMsat = 0L.msat, channelVersion)
 
   def areDifferent(cu: ChannelUpdate): Boolean =
     cu.cltvExpiryDelta.toInt != cltvDeltaBlocks || !cu.htlcMaximumMsat.contains(htlcMinimum) ||

@@ -7,6 +7,8 @@ import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
 import scodec.bits.ByteVector
 import java.nio.ByteOrder
 
+import fr.acinq.eclair.channel.ChannelVersion
+
 
 sealed trait HostedChannelMessage
 
@@ -22,7 +24,8 @@ case class InitHostedChannel(maxHtlcValueInFlightMsat: UInt64,
                              channelCapacityMsat: MilliSatoshi,
                              liabilityDeadlineBlockdays: Int,
                              minimalOnchainRefundAmountSatoshis: Satoshi,
-                             initialClientBalanceMsat: MilliSatoshi) extends HostedChannelMessage
+                             initialClientBalanceMsat: MilliSatoshi,
+                             version: ChannelVersion) extends HostedChannelMessage
 
 case class HostedChannelBranding(rgbColor: Color,
                                  pngIcon: ByteVector,

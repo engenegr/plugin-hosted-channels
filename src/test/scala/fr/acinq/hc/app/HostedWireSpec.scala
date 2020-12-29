@@ -9,7 +9,7 @@ import fr.acinq.eclair.channel.{Channel, Origin}
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.transactions.{CommitmentSpec, IncomingHtlc, OutgoingHtlc}
 import fr.acinq.eclair.wire.{ChannelUpdate, Error, UpdateAddHtlc, UpdateFailHtlc}
-import fr.acinq.hc.app.channel.{ErrorExt, HC_DATA_ESTABLISHED, HostedCommitments, HostedState}
+import fr.acinq.hc.app.channel.{ErrorExt, HC_DATA_ESTABLISHED, HostedChannelVersion, HostedCommitments, HostedState}
 import fr.acinq.hc.app.wire._
 import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits.ByteVector
@@ -37,7 +37,7 @@ object HostedWireSpec {
     paymentHash = randomBytes32,
     onionRoutingPacket = TestConstants.emptyOnionPacket)
 
-  val init_hosted_channel: InitHostedChannel = InitHostedChannel(UInt64(6), 10.msat, 20, 500000000L.msat, 5000, 1000000.sat, 1000000.msat)
+  val init_hosted_channel: InitHostedChannel = InitHostedChannel(UInt64(6), 10.msat, 20, 500000000L.msat, 5000, 1000000.sat, 1000000.msat, HostedChannelVersion.RESIZABLE)
   val lcss1: LastCrossSignedState = LastCrossSignedState(bin(47, 0), init_hosted_channel, 10000, 10000.msat, 20000.msat, 10, 20, List(add2, add1), List(add1, add2), randomBytes64, randomBytes64)
 
   val htlc1: IncomingHtlc = IncomingHtlc(add1)
@@ -60,6 +60,7 @@ object HostedWireSpec {
     isHost = true,
     localNodeId,
     randomKey.publicKey,
+    HostedChannelVersion.RESIZABLE,
     channelId = randomBytes32,
     localSpec = cs,
     originChannels = Map(42L -> Origin.LocalCold(UUID.randomUUID),
