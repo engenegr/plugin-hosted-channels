@@ -51,8 +51,6 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
   context.system.eventStream.subscribe(channel = classOf[CurrentBlockCount], subscriber = self)
 
-  println(chanParams.isResizable)
-
   startWith(OFFLINE, HC_NOTHING)
 
   when(OFFLINE) {
@@ -688,19 +686,24 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
   }
 
   def processResizeProposal(errorState: FsmStateExt, resize: ResizeChannel, data: HC_DATA_ESTABLISHED): HostedFsmState = {
-    val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_INVALID_RESIZE)
-    val isLessThanCurrent = resize.newCapacity < data.commitments.capacity
-    val isMoreThanMax = vals.phcConfig.maxCapacity < resize.newCapacity
+    val isSupported = HostedChannelVersion.isSet(data.commitments.version, HostedChannelVersion.USE_RESIZE)
     val isSignatureFine = resize.verifyClientSig(remoteNodeId)
 
-    if (isLessThanCurrent) {
-      log.info(s"PLGN PHC, resize check fail, new capacity is less than current one, peer=$remoteNodeId")
+    if (!isSupported) {
+      log.info(s"PLGN PHC, resize check fail, not supported, peer=$remoteNodeId")
+      val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_INVALID_RESIZE)
       errorState StoringAndUsing data1 SendingHasChannelId error
-    } else if (isMoreThanMax) {
+    } else if (resize.newCapacity < data.commitments.capacity) {
+      log.info(s"PLGN PHC, resize check fail, new capacity is less than current one, peer=$remoteNodeId")
+      val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_INVALID_RESIZE)
+      errorState StoringAndUsing data1 SendingHasChannelId error
+    } else if (vals.phcConfig.maxCapacity < resize.newCapacity) {
       log.info(s"PLGN PHC, resize check fail, new capacity is more than max allowed one, peer=$remoteNodeId")
+      val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_INVALID_RESIZE)
       errorState StoringAndUsing data1 SendingHasChannelId error
     } else if (!isSignatureFine) {
       log.info(s"PLGN PHC, resize signature check fail, peer=$remoteNodeId")
+      val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_INVALID_RESIZE)
       errorState StoringAndUsing data1 SendingHasChannelId error
     } else {
       log.info(s"PLGN PHC, channel resize successfully accepted, peer=$remoteNodeId")
