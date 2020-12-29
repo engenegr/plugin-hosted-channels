@@ -14,7 +14,6 @@ object HostedChannelCodecs {
     (bool withContext "isHost") ::
       (publicKey withContext "localNodeId") ::
       (publicKey withContext "remoteNodeId") ::
-      (channelVersionCodec withContext "version") ::
       (bytes32 withContext "channelId") ::
       (commitmentSpecCodec withContext "localSpec") ::
       (originsMapCodec withContext "originChannels") ::

@@ -84,8 +84,9 @@ case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
     commitments.nextLocalSpec.htlcs
   }
 
-  def timedOutOutgoingHtlcs(blockHeight: Long): Set[wire.UpdateAddHtlc] =
-    pendingHtlcs.collect(DirectedHtlc.outgoing).filter(blockHeight > _.cltvExpiry.toLong)
+  def isResizeSupported: Boolean = HostedChannelVersion.isSet(commitments.lastCrossSignedState.initHostedChannel.version, HostedChannelVersion.USE_RESIZE)
+
+  def timedOutOutgoingHtlcs(blockHeight: Long): Set[wire.UpdateAddHtlc] = pendingHtlcs.collect(DirectedHtlc.outgoing).filter(blockHeight > _.cltvExpiry.toLong)
 
   def withResize(resize: ResizeChannel): HC_DATA_ESTABLISHED =
     this.modify(_.commitments.lastCrossSignedState.initHostedChannel.maxHtlcValueInFlightMsat).setTo(resize.newCapacityMsatU64)
@@ -102,9 +103,7 @@ object HostedChannelVersion {
 
   def isSet(version: ChannelVersion, bit: Int): Boolean = version.bits.reverse.get(bit)
 
-  val USE_RESIZE = 0
-
-  val STANDARD: ChannelVersion = ZEROES
+  val USE_RESIZE = 1
 
   val RESIZABLE: ChannelVersion = STANDARD | setBit(USE_RESIZE)
 }
@@ -112,7 +111,6 @@ object HostedChannelVersion {
 case class HostedCommitments(isHost: Boolean,
                              localNodeId: PublicKey,
                              remoteNodeId: PublicKey,
-                             version: ChannelVersion,
                              channelId: ByteVector32,
                              localSpec: CommitmentSpec,
                              originChannels: Map[Long, Origin],

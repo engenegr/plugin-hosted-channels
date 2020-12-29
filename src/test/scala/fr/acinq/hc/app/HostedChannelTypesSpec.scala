@@ -25,7 +25,7 @@ class HostedChannelTypesSpec extends AnyFunSuite {
   val channelId: ByteVector32 = randomBytes32
 
   val initHostedChannel: InitHostedChannel = InitHostedChannel(maxHtlcValueInFlightMsat = UInt64(90000L), htlcMinimumMsat = 10.msat,
-    maxAcceptedHtlcs = 3, 1000000L.msat, 5000, 1000000.sat, initialClientBalanceMsat = 0.msat, HostedChannelVersion.STANDARD)
+    maxAcceptedHtlcs = 3, 1000000L.msat, 5000, 1000000.sat, initialClientBalanceMsat = 0.msat, ChannelVersion.STANDARD)
 
   val preimage1: ByteVector32 = randomBytes32
   val preimage2: ByteVector32 = randomBytes32
@@ -43,7 +43,7 @@ class HostedChannelTypesSpec extends AnyFunSuite {
   val channelUpdate: ChannelUpdate = ChannelUpdate(randomBytes64, Block.RegtestGenesisBlock.hash, ShortChannelId(1), 2, 42, 0, CltvExpiryDelta(3), 4.msat, 5.msat, 6, None)
 
   test("HC version") {
-    assert(!HostedChannelVersion.isSet(HostedChannelVersion.STANDARD, HostedChannelVersion.USE_RESIZE))
+    assert(!HostedChannelVersion.isSet(ChannelVersion.STANDARD, HostedChannelVersion.USE_RESIZE))
     assert(HostedChannelVersion.isSet(HostedChannelVersion.RESIZABLE, HostedChannelVersion.USE_RESIZE))
   }
 
@@ -88,7 +88,7 @@ class HostedChannelTypesSpec extends AnyFunSuite {
   }
 
   private val hdc =
-    HostedCommitments(isHost = true, randomKey.publicKey, randomKey.publicKey, HostedChannelVersion.RESIZABLE, channelId, localCommitmentSpec,
+    HostedCommitments(isHost = true, randomKey.publicKey, randomKey.publicKey, channelId, localCommitmentSpec,
       originChannels = Map.empty, lcss1, nextLocalUpdates = Nil, nextRemoteUpdates = Nil, announceChannel = true)
 
   test("Processing HTLCs") {

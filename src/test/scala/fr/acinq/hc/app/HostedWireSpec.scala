@@ -60,7 +60,6 @@ object HostedWireSpec {
     isHost = true,
     localNodeId,
     randomKey.publicKey,
-    HostedChannelVersion.RESIZABLE,
     channelId = randomBytes32,
     localSpec = cs,
     originChannels = Map(42L -> Origin.LocalCold(UUID.randomUUID),

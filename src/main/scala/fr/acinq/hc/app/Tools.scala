@@ -106,7 +106,7 @@ case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long,
 
   val onChainRefundThreshold: Satoshi = onChainRefundThresholdSat.sat
 
-  val channelVersion: ChannelVersion = if (isResizable) HostedChannelVersion.RESIZABLE else HostedChannelVersion.STANDARD
+  val channelVersion: ChannelVersion = if (isResizable) HostedChannelVersion.RESIZABLE else ChannelVersion.STANDARD
 
   val initMsg: InitHostedChannel =
     InitHostedChannel(UInt64(defaultCapacityMsat), htlcMinimum, maxAcceptedHtlcs, defaultCapacityMsat.msat,
