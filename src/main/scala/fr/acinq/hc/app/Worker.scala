@@ -108,10 +108,6 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, channelsDb: HostedChannelsDb
         kit.switchboard ! Peer.Connect(nodeId, None)
         spawnPreparedChannel(channelData)
       }
-
-    case PeerConnection.ConnectionResult.NoAddressFound(nodeId) =>
-      // We have requested a connection for client HC, but no address was found
-      logger.info(s"PLGN PHC, no address for client HC, peer=$nodeId")
   }
 
   def spawnChannel(nodeId: PublicKey): ActorRef = {

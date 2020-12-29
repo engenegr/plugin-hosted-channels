@@ -24,6 +24,7 @@ import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.io.PeerDisconnected
 import fr.acinq.hc.app.db.HostedChannelsDb
 import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.SatoshiLong
 import fr.acinq.hc.app.wire.Codecs
 import scodec.bits.ByteVector
 import scala.concurrent.Await
@@ -292,24 +293,24 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     case Event(add: wire.UpdateAddHtlc, data: HC_DATA_ESTABLISHED) =>
       data.commitments.receiveAdd(add) match {
-        case Success(commits1) => stay using data.copy(commitments = commits1)
-        case Failure(cause) =>
+        case Right(commits1) => stay using data.copy(commitments = commits1)
+        case Left(cause) =>
           val (data1, error) = withLocalError(data, cause.getMessage)
           goto(CLOSED) StoringAndUsing data1 SendingHasChannelId error
       }
 
     case Event(fail: wire.UpdateFailHtlc, data: HC_DATA_ESTABLISHED) =>
       data.commitments.receiveFail(fail) match {
-        case Success(commits1) => stay using data.copy(commitments = commits1)
-        case Failure(cause) =>
+        case Right(commits1) => stay using data.copy(commitments = commits1)
+        case Left(cause) =>
           val (data1, error) = withLocalError(data, cause.getMessage)
           goto(CLOSED) StoringAndUsing data1 SendingHasChannelId error
       }
 
     case Event(fail: wire.UpdateFailMalformedHtlc, data: HC_DATA_ESTABLISHED) =>
       data.commitments.receiveFailMalformed(fail) match {
-        case Success(commits1) => stay using data.copy(commitments = commits1)
-        case Failure(cause) =>
+        case Right(commits1) => stay using data.copy(commitments = commits1)
+        case Left(cause) =>
           val (data1, error) = withLocalError(data, cause.getMessage)
           goto(CLOSED) StoringAndUsing data1 SendingHasChannelId error
       }
@@ -395,23 +396,23 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     case Event(cmd: CMD_FULFILL_HTLC, data: HC_DATA_ESTABLISHED) =>
       data.commitments.sendFulfill(cmd) match {
-        case Success((commits1, fulfill)) if cmd.commit => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fulfill Receiving CMD_SIGN(None)
-        case Success((commits1, fulfill)) => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fulfill
-        case Failure(cause) => stay.AckingFail(cause, cmd)
+        case Right((commits1, fulfill)) if cmd.commit => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fulfill Receiving CMD_SIGN(None)
+        case Right((commits1, fulfill)) => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fulfill
+        case Left(cause) => stay.AckingFail(cause, cmd)
       }
 
     case Event(cmd: CMD_FAIL_HTLC, data: HC_DATA_ESTABLISHED) =>
       data.commitments.sendFail(cmd, kit.nodeParams.privateKey) match {
-        case Success((commits1, fail)) if cmd.commit => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fail Receiving CMD_SIGN(None)
-        case Success((commits1, fail)) => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fail
-        case Failure(cause) => stay.AckingFail(cause, cmd)
+        case Right((commits1, fail)) if cmd.commit => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fail Receiving CMD_SIGN(None)
+        case Right((commits1, fail)) => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fail
+        case Left(cause) => stay.AckingFail(cause, cmd)
       }
 
     case Event(cmd: CMD_FAIL_MALFORMED_HTLC, data: HC_DATA_ESTABLISHED) =>
       data.commitments.sendFailMalformed(cmd) match {
-        case Success((commits1, fail)) if cmd.commit => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fail Receiving CMD_SIGN(None)
-        case Success((commits1, fail)) => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fail
-        case Failure(cause) => stay.AckingFail(cause, cmd)
+        case Right((commits1, fail)) if cmd.commit => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fail Receiving CMD_SIGN(None)
+        case Right((commits1, fail)) => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fail
+        case Left(cause) => stay.AckingFail(cause, cmd)
       }
 
     case Event(cmd: CMD_ADD_HTLC, data: HC_DATA_ESTABLISHED) =>
@@ -644,11 +645,11 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
   def processIncomingFulfill(errorState: FsmStateExt, fulfill: UpdateFulfillHtlc, data: HC_DATA_ESTABLISHED): HostedFsmState =
     data.commitments.receiveFulfill(fulfill) match {
-      case Success((commits1, origin, htlc)) =>
+      case Right((commits1, origin, htlc)) =>
         val result = HtlcResult.RemoteFulfill(fulfill)
         kit.relayer ! RES_ADD_SETTLED(origin, htlc, result)
         stay StoringAndUsing data.copy(commitments = commits1)
-      case Failure(cause) =>
+      case Left(cause) =>
         val (data1, error) = withLocalError(data, cause.getMessage)
         errorState StoringAndUsing data1 SendingHasChannelId error
     }

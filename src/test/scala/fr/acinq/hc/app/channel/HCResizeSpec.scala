@@ -6,6 +6,7 @@ import fr.acinq.eclair.io.PeerDisconnected
 import fr.acinq.eclair.wire.{ChannelUpdate, UpdateAddHtlc, UpdateFulfillHtlc}
 import fr.acinq.hc.app.{HCTestUtils, InvokeHostedChannel, LastCrossSignedState, ResizeChannel, StateUpdate, Worker}
 import org.scalatest.Outcome
+import fr.acinq.bitcoin.SatoshiLong
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 
 class HCResizeSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCStateTestsHelperMethods {

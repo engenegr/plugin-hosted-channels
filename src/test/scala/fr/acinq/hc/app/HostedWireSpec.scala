@@ -2,7 +2,7 @@ package fr.acinq.hc.app
 
 import java.util.UUID
 
-import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto, Satoshi}
+import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto, Satoshi, SatoshiLong}
 import fr.acinq.eclair._
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.channel.{Channel, Origin}

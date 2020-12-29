@@ -4,7 +4,7 @@ import java.util.UUID
 
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair._
-import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto}
+import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto, SatoshiLong}
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.payment.OutgoingPacket
@@ -43,8 +43,8 @@ class HostedChannelTypesSpec extends AnyFunSuite {
   val channelUpdate: ChannelUpdate = ChannelUpdate(randomBytes64, Block.RegtestGenesisBlock.hash, ShortChannelId(1), 2, 42, 0, CltvExpiryDelta(3), 4.msat, 5.msat, 6, None)
 
   test("HC version") {
-    assert(!HostedChannelVersion.isSet(ChannelVersion.STANDARD, HostedChannelVersion.USE_RESIZE))
-    assert(HostedChannelVersion.isSet(HostedChannelVersion.RESIZABLE, HostedChannelVersion.USE_RESIZE))
+    assert(!ChannelVersion.STANDARD.isSet(HostedChannelVersion.USE_RESIZE))
+    assert(HostedChannelVersion.RESIZABLE.isSet(HostedChannelVersion.USE_RESIZE))
   }
 
   test("LCSS has the same sigHash for different order of in-flight HTLCs") {
@@ -116,8 +116,8 @@ class HostedChannelTypesSpec extends AnyFunSuite {
     val Right((hdc4, _)) = hdc3.sendAdd(cmdAdd8, blockHeight = 100)
     val Right((hdc5, _)) = hdc4.sendAdd(cmdAdd9, blockHeight = 100)
     val Left(_: TooManyAcceptedHtlcs) = hdc5.sendAdd(cmdAdd10, blockHeight = 100)
-    val Success(hdc6) = hdc5.receiveAdd(updateAddHtlc1)
-    val Success(hdc7) = hdc6.receiveAdd(updateAddHtlc2)
+    val Right(hdc6) = hdc5.receiveAdd(updateAddHtlc1)
+    val Right(hdc7) = hdc6.receiveAdd(updateAddHtlc2)
     assert(hdc7.nextLocalSpec.toRemote === (hdc.localSpec.toRemote - updateAddHtlc1.amountMsat - updateAddHtlc2.amountMsat))
     assert(hdc7.nextLocalUnsignedLCSS(blockDay = 100).remoteUpdates === 103)
     assert(hdc7.nextLocalUnsignedLCSS(blockDay = 100).localUpdates === 204)
@@ -131,14 +131,14 @@ class HostedChannelTypesSpec extends AnyFunSuite {
     assert(aliceStateUpdatedHdc.lastCrossSignedState.verifyRemoteSig(bobPrivKey.publicKey)) // Alice now has an updated LCSS signed by Bob
     assert(aliceStateUpdatedHdc.localSpec.htlcs.size === 5) // And 5 HTLCs in-flight
 
-    val Success((aliceStateUpdatedHdc1, fulfill)) = aliceStateUpdatedHdc.sendFulfill(CMD_FULFILL_HTLC(updateAddHtlc1.id, preimage1))
+    val Right((aliceStateUpdatedHdc1, fulfill)) = aliceStateUpdatedHdc.sendFulfill(CMD_FULFILL_HTLC(updateAddHtlc1.id, preimage1))
     assert(aliceStateUpdatedHdc1.nextLocalSpec.toLocal === aliceStateUpdatedHdc1.localSpec.toLocal + updateAddHtlc1.amountMsat)
     assert(aliceStateUpdatedHdc1.nextLocalSpec.htlcs.size === 4)
     assert(aliceStateUpdatedHdc1.nextLocalUpdates === List(fulfill))
     assert(aliceStateUpdatedHdc1.nextLocalUnsignedLCSS(blockDay = 201).withLocalSigOfRemote(alicePrivKey).stateUpdate.localUpdates === 205) // Fail/Fulfill also increase an update counter
 
     val bobFulfill = UpdateFulfillHtlc(channelId, bob2AliceAdd.id, bob2AliceAddPreimage)
-    val Success((aliceStateUpdatedHdc2, _, _)) = aliceStateUpdatedHdc1.receiveFulfill(bobFulfill)
+    val Right((aliceStateUpdatedHdc2, _, _)) = aliceStateUpdatedHdc1.receiveFulfill(bobFulfill)
     assert(aliceStateUpdatedHdc2.nextLocalSpec.htlcs.size === 3)
     assert(aliceStateUpdatedHdc2.nextLocalUpdates === List(fulfill))
     assert(aliceStateUpdatedHdc2.nextRemoteUpdates === List(bobFulfill))

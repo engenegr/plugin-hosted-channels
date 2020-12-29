@@ -4,13 +4,14 @@ import fr.acinq.eclair._
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import fr.acinq.eclair.wire.{AnnouncementMessage, ChannelAnnouncement, ChannelUpdate, Color, HasChannelId, UnknownMessage}
-import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol, Satoshi}
+import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol, Satoshi, SatoshiLong}
+import fr.acinq.hc.app.channel.{HostedChannelVersion, HostedCommitments}
 import com.typesafe.config.{ConfigFactory, Config => TypesafeConfig}
 import java.io.{ByteArrayInputStream, File}
 import java.nio.file.{Files, Paths}
 
 import fr.acinq.eclair.channel.Channel.OutgoingMessage
-import fr.acinq.hc.app.channel.{HostedChannelVersion, HostedCommitments}
+import fr.acinq.eclair.channel.ChannelVersion
 import net.ceedubs.ficus.readers.ValueReader
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.bitcoin.Crypto.PublicKey
@@ -20,9 +21,6 @@ import fr.acinq.hc.app.wire.Codecs
 import slick.jdbc.PostgresProfile
 import scodec.bits.ByteVector
 import java.nio.ByteOrder
-
-import fr.acinq.eclair.channel.ChannelVersion
-
 import scala.util.Try
 
 
