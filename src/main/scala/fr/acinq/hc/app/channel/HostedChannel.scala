@@ -11,7 +11,7 @@ import fr.acinq.eclair.db.PendingRelayDb.{ackCommand, getPendingFailsAndFulfills
 import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc}
 import fr.acinq.hc.app.Tools.{DuplicateHandler, DuplicateShortId}
 import fr.acinq.hc.app.network.{HostedSync, OperationalData, PHC}
-import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto}
+import fr.acinq.bitcoin.{ByteVector32, ByteVector64}
 import fr.acinq.hc.app.db.Blocking.{span, timeout}
 import scala.util.{Failure, Success}
 import akka.actor.{ActorRef, FSM}
@@ -41,8 +41,6 @@ object HostedChannel {
 class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannelsDb, hostedSync: ActorRef, vals: Vals) extends FSMDiagnosticActorLogging[State, HostedData] {
 
   lazy val channelId: ByteVector32 = Tools.hostedChanId(kit.nodeParams.nodeId.value, remoteNodeId.value)
-
-  lazy val fakeFailSecret: ByteVector = Crypto.hmac512(kit.nodeParams.privateKey.value, remoteNodeId.value)
 
   lazy val shortChannelId: ShortChannelId = Tools.hostedShortChanId(kit.nodeParams.nodeId.value, remoteNodeId.value)
 
@@ -289,7 +287,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
         case Left(cause) => ackAddFail(cmd, cause, data.channelUpdate)
       }
 
-    // Peer adding and failing HTLCs is only accepted in NORMAL
+    // IMPORTANT: Peer adding and failing HTLCs is only accepted in NORMAL
 
     case Event(add: wire.UpdateAddHtlc, data: HC_DATA_ESTABLISHED) =>
       data.commitments.receiveAdd(add) match {
@@ -615,11 +613,10 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       localLCSS, nextLocalUpdates = Nil, nextRemoteUpdates = Nil, announceChannel = false), makeChannelUpdate(localLCSS, enable = true), localErrors = Nil)
 
   def withLocalError(data: HC_DATA_ESTABLISHED, errorCode: String): (HC_DATA_ESTABLISHED, wire.Error) = {
-    val theirFulfillsAndOurFakeFails: List[wire.UpdateMessage with wire.HasChannelId] = fulfillsAndFakeFails(data)
-    val commits1: HostedCommitments = data.commitments.copy(nextRemoteUpdates = theirFulfillsAndOurFakeFails)
-    val errorExt: ErrorExt = ErrorExt generateFrom wire.Error(channelId = channelId, msg = errorCode)
-    val data1 = data.copy(commitments = commits1, localErrors = errorExt :: data.localErrors)
-    (data1, errorExt.error)
+    val localErrorExt: ErrorExt = ErrorExt generateFrom wire.Error(channelId = channelId, msg = errorCode)
+    val fulfillsAndFakeFails = data.commitments.nextRemoteUpdates.collect { case f: UpdateFulfillHtlc => f case f: UpdateFailHtlc if f.reason.isEmpty => f }
+    val data1 = data.copy(commitments = data.commitments.copy(nextRemoteUpdates = fulfillsAndFakeFails), localErrors = localErrorExt :: data.localErrors)
+    (data1, localErrorExt.error)
   }
 
   def ackAddFail(cmd: CMD_ADD_HTLC, cause: ChannelException, channelUpdate: wire.ChannelUpdate): HostedFsmState = {
@@ -654,18 +651,15 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
         errorState StoringAndUsing data1 SendingHasChannelId error
     }
 
-  def processRemoteError(errorState: FsmStateExt, remoteError: wire.Error, data: HC_DATA_ESTABLISHED): HostedFsmState =
-    if (data.remoteError.isEmpty) {
-      val theirFulfillsAndOurFakeFails: List[wire.UpdateMessage with wire.HasChannelId] = fulfillsAndFakeFails(data)
-      val commits1: HostedCommitments = data.commitments.copy(nextRemoteUpdates = theirFulfillsAndOurFakeFails)
-      val errorExt: Option[ErrorExt] = Some(remoteError).map(ErrorExt.generateFrom)
-      val data1 = data.copy(commitments = commits1, remoteError = errorExt)
-      errorState StoringAndUsing data1
-    } else stay
+  def processRemoteError(errorState: FsmStateExt, remoteError: wire.Error, data: HC_DATA_ESTABLISHED): HostedFsmState = if (data.remoteError.isEmpty) {
+    val fulfillsAndFakeFails = data.commitments.nextRemoteUpdates.collect { case f: UpdateFulfillHtlc => f case f: UpdateFailHtlc if f.reason.isEmpty => f }
+    val data1 = data.copy(commitments = data.commitments.copy(nextRemoteUpdates = fulfillsAndFakeFails), remoteError = Some(remoteError) map ErrorExt.generateFrom)
+    errorState StoringAndUsing data1
+  } else stay
 
   def processFinalizeRefund(errorState: FsmStateExt, cmd: HC_CMD_FINALIZE_REFUND, data: HC_DATA_ESTABLISHED): HostedFsmState = {
-    val liabilityBlockdays: Int = data.commitments.lastCrossSignedState.initHostedChannel.liabilityDeadlineBlockdays
-    val enoughDays: Boolean = data.commitments.lastCrossSignedState.blockDay + liabilityBlockdays < currentBlockDay
+    val liabilityBlockdays = data.commitments.lastCrossSignedState.initHostedChannel.liabilityDeadlineBlockdays
+    val enoughDays = data.commitments.lastCrossSignedState.blockDay + liabilityBlockdays < currentBlockDay
     val data1 = data.copy(refundCompleteInfo = Some(cmd.info), refundPendingInfo = None)
 
     if (cmd.force || enoughDays) errorState StoringAndUsing data1 replying CMDResSuccess(cmd) SendingHasChannelId wire.Error(channelId, cmd.info)
@@ -674,9 +668,9 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
   def processBlockCount(errorState: FsmStateExt, failedAdds: Set[UpdateAddHtlc], data: HC_DATA_ESTABLISHED): HostedFsmState =
     if (failedAdds.nonEmpty) {
-      failTimedoutOutgoing(localAdds = failedAdds, data)
-      val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_TIMED_OUT_OUTGOING_HTLC)
-      val fakeFailsForOutgoingAdds = for (add <- failedAdds) yield UpdateFailHtlc(channelId, add.id, fakeFailSecret)
+      failTimedoutOutgoing(localAdds = failedAdds, data) // Catch all outgoing HTLCs, even the ones they have failed but not signed yet
+      val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_TIMED_OUT_OUTGOING_HTLC) // Remove all their updates except fulfills, transition to error state
+      val fakeFailsForOutgoingAdds = for (add <- failedAdds) yield UpdateFailHtlc(channelId, add.id, reason = ByteVector.empty) // Fake-fail timedout outgoing HTLCs
       val commits1 = data1.commitments.copy(nextRemoteUpdates = data1.commitments.nextRemoteUpdates ++ fakeFailsForOutgoingAdds)
       errorState StoringAndUsing data1.copy(commitments = commits1) SendingHasChannelId error
     } else stay
@@ -735,13 +729,6 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     }
   }
 
-  private def fulfillsAndFakeFails(data: HC_DATA_ESTABLISHED) =
-    data.commitments.nextRemoteUpdates.filter {
-      case fail: UpdateFailHtlc => fail.reason == fakeFailSecret
-      case _: UpdateFulfillHtlc => true
-      case _ => false
-    }
-  
   private def replyToCommand(sender: ActorRef, reply: CommandResponse[Command], cmd: Command): Unit = cmd match {
     case cmd1: HasReplyToCommand => if (cmd1.replyTo == ActorRef.noSender) sender ! reply else cmd1.replyTo ! reply
     case cmd1: HasOptionalReplyToCommand => cmd1.replyTo_opt.foreach(_ ! reply)

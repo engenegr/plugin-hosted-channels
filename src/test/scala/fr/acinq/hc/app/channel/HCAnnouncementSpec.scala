@@ -1,11 +1,8 @@
 package fr.acinq.hc.app.channel
 
-import fr.acinq.eclair.channel.{LocalChannelUpdate, NORMAL, OFFLINE}
-import fr.acinq.eclair.io.PeerDisconnected
-import fr.acinq.eclair.router.Announcements
+import fr.acinq.eclair.channel.LocalChannelUpdate
 import fr.acinq.eclair.wire.UnknownMessage
-import fr.acinq.eclair.{MilliSatoshi, TestKitBaseClass}
-import fr.acinq.hc.app.channel.{HC_CMD_PRIVATE, HC_CMD_PUBLIC, HC_DATA_ESTABLISHED, HostedChannel}
+import fr.acinq.eclair.TestKitBaseClass
 import fr.acinq.hc.app._
 import org.scalatest.Outcome
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
