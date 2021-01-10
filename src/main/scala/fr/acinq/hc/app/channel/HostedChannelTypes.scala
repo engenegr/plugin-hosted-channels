@@ -13,6 +13,11 @@ import fr.acinq.bitcoin.SatoshiLong
 import scodec.bits.ByteVector
 import fr.acinq.eclair.wire
 
+
+case class RemoteHostedStateResult(state: HostedState, remoteNodeId: Option[PublicKey], isLocalSigValid: Boolean)
+
+case class HostedState(nodeId1: PublicKey, nodeId2: PublicKey, nextLocalUpdates: List[wire.UpdateMessage], nextRemoteUpdates: List[wire.UpdateMessage], lastCrossSignedState: LastCrossSignedState)
+
 // Commands
 
 sealed trait HasRemoteNodeIdHostedCommand {
@@ -33,6 +38,8 @@ case class HC_CMD_PUBLIC(remoteNodeId: PublicKey, force: Boolean = false) extend
 case class HC_CMD_PRIVATE(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 
 case class HC_CMD_RESIZE(remoteNodeId: PublicKey, newCapacity: Satoshi) extends HasRemoteNodeIdHostedCommand
+
+case class HC_CMD_RESTORE(remoteNodeId: PublicKey, remoteData: HostedState) extends HasRemoteNodeIdHostedCommand
 
 case class HC_CMD_GET_INFO(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 
@@ -263,13 +270,3 @@ case class HostedCommitments(isHost: Boolean,
     else Right(addRemoteProposal(fail))
   }
 }
-
-case class RemoteHostedStateResult(state: HostedState,
-                                   remoteNodeId: Option[PublicKey],
-                                   isLocalSigValid: Boolean)
-
-case class HostedState(nodeId1: PublicKey,
-                       nodeId2: PublicKey,
-                       nextLocalUpdates: List[wire.UpdateMessage],
-                       nextRemoteUpdates: List[wire.UpdateMessage],
-                       lastCrossSignedState: LastCrossSignedState)

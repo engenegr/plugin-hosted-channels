@@ -1,35 +1,39 @@
 package fr.acinq.hc.app.channel
 
+import java.util.UUID
+
 import fr.acinq.eclair._
 import fr.acinq.hc.app._
 import fr.acinq.eclair.channel._
+
 import scala.concurrent.duration._
 import com.softwaremill.quicklens._
-
 import fr.acinq.eclair.wire.{ChannelUpdate, UpdateAddHtlc, UpdateFailHtlc, UpdateFulfillHtlc}
+import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc, IncomingHtlc, OutgoingHtlc}
 import fr.acinq.eclair.db.PendingRelayDb.{ackCommand, getPendingFailsAndFulfills}
-import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc}
 import fr.acinq.hc.app.Tools.{DuplicateHandler, DuplicateShortId}
 import fr.acinq.hc.app.network.{HostedSync, OperationalData, PHC}
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64}
 import fr.acinq.hc.app.db.Blocking.{span, timeout}
+
 import scala.util.{Failure, Success}
 import akka.actor.{ActorRef, FSM}
-
 import fr.acinq.eclair.blockchain.CurrentBlockCount
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.FSMDiagnosticActorLogging
 import fr.acinq.eclair.payment.relay.Relayer
 import fr.acinq.eclair.router.Announcements
-import fr.acinq.eclair.io.PeerDisconnected
 import fr.acinq.hc.app.db.HostedChannelsDb
+import fr.acinq.eclair.io.PeerDisconnected
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.bitcoin.SatoshiLong
 import fr.acinq.hc.app.wire.Codecs
 import scodec.bits.ByteVector
+
 import scala.concurrent.Await
 import fr.acinq.eclair.wire
 import akka.pattern.ask
+import fr.acinq.eclair.channel.Origin.LocalCold
 
 
 object HostedChannel {
@@ -53,6 +57,13 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
   startWith(OFFLINE, HC_NOTHING)
 
   when(OFFLINE) {
+    case Event(cmd: HC_CMD_RESTORE, HC_NOTHING) =>
+      val localLCSS = cmd.remoteData.lastCrossSignedState.reverse
+      val htlcSet: Set[DirectedHtlc] = localLCSS.incomingHtlcs.map(IncomingHtlc).toSet ++ localLCSS.outgoingHtlcs.map(OutgoingHtlc)
+      val fakeOrigins: Map[Long, LocalCold] = localLCSS.incomingHtlcs.map(_.id).zip(LazyList continually UUID.randomUUID map LocalCold).toMap
+      val data1 = restoreEmptyData(localLCSS, isHost = true).modify(_.commitments.localSpec.htlcs).setTo(htlcSet).modify(_.commitments.originChannels).setTo(fakeOrigins)
+      stay StoringAndUsing data1 replying CMDResSuccess(cmd)
+
     case Event(data: HC_DATA_ESTABLISHED, HC_NOTHING) => stay using data
 
     case Event(Worker.HCPeerConnected, HC_NOTHING) => goto(SYNCING)

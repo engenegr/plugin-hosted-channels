@@ -27,8 +27,6 @@ import scala.util.Try
 object Tools {
   def none: PartialFunction[Any, Unit] = { case _ => }
 
-  def toMapBy[K, V](items: Iterable[V])(mapper: V => K): Map[K, V] = items.map(item => mapper(item) -> item).toMap
-
   case object DuplicateShortId extends Throwable("Duplicate ShortId is not allowed here")
 
   abstract class DuplicateHandler[T] { me =>
@@ -137,12 +135,6 @@ case class PHCConfig(maxPerNode: Long, minNormalChans: Long, maxSyncSendsPerIpPe
 
 case class ApiParams(password: String, bindingIp: String, port: Int)
 
-case class Vals(hcDefaultParams: HCParams,
-                hcOverrideParams: List[HCOverrideParams], maxNewChansPerIpPerHour: Int,
-                branding: Branding, phcConfig: PHCConfig, apiParams: ApiParams) {
-
-  val hcOverrideMap: Map[PublicKey, HCOverrideParams] =
-    Tools.toMapBy[PublicKey, HCOverrideParams](hcOverrideParams) {
-      hcParams => PublicKey(ByteVector fromValidHex hcParams.nodeId)
-    }
+case class Vals(hcDefaultParams: HCParams, hcOverrideParams: List[HCOverrideParams], maxNewChansPerIpPerHour: Int, branding: Branding, phcConfig: PHCConfig, apiParams: ApiParams) {
+  val hcOverrideMap: Map[PublicKey, HCOverrideParams] = hcOverrideParams.map { hcParams => PublicKey(ByteVector fromValidHex hcParams.nodeId) -> hcParams }.toMap
 }

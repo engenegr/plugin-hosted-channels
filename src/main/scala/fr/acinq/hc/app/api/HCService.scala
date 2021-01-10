@@ -97,13 +97,16 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
           complete(worker ? HC_CMD_HIDE(remoteNodeId))
         }
       } ~
-      path("verifystate") {
+      path("verifyremotestate") {
         formFields("state".as[ByteVector](binaryDataUnmarshaller)) { state =>
-          val remoteState = fr.acinq.hc.app.wire.HostedChannelCodecs.hostedStateCodec.decodeValue(state.toBitVector).require
-          val remoteNodeIdOpt = Set(remoteState.nodeId1, remoteState.nodeId2).find(kit.nodeParams.nodeId.!=)
-          val isLocalSigOk = remoteState.lastCrossSignedState.verifyRemoteSig(kit.nodeParams.nodeId)
-          val result = RemoteHostedStateResult(remoteState, remoteNodeIdOpt, isLocalSigOk)
-          complete(result)
+          complete(getHostedStateResult(state))
+        }
+      } ~
+      path("restorefromremotestate") {
+        formFields("state".as[ByteVector](binaryDataUnmarshaller)) { state =>
+          val RemoteHostedStateResult(remoteState, Some(remoteNodeId), isLocalSigOk) = getHostedStateResult(state)
+          require(isLocalSigOk, "Can't proceed: local signature of provided HC state is invalid")
+          complete(worker ? HC_CMD_RESTORE(remoteNodeId, remoteState))
         }
       } ~
       path("phcnodes") {
@@ -122,4 +125,11 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
       node1AnnounceOpt = routerData.nodes.get(phc.channelAnnounce.nodeId1)
       node2AnnounceOpt = routerData.nodes.get(phc.channelAnnounce.nodeId2)
     } yield node1AnnounceOpt ++ node2AnnounceOpt
+
+  private def getHostedStateResult(state: ByteVector) = {
+    val remoteState = fr.acinq.hc.app.wire.HostedChannelCodecs.hostedStateCodec.decodeValue(state.toBitVector).require
+    val remoteNodeIdOpt = Set(remoteState.nodeId1, remoteState.nodeId2).find(kit.nodeParams.nodeId.!=)
+    val isLocalSigOk = remoteState.lastCrossSignedState.verifyRemoteSig(kit.nodeParams.nodeId)
+    RemoteHostedStateResult(remoteState, remoteNodeIdOpt, isLocalSigOk)
+  }
 }

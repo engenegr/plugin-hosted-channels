@@ -85,9 +85,16 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, channelsDb: HostedChannelsDb
       val isInDb = channelsDb.getChannelByRemoteNodeId(cmd.remoteNodeId).nonEmpty
       val isInMemory = Option(inMemoryHostedChannels get cmd.remoteNodeId).nonEmpty
       if (kit.nodeParams.nodeId == cmd.remoteNodeId) sender ! CMDResFailure("HC with itself is prohibited")
-      else if (isInMemory || isInDb) sender ! CMDResFailure("HC with remote node already exists")
+      else if (isInMemory || isInDb) sender ! CMDResFailure("HC with remote peer already exists")
       else if (!isConnected) sender ! CMDResFailure("Not yet connected to remote peer")
       else spawnChannel(cmd.remoteNodeId) !> HCPeerConnected !> cmd
+
+    case cmd: HC_CMD_RESTORE =>
+      val isInDb = channelsDb.getChannelByRemoteNodeId(cmd.remoteNodeId).nonEmpty
+      val isInMemory = Option(inMemoryHostedChannels get cmd.remoteNodeId).nonEmpty
+      if (kit.nodeParams.nodeId == cmd.remoteNodeId) sender ! CMDResFailure("HC with itself is prohibited")
+      else if (isInMemory || isInDb) sender ! CMDResFailure("HC with remote peer already exists")
+      else spawnChannel(cmd.remoteNodeId) ! cmd
 
     // Peer may be disconnected when commands are issued
     // Channel must be able to handle command in any state

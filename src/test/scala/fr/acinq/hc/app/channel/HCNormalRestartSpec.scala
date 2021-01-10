@@ -1,12 +1,16 @@
 package fr.acinq.hc.app.channel
 
 import akka.actor.PoisonPill
+import fr.acinq.bitcoin.ByteVector32
+import fr.acinq.eclair.TestConstants.Bob
 import fr.acinq.eclair._
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.io.PeerDisconnected
 import fr.acinq.eclair.payment.relay.Relayer
 import fr.acinq.eclair.wire.{ChannelUpdate, UpdateAddHtlc, UpdateFulfillHtlc}
+import slick.jdbc.PostgresProfile.api._
 import fr.acinq.hc.app._
+import fr.acinq.hc.app.db.{Blocking, Channels}
 import org.scalatest.Outcome
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 
@@ -396,5 +400,78 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
 
     awaitCond(alice.stateName == CLOSED)
     awaitCond(alice.stateName == CLOSED)
+  }
+
+  test("Alice loses channel data with HTLCs, restores from Bob's data") { f =>
+    HCTestUtils.resetEntireDatabase(f.aliceDB)
+    HCTestUtils.resetEntireDatabase(f.bobDB)
+    reachNormal(f)
+    val (preimage0, alice2bobUpdateAdd0) = addHtlcFromAliceToBob(200000L.msat, f, f.currentBlockHeight)
+    fulfillAliceHtlcByBob(alice2bobUpdateAdd0.id, preimage0, f) // To give Bob some money
+
+    val (preimage1, alice2bobUpdateAdd1) = addHtlcFromAliceToBob(10000L.msat, f, f.currentBlockHeight)
+    val (preimage2, alice2bobUpdateAdd2) = addHtlcFromBob2Alice(10000L.msat, f)
+
+    f.alice ! PeerDisconnected(null, null)
+    f.bob ! PeerDisconnected(null, null)
+    awaitCond(f.alice.stateName == OFFLINE)
+    awaitCond(f.bob.stateName == OFFLINE)
+
+    val channelId = f.bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.channelId
+    Blocking.txWrite(Channels.findIsVisibleUpdatableByRemoteNodeIdCompiled(f.bobKit.nodeParams.nodeId.value.toArray).delete, f.aliceDB) // Alice loses channel data
+
+    val f2 = init()
+    f.bob ! Worker.HCPeerConnected
+    f2.alice ! Worker.HCPeerConnected
+    awaitCond(f.bob.stateName == SYNCING)
+    awaitCond(f2.alice.stateName == SYNCING)
+    f2.alice ! f2.bob2alice.expectMsgType[InvokeHostedChannel]
+    f2.alice2bob.expectMsgType[InitHostedChannel] // Alice does not have a channel
+
+    val bobData = HostedState(f.bobKit.nodeParams.nodeId, f2.aliceKit.nodeParams.nodeId, nextLocalUpdates = Nil, nextRemoteUpdates = Nil,
+      f.bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.lastCrossSignedState)
+
+    val f3 = init()
+    f3.aliceKit.nodeParams.db.pendingRelay.addPendingRelay(channelId, CMD_FULFILL_HTLC(alice2bobUpdateAdd2.id, preimage2)) // Alice gets Bob's payment fulfilled, HC is not there
+    f3.alice ! HC_CMD_RESTORE(bobData.nodeId1, bobData)
+
+    f3.alice ! PeerDisconnected(null, null)
+    f.bob ! PeerDisconnected(null, null)
+    awaitCond(f3.alice.stateName == OFFLINE)
+    awaitCond(f.bob.stateName == OFFLINE)
+
+    f.bob ! Worker.HCPeerConnected
+    f3.alice ! Worker.HCPeerConnected
+    awaitCond(f.bob.stateName == SYNCING)
+    awaitCond(f3.alice.stateName == SYNCING)
+    f3.alice ! f3.bob2alice.expectMsgType[InvokeHostedChannel]
+    f.bob ! f3.alice2bob.expectMsgType[LastCrossSignedState]
+    f3.alice ! f3.bob2alice.expectMsgType[LastCrossSignedState]
+    f.bob ! f3.alice2bob.expectMsgType[LastCrossSignedState]
+    f.bob ! f3.alice2bob.expectMsgType[UpdateFulfillHtlc]
+    f.bob ! f3.alice2bob.expectMsgType[StateUpdate]
+    f.bob ! f3.alice2bob.expectMsgType[ChannelUpdate]
+    f3.alice ! f3.bob2alice.expectMsgType[ChannelUpdate]
+    f3.alice ! f3.bob2alice.expectMsgType[StateUpdate]
+    f.bob ! f3.alice2bob.expectMsgType[StateUpdate]
+
+    f3.alice2bob.expectNoMessage()
+    f3.bob2alice.expectNoMessage()
+
+    f.bob ! CMD_FULFILL_HTLC(alice2bobUpdateAdd1.id, preimage1)
+    f.bob ! CMD_SIGN(None)
+    f3.alice ! f3.bob2alice.expectMsgType[UpdateFulfillHtlc]
+    f3.alice ! f3.bob2alice.expectMsgType[StateUpdate]
+
+    f.bob ! f3.alice2bob.expectMsgType[StateUpdate]
+    f3.alice ! f3.bob2alice.expectMsgType[StateUpdate]
+    f3.aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
+    f3.bob2alice.expectNoMessage()
+    f3.alice2bob.expectNoMessage()
+
+    awaitCond(f3.alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.htlcs.isEmpty)
+    awaitCond(f.bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.htlcs.isEmpty)
+    println(f3.alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 9999800000L.msat)
+    println(f.bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 200000L.msat)
   }
 }
