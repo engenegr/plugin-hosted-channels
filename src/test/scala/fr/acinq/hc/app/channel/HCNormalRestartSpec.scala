@@ -428,8 +428,11 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     f2.alice ! f2.bob2alice.expectMsgType[InvokeHostedChannel]
     f2.alice2bob.expectMsgType[InitHostedChannel] // Alice does not have a channel
 
-    val bobData = HostedState(f.bobKit.nodeParams.nodeId, f2.aliceKit.nodeParams.nodeId, nextLocalUpdates = Nil, nextRemoteUpdates = Nil,
+    val bobData = HostedState(f.bobKit.nodeParams.nodeId, f2.aliceKit.nodeParams.nodeId,
       f.bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.lastCrossSignedState)
+
+    f.bob ! CMD_FULFILL_HTLC(alice2bobUpdateAdd1.id, preimage1)
+    f2.bob2alice.expectMsgType[UpdateFulfillHtlc] // Alice does not receive this
 
     val f3 = init()
     f3.aliceKit.nodeParams.db.pendingRelay.addPendingRelay(channelId, CMD_FULFILL_HTLC(alice2bobUpdateAdd2.id, preimage2)) // Alice gets Bob's payment fulfilled, HC is not there
@@ -451,27 +454,20 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     f.bob ! f3.alice2bob.expectMsgType[UpdateFulfillHtlc]
     f.bob ! f3.alice2bob.expectMsgType[StateUpdate]
     f.bob ! f3.alice2bob.expectMsgType[ChannelUpdate]
+    f3.alice ! f3.bob2alice.expectMsgType[UpdateFulfillHtlc]
+    f3.alice ! f3.bob2alice.expectMsgType[StateUpdate]
     f3.alice ! f3.bob2alice.expectMsgType[ChannelUpdate]
     f3.alice ! f3.bob2alice.expectMsgType[StateUpdate]
     f.bob ! f3.alice2bob.expectMsgType[StateUpdate]
-
-    f3.alice2bob.expectNoMessage()
-    f3.bob2alice.expectNoMessage()
-
-    f.bob ! CMD_FULFILL_HTLC(alice2bobUpdateAdd1.id, preimage1)
-    f.bob ! CMD_SIGN(None)
-    f3.alice ! f3.bob2alice.expectMsgType[UpdateFulfillHtlc]
     f3.alice ! f3.bob2alice.expectMsgType[StateUpdate]
-
     f.bob ! f3.alice2bob.expectMsgType[StateUpdate]
-    f3.alice ! f3.bob2alice.expectMsgType[StateUpdate]
-    f3.aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
-    f3.bob2alice.expectNoMessage()
+
     f3.alice2bob.expectNoMessage()
+    f3.bob2alice.expectNoMessage()
 
     awaitCond(f3.alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.htlcs.isEmpty)
     awaitCond(f.bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.htlcs.isEmpty)
-    println(f3.alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 9999800000L.msat)
-    println(f.bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 200000L.msat)
+    awaitCond(f3.alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 9999800000L.msat)
+    awaitCond(f.bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 200000L.msat)
   }
 }

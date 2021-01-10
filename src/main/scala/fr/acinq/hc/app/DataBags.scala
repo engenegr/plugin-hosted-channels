@@ -2,7 +2,7 @@ package fr.acinq.hc.app
 
 import fr.acinq.eclair._
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, LexicographicalOrdering, Protocol, Satoshi}
-import fr.acinq.eclair.wire.{Color, LightningMessageCodecs, UpdateAddHtlc}
+import fr.acinq.eclair.wire.{Color, LightningMessageCodecs, UpdateAddHtlc, UpdateFulfillHtlc}
 import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
 import scodec.bits.ByteVector
 import java.nio.ByteOrder
@@ -70,11 +70,11 @@ case class LastCrossSignedState(refundScriptPubKey: ByteVector,
     Crypto.sha256(preimage)
   }
 
+  def stateUpdate: StateUpdate = StateUpdate(blockDay, localUpdates, remoteUpdates, localSigOfRemote)
+
   def verifyRemoteSig(pubKey: PublicKey): Boolean = Crypto.verifySignature(hostedSigHash, remoteSigOfLocal, pubKey)
 
   def withLocalSigOfRemote(priv: PrivateKey): LastCrossSignedState = copy(localSigOfRemote = Crypto.sign(reverse.hostedSigHash, priv))
-
-  def stateUpdate: StateUpdate = StateUpdate(blockDay, localUpdates, remoteUpdates, localSigOfRemote)
 }
 
 case class StateUpdate(blockDay: Long, localUpdates: Long, remoteUpdates: Long, localSigOfRemoteLCSS: ByteVector64) extends HostedChannelMessage

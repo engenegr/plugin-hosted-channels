@@ -6,7 +6,7 @@ import akka.http.scaladsl.server._
 import fr.acinq.eclair.api.FormParamExtractors._
 import fr.acinq.eclair.api.JsonSupport.{formats, marshaller, serialization}
 import fr.acinq.hc.app.network.{HostedSync, OperationalData}
-import fr.acinq.bitcoin.{ByteVector32, Satoshi, Script}
+import fr.acinq.bitcoin.{ByteVector32, Crypto, Satoshi, Script}
 import akka.actor.{ActorRef, ActorSystem}
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -128,7 +128,7 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
 
   private def getHostedStateResult(state: ByteVector) = {
     val remoteState = fr.acinq.hc.app.wire.HostedChannelCodecs.hostedStateCodec.decodeValue(state.toBitVector).require
-    val remoteNodeIdOpt = Set(remoteState.nodeId1, remoteState.nodeId2).find(kit.nodeParams.nodeId.!=)
+    val remoteNodeIdOpt = Set(remoteState.nodeId1, remoteState.nodeId2).find(pubKey => kit.nodeParams.nodeId != pubKey)
     val isLocalSigOk = remoteState.lastCrossSignedState.verifyRemoteSig(kit.nodeParams.nodeId)
     RemoteHostedStateResult(remoteState, remoteNodeIdOpt, isLocalSigOk)
   }

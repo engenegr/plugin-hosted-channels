@@ -16,7 +16,7 @@ import fr.acinq.eclair.wire
 
 case class RemoteHostedStateResult(state: HostedState, remoteNodeId: Option[PublicKey], isLocalSigValid: Boolean)
 
-case class HostedState(nodeId1: PublicKey, nodeId2: PublicKey, nextLocalUpdates: List[wire.UpdateMessage], nextRemoteUpdates: List[wire.UpdateMessage], lastCrossSignedState: LastCrossSignedState)
+case class HostedState(nodeId1: PublicKey, nodeId2: PublicKey, lastCrossSignedState: LastCrossSignedState)
 
 // Commands
 
