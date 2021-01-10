@@ -25,7 +25,10 @@ import scala.util.Try
 
 
 object Tools {
+  def none: PartialFunction[Any, Unit] = { case _ => }
+
   def toMapBy[K, V](items: Iterable[V])(mapper: V => K): Map[K, V] = items.map(item => mapper(item) -> item).toMap
+
   case object DuplicateShortId extends Throwable("Duplicate ShortId is not allowed here")
 
   abstract class DuplicateHandler[T] { me =>

@@ -38,7 +38,7 @@ case class HC_CMD_GET_INFO(remoteNodeId: PublicKey) extends HasRemoteNodeIdHoste
 
 case class HC_CMD_SUSPEND(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 
-case class HC_CMD_DROP(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
+case class HC_CMD_HIDE(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 
 sealed trait HCCommandResponse
 
@@ -253,7 +253,7 @@ case class HostedCommitments(isHost: Boolean,
 
   def receiveFail(fail: wire.UpdateFailHtlc): Either[ChannelException, HostedCommitments] =
     if (getOutgoingHtlcCrossSigned(fail.id).isEmpty) Left(UnknownHtlcId(channelId, fail.id)) // Unlike Fulfill, for Fail/FailMalformed we make sure they fail cross-signed outgoing payment
-    else if (fail.reason.isEmpty) Left(new ChannelException(channelId, "empty fail reason")) // Never accept an empty reason since it's a special marker for our fake fails of timedout HTLCs
+    else if (fail.reason.isEmpty) Left(new ChannelException(channelId, "empty fail reason")) // Decline an empty reason since it's a special marker for our fake fails of timedout outgoing HTLCs
     else Right(addRemoteProposal(fail))
 
   def receiveFailMalformed(fail: wire.UpdateFailMalformedHtlc): Either[ChannelException, HostedCommitments] = {

@@ -447,13 +447,13 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     // Misc
 
-    case Event(cmd: HC_CMD_DROP, data: HC_DATA_ESTABLISHED) =>
+    case Event(cmd: HC_CMD_HIDE, data: HC_DATA_ESTABLISHED) =>
       if (data.pendingHtlcs.nonEmpty) {
-        channelsDb.removeHostedChannelFromDb(remoteNodeId)
+        channelsDb.hideHostedChannelFromDb(remoteNodeId)
         stop(FSM.Normal) replying CMDResSuccess(cmd)
       } else {
         // Only cold channel can be dropped, otherwise we'd have dangling HTLCs
-        stay replying CMDResFailure("Dropping declined: in-flight HTLCs are present")
+        stay replying CMDResFailure("Hiding declined: in-flight HTLCs are present")
       }
 
     case Event(cmd: HC_CMD_SUSPEND, data: HC_DATA_ESTABLISHED) =>

@@ -38,31 +38,25 @@ object Channels {
   final val tableName = "channels"
   val model = TableQuery[Channels]
 
-  type DbType = (Long, ByteArray, Long, Int, Boolean, CompleteRefund, PendingRefund, Long, Long, ByteArray, ByteArray)
+  type DbType = (Long, ByteArray, Long, Int, Boolean, CompleteRefund, PendingRefund, Long, Long, ByteArray, ByteArray, Boolean)
 
   val insertCompiled = Compiled {
-    for (x <- model) yield (x.remoteNodeId, x.shortChannelId, x.inFlightHtlcs, x.isHost, x.completeRefund, x.pendingRefund, x.lastBlockDay, x.createdAt, x.data, x.secret)
+    for (x <- model) yield (x.remoteNodeId, x.shortChannelId, x.inFlightHtlcs, x.isHost, x.completeRefund, x.pendingRefund, x.lastBlockDay, x.createdAt, x.data, x.secret, x.isVisible)
   }
 
   val findByRemoteNodeIdUpdatableCompiled = Compiled {
-    (nodeId: RepByteArray) => for (x <- model if x.remoteNodeId === nodeId) yield (x.inFlightHtlcs, x.isHost, x.completeRefund, x.pendingRefund, x.lastBlockDay, x.data)
+    (nodeId: RepByteArray) => for (x <- model if x.remoteNodeId === nodeId) yield (x.inFlightHtlcs, x.isHost, x.completeRefund, x.pendingRefund, x.lastBlockDay, x.data, x.isVisible)
   }
 
-  val findSecretUpdatableByRemoteNodeIdCompiled = Compiled {
-    (nodeId: RepByteArray) => for (x <- model if x.remoteNodeId === nodeId) yield x.secret
-  }
+  val findSecretUpdatableByRemoteNodeIdCompiled = Compiled { nodeId: RepByteArray => for (x <- model if x.remoteNodeId === nodeId) yield x.secret }
 
-  val findBySecretCompiled = Compiled {
-    (secret: RepByteArray) => for (x <- model if x.secret === secret) yield x.data
-  }
+  val findIsVisibleUpdatableByRemoteNodeIdCompiled = Compiled { nodeId: RepByteArray => for (x <- model if x.remoteNodeId === nodeId) yield x.isVisible }
 
-  val listHotChannelsCompiled = Compiled {
-    for (x <- model if x.inFlightHtlcs > 0) yield x.data
-  }
+  val findBySecretCompiled = Compiled { secret: RepByteArray => for (x <- model if x.secret === secret) yield x.data }
 
-  val listClientChannelsCompiled = Compiled {
-    for (x <- model if !x.isHost) yield x.data
-  }
+  val listHotChannelsCompiled = Compiled { for (x <- model if x.inFlightHtlcs > 0 && x.isVisible) yield x.data }
+
+  val listClientChannelsCompiled = Compiled { for (x <- model if !x.isHost && x.isVisible) yield x.data }
 }
 
 class Channels(tag: Tag) extends Table[Channels.DbType](tag, Channels.tableName) {
@@ -80,12 +74,13 @@ class Channels(tag: Tag) extends Table[Channels.DbType](tag, Channels.tableName)
   // These have special update rules
   def data: Rep[ByteArray] = column[ByteArray]("data")
   def secret: Rep[ByteArray] = column[ByteArray]("secret")
+  def isVisible: Rep[Boolean] = column[Boolean]("is_visible")
 
-  def idx1: Index = index("channels__is_host__idx", isHost, unique = false) // Select non-hosts on startup for automatic reconnect
-  def idx2: Index = index("channels__in_flight_htlcs__idx", inFlightHtlcs, unique = false) // Select these on startup for HTLC resolution
+  def idx1: Index = index("channels__is_host__is_visible__idx", (isHost, isVisible), unique = false) // Select non-hosts on startup for automatic reconnect
+  def idx2: Index = index("channels__in_flight_htlcs__is_visible__idx", (inFlightHtlcs, isVisible), unique = false) // Select these on startup for HTLC resolution
   def idx3: Index = index("channels__secret__idx", secret, unique = false) // Find these on user request
 
-  def * = (id, remoteNodeId, shortChannelId, inFlightHtlcs, isHost, completeRefund, pendingRefund, lastBlockDay, createdAt, data, secret)
+  def * = (id, remoteNodeId, shortChannelId, inFlightHtlcs, isHost, completeRefund, pendingRefund, lastBlockDay, createdAt, data, secret, isVisible)
 }
 
 

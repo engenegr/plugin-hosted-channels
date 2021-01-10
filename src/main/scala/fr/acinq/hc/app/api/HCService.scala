@@ -92,9 +92,9 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
           complete(worker ? HC_CMD_SUSPEND(remoteNodeId))
         }
       } ~
-      path("drop") {
+      path("hide") {
         formFields(nodeIdFormParam) { remoteNodeId =>
-          complete(worker ? HC_CMD_DROP(remoteNodeId))
+          complete(worker ? HC_CMD_HIDE(remoteNodeId))
         }
       } ~
       path("verifystate") {
