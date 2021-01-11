@@ -25,8 +25,8 @@ class HCEstablishmentSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     reachNormal(f)
     val bobData = bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED]
     val aliceData = alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED]
-    assert(!bobData.commitments.isHost)
-    assert(aliceData.commitments.isHost)
+    assert(!bobData.commitments.lastCrossSignedState.isHost)
+    assert(aliceData.commitments.lastCrossSignedState.isHost)
     assert(bobData.commitments.lastCrossSignedState.verifyRemoteSig(Alice.nodeParams.nodeId))
     assert(aliceData.commitments.lastCrossSignedState.verifyRemoteSig(Bob.nodeParams.nodeId))
   }

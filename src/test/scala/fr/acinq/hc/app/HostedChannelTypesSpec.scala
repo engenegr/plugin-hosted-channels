@@ -32,7 +32,7 @@ class HostedChannelTypesSpec extends AnyFunSuite {
   val updateAddHtlc1: UpdateAddHtlc = UpdateAddHtlc(channelId, 102, 10000.msat, Crypto.sha256(preimage1), CltvExpiry(4), TestConstants.emptyOnionPacket)
   val updateAddHtlc2: UpdateAddHtlc = UpdateAddHtlc(channelId, 103, 20000.msat, Crypto.sha256(preimage2), CltvExpiry(40), TestConstants.emptyOnionPacket)
 
-  val lcss: LastCrossSignedState = LastCrossSignedState(refundScriptPubKey = randomBytes(119), initHostedChannel, blockDay = 100, localBalanceMsat = 100000.msat, remoteBalanceMsat = 900000.msat,
+  val lcss: LastCrossSignedState = LastCrossSignedState(isHost = true, refundScriptPubKey = randomBytes(119), initHostedChannel, blockDay = 100, localBalanceMsat = 100000.msat, remoteBalanceMsat = 900000.msat,
     localUpdates = 201, remoteUpdates = 101, incomingHtlcs = List(updateAddHtlc1, updateAddHtlc2), outgoingHtlcs = List(updateAddHtlc2, updateAddHtlc1),
     remoteSigOfLocal = ByteVector64.Zeroes, localSigOfRemote = ByteVector64.Zeroes)
 
@@ -88,7 +88,7 @@ class HostedChannelTypesSpec extends AnyFunSuite {
   }
 
   private val hdc =
-    HostedCommitments(isHost = true, randomKey.publicKey, randomKey.publicKey, channelId, localCommitmentSpec,
+    HostedCommitments(randomKey.publicKey, randomKey.publicKey, channelId, localCommitmentSpec,
       originChannels = Map.empty, lcss1, nextLocalUpdates = Nil, nextRemoteUpdates = Nil, announceChannel = true)
 
   test("Processing HTLCs") {

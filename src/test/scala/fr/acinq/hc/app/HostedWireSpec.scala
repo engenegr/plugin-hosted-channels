@@ -38,7 +38,7 @@ object HostedWireSpec {
     onionRoutingPacket = TestConstants.emptyOnionPacket)
 
   val init_hosted_channel: InitHostedChannel = InitHostedChannel(UInt64(6), 10.msat, 20, 500000000L.msat, 5000, 1000000.sat, 1000000.msat, HostedChannelVersion.RESIZABLE)
-  val lcss1: LastCrossSignedState = LastCrossSignedState(bin(47, 0), init_hosted_channel, 10000, 10000.msat, 20000.msat, 10, 20, List(add2, add1), List(add1, add2), randomBytes64, randomBytes64)
+  val lcss1: LastCrossSignedState = LastCrossSignedState(isHost = true, bin(47, 0), init_hosted_channel, 10000, 10000.msat, 20000.msat, 10, 20, List(add2, add1), List(add1, add2), randomBytes64, randomBytes64)
 
   val htlc1: IncomingHtlc = IncomingHtlc(add1)
   val htlc2: OutgoingHtlc = OutgoingHtlc(add2)
@@ -57,7 +57,6 @@ object HostedWireSpec {
   val localNodeId: Crypto.PublicKey = randomKey.publicKey
 
   val hdc: HostedCommitments = HostedCommitments(
-    isHost = true,
     localNodeId,
     randomKey.publicKey,
     channelId = randomBytes32,

@@ -2,12 +2,11 @@ package fr.acinq.hc.app
 
 import fr.acinq.eclair._
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, LexicographicalOrdering, Protocol, Satoshi}
-import fr.acinq.eclair.wire.{Color, LightningMessageCodecs, UpdateAddHtlc, UpdateFulfillHtlc}
+import fr.acinq.eclair.wire.{Color, LightningMessageCodecs, UpdateAddHtlc}
 import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
+import fr.acinq.eclair.channel.ChannelVersion
 import scodec.bits.ByteVector
 import java.nio.ByteOrder
-
-import fr.acinq.eclair.channel.ChannelVersion
 
 
 sealed trait HostedChannelMessage
@@ -31,7 +30,8 @@ case class HostedChannelBranding(rgbColor: Color,
                                  pngIcon: ByteVector,
                                  contactInfo: String) extends HostedChannelMessage
 
-case class LastCrossSignedState(refundScriptPubKey: ByteVector,
+case class LastCrossSignedState(isHost: Boolean,
+                                refundScriptPubKey: ByteVector,
                                 initHostedChannel: InitHostedChannel,
                                 blockDay: Long,
                                 localBalanceMsat: MilliSatoshi,
@@ -44,7 +44,7 @@ case class LastCrossSignedState(refundScriptPubKey: ByteVector,
                                 localSigOfRemote: ByteVector64) extends HostedChannelMessage {
 
   lazy val reverse: LastCrossSignedState =
-    copy(localUpdates = remoteUpdates, remoteUpdates = localUpdates,
+    copy(isHost = !isHost, localUpdates = remoteUpdates, remoteUpdates = localUpdates,
       localBalanceMsat = remoteBalanceMsat, remoteBalanceMsat = localBalanceMsat,
       remoteSigOfLocal = localSigOfRemote, localSigOfRemote = remoteSigOfLocal,
       incomingHtlcs = outgoingHtlcs, outgoingHtlcs = incomingHtlcs)
@@ -52,29 +52,31 @@ case class LastCrossSignedState(refundScriptPubKey: ByteVector,
   lazy val hostedSigHash: ByteVector32 = {
     val inPayments = incomingHtlcs.map(LightningMessageCodecs.updateAddHtlcCodec.encode(_).require.toByteVector).sortWith(LexicographicalOrdering.isLessThan)
     val outPayments = outgoingHtlcs.map(LightningMessageCodecs.updateAddHtlcCodec.encode(_).require.toByteVector).sortWith(LexicographicalOrdering.isLessThan)
+    val hostFlag = if (isHost) 1 else 0
 
-    val preimage =
-      refundScriptPubKey ++
-        Protocol.writeUInt16(initHostedChannel.liabilityDeadlineBlockdays, ByteOrder.LITTLE_ENDIAN) ++
-        Protocol.writeUInt64(initHostedChannel.minimalOnchainRefundAmountSatoshis.toLong, ByteOrder.LITTLE_ENDIAN) ++
-        Protocol.writeUInt64(initHostedChannel.channelCapacityMsat.toLong, ByteOrder.LITTLE_ENDIAN) ++
-        Protocol.writeUInt64(initHostedChannel.initialClientBalanceMsat.toLong, ByteOrder.LITTLE_ENDIAN) ++
-        Protocol.writeUInt32(blockDay, ByteOrder.LITTLE_ENDIAN) ++
-        Protocol.writeUInt64(localBalanceMsat.toLong, ByteOrder.LITTLE_ENDIAN) ++
-        Protocol.writeUInt64(remoteBalanceMsat.toLong, ByteOrder.LITTLE_ENDIAN) ++
-        Protocol.writeUInt32(localUpdates, ByteOrder.LITTLE_ENDIAN) ++
-        Protocol.writeUInt32(remoteUpdates, ByteOrder.LITTLE_ENDIAN) ++
-        inPayments.foldLeft(ByteVector.empty) { case (acc, htlc) => acc ++ htlc } ++
-        outPayments.foldLeft(ByteVector.empty) { case (acc, htlc) => acc ++ htlc }
-
-    Crypto.sha256(preimage)
+    Crypto.sha256(refundScriptPubKey ++
+      Protocol.writeUInt16(initHostedChannel.liabilityDeadlineBlockdays, ByteOrder.LITTLE_ENDIAN) ++
+      Protocol.writeUInt64(initHostedChannel.minimalOnchainRefundAmountSatoshis.toLong, ByteOrder.LITTLE_ENDIAN) ++
+      Protocol.writeUInt64(initHostedChannel.channelCapacityMsat.toLong, ByteOrder.LITTLE_ENDIAN) ++
+      Protocol.writeUInt64(initHostedChannel.initialClientBalanceMsat.toLong, ByteOrder.LITTLE_ENDIAN) ++
+      Protocol.writeUInt32(blockDay, ByteOrder.LITTLE_ENDIAN) ++
+      Protocol.writeUInt64(localBalanceMsat.toLong, ByteOrder.LITTLE_ENDIAN) ++
+      Protocol.writeUInt64(remoteBalanceMsat.toLong, ByteOrder.LITTLE_ENDIAN) ++
+      Protocol.writeUInt32(localUpdates, ByteOrder.LITTLE_ENDIAN) ++
+      Protocol.writeUInt32(remoteUpdates, ByteOrder.LITTLE_ENDIAN) ++
+      inPayments.foldLeft(ByteVector.empty) { case (acc, htlc) => acc ++ htlc } ++
+      outPayments.foldLeft(ByteVector.empty) { case (acc, htlc) => acc ++ htlc } :+
+      hostFlag.toByte)
   }
 
   def stateUpdate: StateUpdate = StateUpdate(blockDay, localUpdates, remoteUpdates, localSigOfRemote)
 
   def verifyRemoteSig(pubKey: PublicKey): Boolean = Crypto.verifySignature(hostedSigHash, remoteSigOfLocal, pubKey)
 
-  def withLocalSigOfRemote(priv: PrivateKey): LastCrossSignedState = copy(localSigOfRemote = Crypto.sign(reverse.hostedSigHash, priv))
+  def withLocalSigOfRemote(priv: PrivateKey): LastCrossSignedState = {
+    val localSignature = Crypto.sign(reverse.hostedSigHash, priv)
+    copy(localSigOfRemote = localSignature)
+  }
 }
 
 case class StateUpdate(blockDay: Long, localUpdates: Long, remoteUpdates: Long, localSigOfRemoteLCSS: ByteVector64) extends HostedChannelMessage

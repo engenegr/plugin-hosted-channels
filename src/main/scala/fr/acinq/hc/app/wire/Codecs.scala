@@ -35,7 +35,8 @@ object Codecs {
   }.as[HostedChannelBranding]
 
   val lastCrossSignedStateCodec: Codec[LastCrossSignedState] = {
-    (varsizebinarydata withContext "refundScriptPubKey") ::
+    (bool withContext "isHost") ::
+      (varsizebinarydata withContext "refundScriptPubKey") ::
       (initHostedChannelCodec withContext "initHostedChannel") ::
       (uint32 withContext "blockDay") ::
       (millisatoshi withContext "localBalanceMsat") ::

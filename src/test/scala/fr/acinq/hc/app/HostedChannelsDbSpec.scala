@@ -1,6 +1,7 @@
 package fr.acinq.hc.app
 
 import fr.acinq.eclair._
+import com.softwaremill.quicklens._
 import fr.acinq.bitcoin.{ByteVector32, Satoshi}
 import fr.acinq.eclair.ShortChannelId
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
@@ -76,9 +77,9 @@ class HostedChannelsDbSpec extends AnyFunSuite {
     HCTestUtils.resetEntireDatabase(Config.db)
     val cdb = new HostedChannelsDb(Config.db)
 
-    val data1 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(1L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32, isHost = true))
-    val data2 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(2L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32, isHost = true))
-    val data3 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(3L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32, isHost = true))
+    val data1 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(1L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
+    val data2 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(2L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
+    val data3 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(3L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
 
     cdb.addNewChannel(data1)
     cdb.addNewChannel(data2)
@@ -86,8 +87,8 @@ class HostedChannelsDbSpec extends AnyFunSuite {
 
     assert(cdb.listClientChannels.isEmpty)
 
-    val data4 = data1.copy(commitments = data1.commitments.copy(isHost = false))
-    val data5 = data2.copy(commitments = data2.commitments.copy(isHost = false))
+    val data4 = data1.modify(_.commitments.lastCrossSignedState.isHost).setTo(false)
+    val data5 = data2.modify(_.commitments.lastCrossSignedState.isHost).setTo(false)
 
     cdb.updateOrAddNewChannel(data4)
     cdb.updateOrAddNewChannel(data5)

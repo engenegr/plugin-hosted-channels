@@ -97,8 +97,8 @@ case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
   def withResize(resize: ResizeChannel): HC_DATA_ESTABLISHED =
     this.modify(_.commitments.lastCrossSignedState.initHostedChannel.maxHtlcValueInFlightMsat).setTo(resize.newCapacityMsatU64)
       .modify(_.commitments.lastCrossSignedState.initHostedChannel.channelCapacityMsat).setTo(resize.newCapacity.toMilliSatoshi)
-      .modify(_.commitments.localSpec.toRemote).usingIf(!commitments.isHost)(_ + resize.newCapacity - commitments.capacity)
-      .modify(_.commitments.localSpec.toLocal).usingIf(commitments.isHost)(_ + resize.newCapacity - commitments.capacity)
+      .modify(_.commitments.localSpec.toRemote).usingIf(!commitments.lastCrossSignedState.isHost)(_ + resize.newCapacity - commitments.capacity)
+      .modify(_.commitments.localSpec.toLocal).usingIf(commitments.lastCrossSignedState.isHost)(_ + resize.newCapacity - commitments.capacity)
       .modify(_.resizeProposal).setTo(None)
 }
 
@@ -108,8 +108,7 @@ object HostedChannelVersion {
   val RESIZABLE: ChannelVersion = ChannelVersion.STANDARD | ChannelVersion.fromBit(USE_RESIZE)
 }
 
-case class HostedCommitments(isHost: Boolean,
-                             localNodeId: PublicKey,
+case class HostedCommitments(localNodeId: PublicKey,
                              remoteNodeId: PublicKey,
                              channelId: ByteVector32,
                              localSpec: CommitmentSpec,
@@ -155,7 +154,7 @@ case class HostedCommitments(isHost: Boolean,
     }
 
   def nextLocalUnsignedLCSS(blockDay: Long): LastCrossSignedState =
-    LastCrossSignedState(lastCrossSignedState.refundScriptPubKey, lastCrossSignedState.initHostedChannel,
+    LastCrossSignedState(lastCrossSignedState.isHost, lastCrossSignedState.refundScriptPubKey, lastCrossSignedState.initHostedChannel,
       blockDay, localBalanceMsat = nextLocalSpec.toLocal, remoteBalanceMsat = nextLocalSpec.toRemote, nextTotalLocal, nextTotalRemote,
       nextLocalSpec.htlcs.collect(DirectedHtlc.incoming).toList, nextLocalSpec.htlcs.collect(DirectedHtlc.outgoing).toList,
       localSigOfRemote = ByteVector64.Zeroes, remoteSigOfLocal = ByteVector64.Zeroes)

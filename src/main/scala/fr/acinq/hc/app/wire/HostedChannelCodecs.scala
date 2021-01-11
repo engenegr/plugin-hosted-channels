@@ -11,8 +11,7 @@ import scodec.Codec
 
 object HostedChannelCodecs {
   val hostedCommitmentsCodec: Codec[HostedCommitments] = {
-    (bool withContext "isHost") ::
-      (publicKey withContext "localNodeId") ::
+    (publicKey withContext "localNodeId") ::
       (publicKey withContext "remoteNodeId") ::
       (bytes32 withContext "channelId") ::
       (commitmentSpecCodec withContext "localSpec") ::
