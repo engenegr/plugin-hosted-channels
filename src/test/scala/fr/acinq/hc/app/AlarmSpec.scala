@@ -17,7 +17,7 @@ class AlarmSpec extends AnyFunSuite {
   test("Find closest nodes") {
     val preimage = ByteVector32.fromValidHex("57ca95a6cd7c6e496d4ab622ed7bb13e01ce33dfeb1589f82b570244999eac01")
     val pointOfInterest = Tools.pointOfInterest(nodeKey, blockHash, preimage)
-    val closestNodeId = ByteVector.fromValidHex("020ff52abb64e2edb8df5d68609e17800755137810d7c9240ed1ac7e98999b29f9")
+    val closestNodeId = ByteVector.fromValidHex("0269cb331efd826fd8a5ca207bdc476483ca2b99c10c61c4edc267752063fe80a2")
     assert(Tools.closestNodes(pointOfInterest.toBitVector.toIndexedSeq, publicGraphNodeIds).head.value == closestNodeId)
     assert(Tools.closestNodes(pointOfInterest.toBitVector.toIndexedSeq, incompleteGraphNodeIds).head.value == closestNodeId)
   }

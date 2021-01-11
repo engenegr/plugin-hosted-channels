@@ -3,12 +3,12 @@ package fr.acinq.hc.app
 import fr.acinq.eclair._
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
-
 import scala.collection.parallel.CollectionConverters._
 import fr.acinq.eclair.wire.{AnnouncementMessage, ChannelAnnouncement, ChannelUpdate, Color, HasChannelId, UnknownMessage}
 import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol, Satoshi, SatoshiLong}
 import fr.acinq.hc.app.channel.{HostedChannelVersion, HostedCommitments}
 import com.typesafe.config.{ConfigFactory, Config => TypesafeConfig}
+import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
 import java.io.{ByteArrayInputStream, File}
 import java.nio.file.{Files, Paths}
 
@@ -16,14 +16,12 @@ import fr.acinq.eclair.channel.Channel.OutgoingMessage
 import fr.acinq.eclair.channel.ChannelVersion
 import net.ceedubs.ficus.readers.ValueReader
 import fr.acinq.eclair.router.Announcements
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
 import org.postgresql.util.PSQLException
 import fr.acinq.eclair.io.PeerConnected
 import fr.acinq.hc.app.wire.Codecs
 import slick.jdbc.PostgresProfile
 import scodec.bits.ByteVector
 import java.nio.ByteOrder
-
 import scala.util.Try
 
 
@@ -83,7 +81,7 @@ object Tools {
   }
 
   def pointOfInterest(nodeKey: PrivateKey, blockHash: ByteVector32, preimage: ByteVector32): ByteVector32 = {
-    val nodeSignature = Crypto.hmac512(nodeKey.value, blockHash ++ preimage)
+    val nodeSignature = Crypto.sign(Crypto.sha256(blockHash ++ preimage), nodeKey)
     Crypto.sha256(nodeSignature)
   }
 }
