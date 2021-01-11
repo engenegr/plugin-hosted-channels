@@ -16,8 +16,8 @@ class AlarmSpec extends AnyFunSuite {
 
   test("Find closest nodes") {
     val preimage = ByteVector32.fromValidHex("57ca95a6cd7c6e496d4ab622ed7bb13e01ce33dfeb1589f82b570244999eac01")
-    val pointOfInterest = Tools.pointOfInterest(nodeKey, blockHash, preimage)
-    val closestNodeId = ByteVector.fromValidHex("0269cb331efd826fd8a5ca207bdc476483ca2b99c10c61c4edc267752063fe80a2")
+    val pointOfInterest = Tools.alarmSignature(nodeKey, blockHash, preimage).take(32)
+    val closestNodeId = ByteVector.fromValidHex("02eafbe745dd20f8c1b2dcea08ea5df7b8c5bc854673d701cb8580d440700d02f7")
     assert(Tools.closestNodes(pointOfInterest.toBitVector.toIndexedSeq, publicGraphNodeIds).head.value == closestNodeId)
     assert(Tools.closestNodes(pointOfInterest.toBitVector.toIndexedSeq, incompleteGraphNodeIds).head.value == closestNodeId)
   }
@@ -28,7 +28,7 @@ class AlarmSpec extends AnyFunSuite {
 
     val allClosestNodes = for {
       preimage <- List.fill(1000)(randomBytes32)
-      pointOfInterest = Tools.pointOfInterest(nodeKey, blockHash, preimage)
+      pointOfInterest = Tools.alarmSignature(nodeKey, blockHash, preimage).take(32)
       closestNodes = Tools.closestNodes(pointOfInterest.toBitVector.toIndexedSeq, allNodes)
     } yield closestNodes.toSet
 
@@ -45,7 +45,7 @@ class AlarmSpec extends AnyFunSuite {
 
     val allClosestNodes = for {
       preimage <- List.fill(iterations)(randomBytes32)
-      pointOfInterest = Tools.pointOfInterest(nodeKey, blockHash, preimage)
+      pointOfInterest = Tools.alarmSignature(nodeKey, blockHash, preimage).take(32)
       closestNodes = Tools.closestNodes(pointOfInterest.toBitVector.toIndexedSeq, subgraph)
     } yield closestNodes.head
 

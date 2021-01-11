@@ -5,7 +5,7 @@ import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import scala.collection.parallel.CollectionConverters._
 import fr.acinq.eclair.wire.{AnnouncementMessage, ChannelAnnouncement, ChannelUpdate, Color, HasChannelId, UnknownMessage}
-import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol, Satoshi, SatoshiLong}
+import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, LexicographicalOrdering, Protocol, Satoshi, SatoshiLong}
 import fr.acinq.hc.app.channel.{HostedChannelVersion, HostedCommitments}
 import com.typesafe.config.{ConfigFactory, Config => TypesafeConfig}
 import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
@@ -80,10 +80,8 @@ object Tools {
     distances.toList.sortBy(_._1).take(nodeIds.size / 20 max 21).map(_._2)
   }
 
-  def pointOfInterest(nodeKey: PrivateKey, blockHash: ByteVector32, preimage: ByteVector32): ByteVector32 = {
-    val nodeSignature = Crypto.sign(Crypto.sha256(blockHash ++ preimage), nodeKey)
-    Crypto.sha256(nodeSignature)
-  }
+  def alarmSignature(nodeKey: PrivateKey, blockHash: ByteVector32, preimage: ByteVector32): ByteVector64 =
+    Crypto.sign(Crypto.sha256(blockHash ++ preimage), nodeKey)
 }
 
 trait PeerConnectedWrap {
