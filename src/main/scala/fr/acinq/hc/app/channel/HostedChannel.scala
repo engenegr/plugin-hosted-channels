@@ -1,11 +1,8 @@
 package fr.acinq.hc.app.channel
 
-import java.util.UUID
-
 import fr.acinq.eclair._
 import fr.acinq.hc.app._
 import fr.acinq.eclair.channel._
-
 import scala.concurrent.duration._
 import com.softwaremill.quicklens._
 import fr.acinq.eclair.wire.{ChannelUpdate, UpdateAddHtlc, UpdateFailHtlc, UpdateFulfillHtlc}
@@ -15,12 +12,13 @@ import fr.acinq.hc.app.Tools.{DuplicateHandler, DuplicateShortId}
 import fr.acinq.hc.app.network.{HostedSync, OperationalData, PHC}
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64}
 import fr.acinq.hc.app.db.Blocking.{span, timeout}
-
 import scala.util.{Failure, Success}
 import akka.actor.{ActorRef, FSM}
+
 import fr.acinq.eclair.blockchain.CurrentBlockCount
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.FSMDiagnosticActorLogging
+import fr.acinq.eclair.channel.Origin.LocalCold
 import fr.acinq.eclair.payment.relay.Relayer
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.hc.app.db.HostedChannelsDb
@@ -29,11 +27,10 @@ import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.bitcoin.SatoshiLong
 import fr.acinq.hc.app.wire.Codecs
 import scodec.bits.ByteVector
-
 import scala.concurrent.Await
 import fr.acinq.eclair.wire
 import akka.pattern.ask
-import fr.acinq.eclair.channel.Origin.LocalCold
+import java.util.UUID
 
 
 object HostedChannel {

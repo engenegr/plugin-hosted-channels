@@ -1,8 +1,6 @@
 package fr.acinq.hc.app.channel
 
 import akka.actor.PoisonPill
-import fr.acinq.bitcoin.ByteVector32
-import fr.acinq.eclair.TestConstants.Bob
 import fr.acinq.eclair._
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.io.PeerDisconnected
