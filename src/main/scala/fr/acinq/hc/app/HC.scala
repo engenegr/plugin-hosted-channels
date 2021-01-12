@@ -71,6 +71,7 @@ class HC extends Plugin {
   override def onKit(kit: Kit): Unit = {
     val syncRef = kit.system actorOf Props(classOf[HostedSync], kit, new HostedUpdatesDb(Config.db), Config.vals.phcConfig)
     val workerRef = kit.system actorOf Props(classOf[Worker], kit, syncRef, channelsDb, Config.vals)
+
     implicit val executionContext: ExecutionContextExecutor = kit.system.dispatcher
     implicit val coreActorSystem: ActorSystem = kit.system
 
