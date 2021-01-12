@@ -4,20 +4,21 @@ import fr.acinq.eclair._
 import fr.acinq.hc.app.channel._
 import akka.http.scaladsl.server._
 import fr.acinq.eclair.api.FormParamExtractors._
-import fr.acinq.eclair.api.JsonSupport.{formats, marshaller, serialization}
 import fr.acinq.hc.app.network.{HostedSync, OperationalData}
-import fr.acinq.bitcoin.{ByteVector32, Crypto, Satoshi, Script}
+import fr.acinq.bitcoin.{ByteVector32, Satoshi, Script}
 import akka.actor.{ActorRef, ActorSystem}
 
-import scala.concurrent.ExecutionContext.Implicits.global
 import fr.acinq.hc.app.db.HostedChannelsDb
-import fr.acinq.eclair.api.AbstractService
 import fr.acinq.eclair.router.Router
 import fr.acinq.eclair.crypto.Mac32
 import scodec.bits.ByteVector
 import fr.acinq.hc.app.Vals
 import akka.util.Timeout
 import akka.pattern.ask
+
+// important! Must NOT import the unmarshaller as it is too generic...see https://github.com/akka/akka-http/issues/541
+
+import fr.acinq.eclair.api.JsonSupport.{formats, marshaller, serialization}
 
 
 class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: ActorRef, vals: Vals) extends AbstractService {
@@ -110,6 +111,8 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
         }
       } ~
       path("phcnodes") {
+        import scala.concurrent.ExecutionContext.Implicits.global
+
         val phcNodeAnnounces = for {
           routerData <- (kit.router ? Router.GetRouterData).mapTo[Router.Data]
           hostedSyncData <- (sync ? HostedSync.GetHostedSyncData).mapTo[OperationalData]
@@ -128,7 +131,7 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
 
   private def getHostedStateResult(state: ByteVector) = {
     val remoteState = fr.acinq.hc.app.wire.HostedChannelCodecs.hostedStateCodec.decodeValue(state.toBitVector).require
-    val remoteNodeIdOpt = Set(remoteState.nodeId1, remoteState.nodeId2).find(pubKey => kit.nodeParams.nodeId != pubKey)
+    val remoteNodeIdOpt = Set(remoteState.nodeId1, remoteState.nodeId2).find(kit.nodeParams.nodeId != _)
     val isLocalSigOk = remoteState.lastCrossSignedState.verifyRemoteSig(kit.nodeParams.nodeId)
     RemoteHostedStateResult(remoteState, remoteNodeIdOpt, isLocalSigOk)
   }

@@ -29,7 +29,7 @@ case class WaitForNormalNetworkData(phcNetwork: PHCNetwork) extends HostedSyncDa
 
 case class OperationalData(phcNetwork: PHCNetwork,
                            phcGossip: CollectedGossip,
-                           lastSyncNodeId: Option[PublicKey],
+                           syncNodeId: Option[PublicKey],
                            normalChannels: SortedMap[ShortChannelId, PublicChannel],
                            normalGraph: DirectedGraph) extends HostedSyncData {
 

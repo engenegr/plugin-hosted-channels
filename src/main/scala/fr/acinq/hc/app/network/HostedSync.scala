@@ -96,24 +96,28 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
     case Event(msg: UnknownMessageReceived, data: OperationalData) if syncProcessor.tagsOfInterest.contains(msg.message.tag) =>
       stay using syncProcessor.process(msg.nodeId, msg.message, data)
 
-    case Event(GotAllSyncFrom(wrap), data: OperationalData) if data.lastSyncNodeId.contains(wrap.info.nodeId) =>
-      tryPersist(data.phcNetwork).map { adds =>
-        // Note: nodes whose NC count falls below minimum will eventually be pruned out
-        val u1Count = updatesDb.pruneOldUpdates1(System.currentTimeMillis.millis.toSeconds)
-        val u2Count = updatesDb.pruneOldUpdates2(System.currentTimeMillis.millis.toSeconds)
-        val annCount = updatesDb.pruneUpdateLessAnnounces
-        val phcNetwork1 = updatesDb.getState
+    case Event(GotAllSyncFrom(wrap), data: OperationalData) if data.syncNodeId.contains(wrap.info.nodeId) =>
+      // It's important to check that ending messages comes exactly from a node we have requested a sync from
 
-        // In case of success we prune database and recreate network from scratch
-        log.info(s"PLGN PHC, HostedSync, added=${adds.sum}, removed u1=$u1Count, removed u2=$u2Count, removed ann=$annCount")
-        log.info(s"PLGN PHC, HostedSync, chans old=${data.phcNetwork.channels.size}, new=${phcNetwork1.channels.size}")
-        goto(OPERATIONAL) using data.copy(phcNetwork = phcNetwork1)
-      }.recover { err =>
-        log.info(s"PLGN PHC, HostedSync, db fail=${err.getMessage}")
-        // Note that in case of db failure announces are retained, this is fine
-        val phcNetwork1 = data.phcNetwork.copy(unsaved = PHCNetwork.emptyUnsaved)
-        goto(WAIT_FOR_PHC_SYNC) using WaitForNormalNetworkData(phcNetwork1)
-      }.get
+      tryPersist(data.phcNetwork) match {
+        case Failure(unkownMessageError) =>
+          // Note that in case of db failure announces are retained, this is fine
+          log.info(s"PLGN PHC, HostedSync, db fail=${unkownMessageError.getMessage}")
+          val phcNetwork1 = data.phcNetwork.copy(unsaved = PHCNetwork.emptyUnsaved)
+          goto(WAIT_FOR_PHC_SYNC) using WaitForNormalNetworkData(phcNetwork1)
+
+        case Success(adds) =>
+          // Note: nodes whose NC count falls below minimum will eventually be pruned out
+          val u1Count = updatesDb.pruneOldUpdates1(System.currentTimeMillis.millis.toSeconds)
+          val u2Count = updatesDb.pruneOldUpdates2(System.currentTimeMillis.millis.toSeconds)
+          val annCount = updatesDb.pruneUpdateLessAnnounces
+          val phcNetwork1 = updatesDb.getState
+
+          // In case of success we prune database and recreate network from scratch
+          log.info(s"PLGN PHC, HostedSync, added=${adds.sum}, removed u1=$u1Count, removed u2=$u2Count, removed ann=$annCount")
+          log.info(s"PLGN PHC, HostedSync, chans old=${data.phcNetwork.channels.size}, new=${phcNetwork1.channels.size}")
+          goto(OPERATIONAL) using data.copy(phcNetwork = phcNetwork1)
+      }
   }
 
   when(OPERATIONAL) {
@@ -163,17 +167,15 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
     // PERIODIC SYNC
 
     case Event(SyncFromPHCPeers, data: OperationalData) =>
-      randomPublicPeers(data).headOption match {
-        case Some(publicPeerConnectedWrap) =>
-          val lastSyncNodeIdOpt = Some(publicPeerConnectedWrap.info.nodeId)
-          log.info(s"PLGN PHC, HostedSync, with peer=${publicPeerConnectedWrap.info.nodeId}")
-          publicPeerConnectedWrap sendHostedChannelMsg QueryPublicHostedChannels(kit.nodeParams.chainHash)
-          goto(DOING_PHC_SYNC) using data.copy(lastSyncNodeId = lastSyncNodeIdOpt)
-
-        case None =>
-          // A frequent ask timer has been scheduled in transition
-          log.info("PLGN PHC, HostedSync, no PHC peers, waiting")
-          goto(WAIT_FOR_PHC_SYNC)
+      randomPublicPeers(data).headOption map { publicPeer =>
+        val selectedSyncNodeIdOpt = Some(publicPeer.info.nodeId)
+        log.info(s"PLGN PHC, HostedSync, with peer=${publicPeer.info.nodeId}")
+        publicPeer sendHostedChannelMsg QueryPublicHostedChannels(kit.nodeParams.chainHash)
+        goto(DOING_PHC_SYNC) using data.copy(syncNodeId = selectedSyncNodeIdOpt)
+      } getOrElse {
+        // A frequent ask timer has been scheduled in transition
+        log.info("PLGN PHC, HostedSync, no PHC peers, waiting")
+        goto(WAIT_FOR_PHC_SYNC)
       }
 
     // LISTENING TO GOSSIP

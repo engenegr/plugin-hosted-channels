@@ -107,12 +107,10 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, channelsDb: HostedChannelsDb
 
     case Terminated(channelRef) => inMemoryHostedChannels.inverse.remove(channelRef)
 
-    case TickRemoveIdleChannels =>
-      logger.info(s"PLGN PHC, in-memory=${inMemoryHostedChannels.size}")
-      inMemoryHostedChannels.values.forEach(_ ! TickRemoveIdleChannels)
+    case TickRemoveIdleChannels => inMemoryHostedChannels.values.forEach(_ ! TickRemoveIdleChannels)
 
-    case ClientChannels(channels) =>
-      for (channelData <- channels) {
+    case cc: ClientChannels =>
+      for (channelData <- cc.channels) {
         val nodeId = channelData.commitments.remoteNodeId
         kit.switchboard ! Peer.Connect(nodeId, None)
         spawnPreparedChannel(channelData)
