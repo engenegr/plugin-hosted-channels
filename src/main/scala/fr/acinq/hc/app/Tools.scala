@@ -117,8 +117,9 @@ object Config {
 }
 
 
-case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDeltaBlocks: Int, onChainRefundThresholdSat: Long,
-                    liabilityDeadlineBlockdays: Int, channelCapacityMsat: Long, maxHtlcValueInFlightMsat: Long,
+case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long,
+                    cltvDeltaBlocks: Int, onChainRefundThresholdSat: Long,
+                    liabilityDeadlineBlockdays: Int, channelCapacityMsat: Long,
                     htlcMinimumMsat: Long, maxAcceptedHtlcs: Int, isResizable: Boolean) {
 
   val feeBase: MilliSatoshi = feeBaseMsat.msat
@@ -130,7 +131,7 @@ case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDelt
   val channelVersion: ChannelVersion = if (isResizable) HostedChannelVersion.RESIZABLE else ChannelVersion.STANDARD
 
   val initMsg: InitHostedChannel =
-    InitHostedChannel(UInt64(maxHtlcValueInFlightMsat), htlcMinimum, maxAcceptedHtlcs, channelCapacityMsat.msat,
+    InitHostedChannel(UInt64(channelCapacityMsat), htlcMinimum, maxAcceptedHtlcs, channelCapacityMsat.msat,
       liabilityDeadlineBlockdays, onChainRefundThreshold, initialClientBalanceMsat = 0L.msat, channelVersion)
 
   def areDifferent(cu: ChannelUpdate): Boolean =

@@ -75,7 +75,7 @@ case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
                                overrideProposal: Option[StateOverride] = None, // CLOSED channel override can be initiated by Host
                                refundPendingInfo: Option[RefundPending] = None, // Will be present in case if funds should be refunded
                                refundCompleteInfo: Option[String] = None, // Will be present after channel has been manually updated as a refunded
-                               channelAnnouncement: Option[wire.ChannelAnnouncement] = None) extends HostedData {
+                               channelAnnouncement: Option[wire.ChannelAnnouncement] = None) extends HostedData { me =>
 
   lazy val errorExt: Option[ErrorExt] = localErrors.headOption orElse remoteError
 
@@ -95,7 +95,7 @@ case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
   def timedOutOutgoingHtlcs(blockHeight: Long): Set[wire.UpdateAddHtlc] = pendingHtlcs.collect(DirectedHtlc.outgoing).filter(blockHeight > _.cltvExpiry.toLong)
 
   def withResize(resize: ResizeChannel): HC_DATA_ESTABLISHED =
-    this.modify(_.commitments.lastCrossSignedState.initHostedChannel.maxHtlcValueInFlightMsat).setTo(resize.newCapacityMsatU64)
+    me.modify(_.commitments.lastCrossSignedState.initHostedChannel.maxHtlcValueInFlightMsat).setTo(resize.newCapacityMsatU64)
       .modify(_.commitments.lastCrossSignedState.initHostedChannel.channelCapacityMsat).setTo(resize.newCapacity.toMilliSatoshi)
       .modify(_.commitments.localSpec.toRemote).usingIf(!commitments.lastCrossSignedState.isHost)(_ + resize.newCapacity - commitments.capacity)
       .modify(_.commitments.localSpec.toLocal).usingIf(commitments.lastCrossSignedState.isHost)(_ + resize.newCapacity - commitments.capacity)
