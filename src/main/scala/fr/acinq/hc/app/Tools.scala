@@ -107,15 +107,19 @@ object Config {
     Color(source.getInt("r").toByte, source.getInt("g").toByte, source.getInt("b").toByte)
   }
 
-  val config: TypesafeConfig = ConfigFactory parseFile new File(s"${System getProperty "user.dir"}/src/main/resources", "hc.conf")
+  val resourcesDir: String = s"${System getProperty "user.dir"}/plugin-resources/hosted-channels"
+
+  val config: TypesafeConfig = ConfigFactory parseFile new File(resourcesDir, "hc.conf")
+
   val db: PostgresProfile.backend.Database = PostgresProfile.backend.Database.forConfig("config.relationalDb", config)
+
   val vals: Vals = config.as[Vals]("config.vals")
 }
 
 
-case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long,
-                    cltvDeltaBlocks: Int, onChainRefundThresholdSat: Long, liabilityDeadlineBlockdays: Int,
-                    defaultCapacityMsat: Long, htlcMinimumMsat: Long, maxAcceptedHtlcs: Int, isResizable: Boolean) {
+case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDeltaBlocks: Int, onChainRefundThresholdSat: Long,
+                    liabilityDeadlineBlockdays: Int, channelCapacityMsat: Long, maxHtlcValueInFlightMsat: Long,
+                    htlcMinimumMsat: Long, maxAcceptedHtlcs: Int, isResizable: Boolean) {
 
   val feeBase: MilliSatoshi = feeBaseMsat.msat
 
@@ -126,7 +130,7 @@ case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long,
   val channelVersion: ChannelVersion = if (isResizable) HostedChannelVersion.RESIZABLE else ChannelVersion.STANDARD
 
   val initMsg: InitHostedChannel =
-    InitHostedChannel(UInt64(defaultCapacityMsat), htlcMinimum, maxAcceptedHtlcs, defaultCapacityMsat.msat,
+    InitHostedChannel(UInt64(maxHtlcValueInFlightMsat), htlcMinimum, maxAcceptedHtlcs, channelCapacityMsat.msat,
       liabilityDeadlineBlockdays, onChainRefundThreshold, initialClientBalanceMsat = 0L.msat, channelVersion)
 
   def areDifferent(cu: ChannelUpdate): Boolean =
@@ -140,8 +144,8 @@ case class Branding(logo: String, color: Color, contactInfo: String) {
   var brandingMessageOpt: Option[HostedChannelBranding] = None
 
   Try {
-    val pngBytes = ByteVector view Files.readAllBytes(Paths get logo)
-    val msg = HostedChannelBranding(color, pngBytes, contactInfo)
+    val pngBytes = Files.readAllBytes(Paths get s"${Config.resourcesDir}/$logo")
+    val msg = HostedChannelBranding(color, ByteVector(pngBytes), contactInfo)
     brandingMessageOpt = Some(msg)
   }
 }
@@ -155,5 +159,5 @@ case class PHCConfig(maxPerNode: Long, minNormalChans: Long, maxSyncSendsPerIpPe
 case class ApiParams(password: String, bindingIp: String, port: Int)
 
 case class Vals(hcDefaultParams: HCParams, hcOverrideParams: List[HCOverrideParams], maxNewChansPerIpPerHour: Int, branding: Branding, phcConfig: PHCConfig, apiParams: ApiParams) {
-  val hcOverrideMap: Map[PublicKey, HCOverrideParams] = hcOverrideParams.map { hcParams => PublicKey(ByteVector fromValidHex hcParams.nodeId) -> hcParams }.toMap
+  val hcOverrideMap: Map[PublicKey, HCOverrideParams] = hcOverrideParams.map(hcParams => PublicKey(ByteVector fromValidHex hcParams.nodeId) -> hcParams).toMap
 }
