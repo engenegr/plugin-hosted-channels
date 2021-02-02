@@ -23,7 +23,7 @@ object HostedChannelCodecs {
   }.as[HostedCommitments]
 
   val errorExtCodec: Codec[ErrorExt] = {
-    (errorCodec withContext "localError") ::
+    (lengthDelimited(errorCodec) withContext "localError") ::
       (variableSizeBytes(uint16, utf8) withContext "stamp") ::
       (variableSizeBytes(uint16, utf8) withContext "description")
   }.as[ErrorExt]
@@ -33,9 +33,9 @@ object HostedChannelCodecs {
       (lengthDelimited(channelUpdateCodec) withContext "channelUpdate") ::
       (listOfN(uint8, errorExtCodec) withContext "localErrors") ::
       (optional(bool8, errorExtCodec) withContext "remoteError") ::
-      (optional(bool8, resizeChannelCodec) withContext "resizeProposal") ::
-      (optional(bool8, stateOverrideCodec) withContext "overrideProposal") ::
-      (optional(bool8, refundPendingCodec) withContext "refundPendingInfo") ::
+      (optional(bool8, lengthDelimited(resizeChannelCodec)) withContext "resizeProposal") ::
+      (optional(bool8, lengthDelimited(stateOverrideCodec)) withContext "overrideProposal") ::
+      (optional(bool8, lengthDelimited(refundPendingCodec)) withContext "refundPendingInfo") ::
       (optional(bool8, variableSizeBytes(uint16, utf8)) withContext "refundCompleteInfo") ::
       (optional(bool8, lengthDelimited(channelAnnouncementCodec)) withContext "channelAnnouncement")
   }.as[HC_DATA_ESTABLISHED]

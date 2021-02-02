@@ -23,22 +23,28 @@ object HostedWireSpec {
   def bin32(fill: Byte): ByteVector32 = ByteVector32(bin(32, fill))
 
   val add1: UpdateAddHtlc = UpdateAddHtlc(
-    channelId = randomBytes32,
+    channelId = ByteVector32.One,
     id = Random.nextInt(Int.MaxValue),
     amountMsat = MilliSatoshi(Random.nextInt(Int.MaxValue)),
     cltvExpiry = CltvExpiry(Random.nextInt(Int.MaxValue)),
-    paymentHash = randomBytes32,
-    onionRoutingPacket = TestConstants.emptyOnionPacket)
-  val add2: UpdateAddHtlc = UpdateAddHtlc(
-    channelId = randomBytes32,
-    id = Random.nextInt(Int.MaxValue),
-    amountMsat = MilliSatoshi(Random.nextInt(Int.MaxValue)),
-    cltvExpiry = CltvExpiry(Random.nextInt(Int.MaxValue)),
-    paymentHash = randomBytes32,
+    paymentHash = ByteVector32.Zeroes,
     onionRoutingPacket = TestConstants.emptyOnionPacket)
 
+  val add2: UpdateAddHtlc = UpdateAddHtlc(
+    channelId = ByteVector32.One,
+    id = Random.nextInt(Int.MaxValue),
+    amountMsat = MilliSatoshi(Random.nextInt(Int.MaxValue)),
+    cltvExpiry = CltvExpiry(Random.nextInt(Int.MaxValue)),
+    paymentHash = ByteVector32.Zeroes,
+    onionRoutingPacket = TestConstants.emptyOnionPacket)
+
+  val invoke_hosted_channel: InvokeHostedChannel = InvokeHostedChannel(Block.LivenetGenesisBlock.hash, ByteVector.fromValidHex("00" * 32), secret = ByteVector.fromValidHex("00" * 32))
+
   val init_hosted_channel: InitHostedChannel = InitHostedChannel(UInt64(6), 10.msat, 20, 500000000L.msat, 5000, 1000000.sat, 1000000.msat, HostedChannelVersion.RESIZABLE)
-  val lcss1: LastCrossSignedState = LastCrossSignedState(isHost = true, bin(47, 0), init_hosted_channel, 10000, 10000.msat, 20000.msat, 10, 20, List(add2, add1), List(add1, add2), randomBytes64, randomBytes64)
+
+  val state_update: StateUpdate = StateUpdate(blockDay = 20020L, localUpdates = 1202L, remoteUpdates = 10L, ByteVector64.Zeroes)
+
+  val last_cross_signed_state_1: LastCrossSignedState = LastCrossSignedState(isHost = true, bin(47, 0), init_hosted_channel, 10000, 10000.msat, 20000.msat, 10, 20, List(add2, add1), List(add1, add2), ByteVector64.Zeroes, ByteVector64.Zeroes)
 
   val htlc1: IncomingHtlc = IncomingHtlc(add1)
   val htlc2: OutgoingHtlc = OutgoingHtlc(add2)
@@ -63,7 +69,7 @@ object HostedWireSpec {
     localSpec = cs,
     originChannels = Map(42L -> Origin.LocalCold(UUID.randomUUID),
       15000L -> Origin.ChannelRelayedCold(ByteVector32(ByteVector.fill(32)(42)), 43, MilliSatoshi(11000000L), MilliSatoshi(10000000L))),
-    lcss1,
+    last_cross_signed_state_1,
     nextLocalUpdates = List(add1, add2),
     nextRemoteUpdates = Nil,
     announceChannel = false)
@@ -109,7 +115,7 @@ class HostedWireSpec extends AnyFunSuite {
       assert(hdc === check)
     }
 
-    val state = HostedState(randomKey.publicKey, randomKey.publicKey, lcss1)
+    val state = HostedState(randomKey.publicKey, randomKey.publicKey, last_cross_signed_state_1)
 
     {
       val binary = HostedChannelCodecs.hostedStateCodec.encode(state).require
@@ -120,8 +126,8 @@ class HostedWireSpec extends AnyFunSuite {
 
   test("Encode and decode messages") {
     import HostedWireSpec._
-    assert(Codecs.toUnknownHostedMessage(lcss1).tag === HC.HC_LAST_CROSS_SIGNED_STATE_TAG)
-    assert(Codecs.decodeHostedMessage(Codecs.toUnknownHostedMessage(lcss1)).require === lcss1)
+    assert(Codecs.toUnknownHostedMessage(last_cross_signed_state_1).tag === HC.HC_LAST_CROSS_SIGNED_STATE_TAG)
+    assert(Codecs.decodeHostedMessage(Codecs.toUnknownHostedMessage(last_cross_signed_state_1)).require === last_cross_signed_state_1)
   }
 
   test("Encode and decode routing messages") {
@@ -152,5 +158,17 @@ class HostedWireSpec extends AnyFunSuite {
     assert(Codecs.decodeHasChanIdMessage(Codecs.toUnknownHasChanIdMessage(update_fail_htlc)).require === update_fail_htlc)
     assert(Codecs.decodeHasChanIdMessage(Codecs.toUnknownHasChanIdMessage(update_add_htlc)).require === update_add_htlc)
     assert(Codecs.decodeHostedMessage(Codecs.toUnknownHostedMessage(announcement_signature)).require === announcement_signature)
+  }
+
+  test("Test vectors") {
+    val invoke_hosted_channel_raw = Codecs.invokeHostedChannelCodec.encode(invoke_hosted_channel).require.toHex
+    assert(invoke_hosted_channel_raw == s"6fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000002000000000000000000000000000000000000000000000000000000000000000000020" +
+      s"0000000000000000000000000000000000000000000000000000000000000000")
+
+    val init_hosted_channel_raw = Codecs.initHostedChannelCodec.encode(init_hosted_channel).require.toHex
+    assert(init_hosted_channel_raw == s"0000000000000006000000000000000a0014000000001dcd6500138800000000000f424000000000000f424000000003")
+
+    val state_update_raw = Codecs.stateUpdateCodec.encode(state_update).require.toHex
+    assert(state_update_raw == s"00004e34000004b20000000a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")
   }
 }
