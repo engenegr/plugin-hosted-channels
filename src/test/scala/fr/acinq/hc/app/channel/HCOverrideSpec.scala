@@ -7,8 +7,7 @@ import fr.acinq.eclair.channel._
 import fr.acinq.eclair.io.PeerDisconnected
 import fr.acinq.eclair.transactions.DirectedHtlc
 import fr.acinq.eclair.wire.{ChannelUpdate, UpdateFailHtlc, UpdateFulfillHtlc}
-import fr.acinq.hc.app.channel.{HC_CMD_OVERRIDE_ACCEPT, HC_CMD_OVERRIDE_PROPOSE, HC_DATA_ESTABLISHED}
-import fr.acinq.hc.app.{wire => _, _}
+import fr.acinq.hc.app.{StateOverride, HCTestUtils, StateUpdate, Worker, InvokeHostedChannel, LastCrossSignedState}
 import org.scalatest.Outcome
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 import scodec.bits.ByteVector
