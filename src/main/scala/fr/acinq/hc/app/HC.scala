@@ -67,7 +67,8 @@ class HC extends Plugin {
   var channelsDb: HostedChannelsDb = _
 
   override def onSetup(setup: Setup): Unit = {
-    Blocking.createTablesIfNotExist(Config.db)
+    // TODO: remove this once slick handles existing indexes correctly
+    if (Config.attemptCreateTables) Blocking.createTablesIfNotExist(Config.db)
     channelsDb = new HostedChannelsDb(Config.db)
   }
 
