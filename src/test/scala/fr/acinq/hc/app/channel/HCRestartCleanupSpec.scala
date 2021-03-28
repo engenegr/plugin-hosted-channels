@@ -21,7 +21,7 @@ class HCRestartCleanupSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike 
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
     val bobHC: HC = new HC {
-      override val channelsDb: HostedChannelsDb = new HostedChannelsDb(bobDB)
+      channelsDb = new HostedChannelsDb(bobDB)
     }
 
     val (preimage1, alice2bobUpdateAdd1) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
@@ -62,7 +62,7 @@ class HCRestartCleanupSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike 
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
     val aliceHC: HC = new HC {
-      override val channelsDb: HostedChannelsDb = new HostedChannelsDb(aliceDB)
+      channelsDb = new HostedChannelsDb(aliceDB)
     }
 
     val (preimage1, alice2bobUpdateAdd1) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)

@@ -64,9 +64,12 @@ object HC {
 
 class HC extends Plugin {
 
-  val channelsDb: HostedChannelsDb = new HostedChannelsDb(Config.db)
+  var channelsDb: HostedChannelsDb = _
 
-  override def onSetup(setup: Setup): Unit = Blocking.createTablesIfNotExist(Config.db)
+  override def onSetup(setup: Setup): Unit = {
+    Blocking.createTablesIfNotExist(Config.db)
+    channelsDb = new HostedChannelsDb(Config.db)
+  }
 
   override def onKit(kit: Kit): Unit = {
     val syncRef = kit.system actorOf Props(classOf[HostedSync], kit, new HostedUpdatesDb(Config.db), Config.vals.phcConfig)
