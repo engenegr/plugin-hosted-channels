@@ -29,10 +29,6 @@ mainClass in assembly := Some("fr.acinq.hc.app.HC")
 
 test in assembly := {}
 
-val workaround: Unit = {
-  sys.props += "packaging.type" -> "jar"
-}
-
 assemblyMergeStrategy in assembly := {
   case n if n.startsWith("META-INF") => MergeStrategy.discard
   case _ => MergeStrategy.first
