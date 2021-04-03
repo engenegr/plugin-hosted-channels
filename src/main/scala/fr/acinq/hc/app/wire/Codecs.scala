@@ -38,7 +38,7 @@ object Codecs {
   val lastCrossSignedStateCodec: Codec[LastCrossSignedState] = {
     (bool8 withContext "isHost") ::
       (varsizebinarydata withContext "refundScriptPubKey") ::
-      (initHostedChannelCodec withContext "initHostedChannel") ::
+      (lengthDelimited(initHostedChannelCodec) withContext "initHostedChannel") ::
       (uint32 withContext "blockDay") ::
       (millisatoshi withContext "localBalanceMsat") ::
       (millisatoshi withContext "remoteBalanceMsat") ::
