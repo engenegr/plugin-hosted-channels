@@ -4,7 +4,7 @@ import fr.acinq.hc.app.wire.Codecs._
 import fr.acinq.eclair.wire.ChannelCodecs._
 import fr.acinq.eclair.wire.LightningMessageCodecs.{channelUpdateCodec, channelAnnouncementCodec, errorCodec}
 import fr.acinq.hc.app.channel.{ErrorExt, HC_DATA_ESTABLISHED, HostedCommitments, HostedState}
-import scodec.codecs.{bool, listOfN, optional, uint16, uint8, utf8, variableSizeBytes}
+import scodec.codecs.{listOfN, optional, uint16, uint8, utf8, variableSizeBytes}
 import fr.acinq.eclair.wire.CommonCodecs.{bytes32, publicKey}
 import scodec.Codec
 
@@ -19,7 +19,7 @@ object HostedChannelCodecs {
       (lastCrossSignedStateCodec withContext "lastCrossSignedState") ::
       (listOfN(uint8, updateMessageWithHasChannelIdCodec) withContext "nextLocalUpdates") ::
       (listOfN(uint8, updateMessageWithHasChannelIdCodec) withContext "nextRemoteUpdates") ::
-      (bool withContext "announceChannel")
+      (bool8 withContext "announceChannel")
   }.as[HostedCommitments]
 
   val errorExtCodec: Codec[ErrorExt] = {

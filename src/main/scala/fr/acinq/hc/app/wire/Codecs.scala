@@ -4,9 +4,10 @@ import fr.acinq.hc.app._
 import fr.acinq.hc.app.HC._
 import fr.acinq.eclair.wire._
 import fr.acinq.eclair.wire.CommonCodecs._
+import fr.acinq.eclair.wire.ChannelCodecs._
 import fr.acinq.eclair.wire.LightningMessageCodecs._
 import fr.acinq.eclair.wire.ChannelCodecs.channelVersionCodec
-import scodec.codecs.{bool, listOfN, uint16, uint32, variableSizeBytes, utf8}
+import scodec.codecs.{listOfN, uint16, uint32, variableSizeBytes, utf8}
 import scodec.{Attempt, Codec, Err}
 
 
@@ -35,7 +36,7 @@ object Codecs {
   }.as[HostedChannelBranding]
 
   val lastCrossSignedStateCodec: Codec[LastCrossSignedState] = {
-    (bool withContext "isHost") ::
+    (bool8 withContext "isHost") ::
       (varsizebinarydata withContext "refundScriptPubKey") ::
       (initHostedChannelCodec withContext "initHostedChannel") ::
       (uint32 withContext "blockDay") ::
@@ -69,7 +70,7 @@ object Codecs {
 
   val announcementSignatureCodec: Codec[AnnouncementSignature] = {
     (bytes64 withContext "nodeSignature") ::
-      (bool withContext "wantsReply")
+      (bool8 withContext "wantsReply")
   }.as[AnnouncementSignature]
 
   val resizeChannelCodec: Codec[ResizeChannel] = {
