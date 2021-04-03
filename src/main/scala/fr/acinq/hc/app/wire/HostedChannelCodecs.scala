@@ -16,7 +16,7 @@ object HostedChannelCodecs {
       (bytes32 withContext "channelId") ::
       (commitmentSpecCodec withContext "localSpec") ::
       (originsMapCodec withContext "originChannels") ::
-      (lastCrossSignedStateCodec withContext "lastCrossSignedState") ::
+      (lengthDelimited(lastCrossSignedStateCodec) withContext "lastCrossSignedState") ::
       (listOfN(uint8, updateMessageWithHasChannelIdCodec) withContext "nextLocalUpdates") ::
       (listOfN(uint8, updateMessageWithHasChannelIdCodec) withContext "nextRemoteUpdates") ::
       (bool8 withContext "announceChannel")
