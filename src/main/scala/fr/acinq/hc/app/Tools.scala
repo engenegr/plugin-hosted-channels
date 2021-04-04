@@ -3,12 +3,10 @@ package fr.acinq.hc.app
 import fr.acinq.eclair._
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
-import scala.collection.parallel.CollectionConverters._
 import fr.acinq.eclair.wire.{AnnouncementMessage, ChannelAnnouncement, ChannelUpdate, Color, HasChannelId, UnknownMessage}
-import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, LexicographicalOrdering, Protocol, Satoshi, SatoshiLong}
+import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol, Satoshi, SatoshiLong}
 import fr.acinq.hc.app.channel.{HostedChannelVersion, HostedCommitments}
 import com.typesafe.config.{ConfigFactory, Config => TypesafeConfig}
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
 import java.io.{ByteArrayInputStream, File}
 import java.nio.file.{Files, Paths}
 
@@ -16,6 +14,7 @@ import fr.acinq.eclair.channel.Channel.OutgoingMessage
 import fr.acinq.eclair.channel.ChannelVersion
 import net.ceedubs.ficus.readers.ValueReader
 import fr.acinq.eclair.router.Announcements
+import fr.acinq.bitcoin.Crypto.PublicKey
 import org.postgresql.util.PSQLException
 import fr.acinq.eclair.io.PeerConnected
 import fr.acinq.hc.app.wire.Codecs
@@ -65,23 +64,6 @@ object Tools {
     val id = List.fill(8)(getChunk).foldLeft(Long.MaxValue)(_ % _)
     ShortChannelId(id)
   }
-
-  // HC alarm utils
-
-  def bitDistance(v1: IndexedSeq[Boolean], v2: PublicKey): Int =
-    v1.zip(v2.value.toBitVector.toIndexedSeq).map {
-      case (false, true) => 1
-      case (true, false) => 1
-      case _ => 0
-    }.sum
-
-  def closestNodes(point: IndexedSeq[Boolean], nodeIds: Set[PublicKey] = Set.empty): List[PublicKey] = {
-    val distances = for (nodeId <- nodeIds.par) yield (bitDistance(point, nodeId), nodeId)
-    distances.toList.sortBy(_._1).take(nodeIds.size / 20 max 21).map(_._2)
-  }
-
-  def alarmSignature(nodeKey: PrivateKey, blockHash: ByteVector32, preimage: ByteVector32): ByteVector64 =
-    Crypto.sign(Crypto.sha256(blockHash ++ preimage), nodeKey)
 }
 
 trait PeerConnectedWrap {
