@@ -41,7 +41,7 @@ class HostedChannelsDb(db: PostgresProfile.backend.Database) {
 
   def getChannelBySecret(secret: ByteVector): Option[HC_DATA_ESTABLISHED] = Blocking.txRead(Channels.findBySecretCompiled(secret.toArray).result.headOption, db).map(decode)
 
-  def hideHostedChannelFromDb(remoteNodeId: PublicKey): Int = Blocking.txWrite(Channels.findIsVisibleUpdatableByRemoteNodeIdCompiled(remoteNodeId.value.toArray).update(false), db)
+  def hideHostedChannel(remoteNodeId: PublicKey): Int = Blocking.txWrite(Channels.findIsVisibleUpdatableByRemoteNodeIdCompiled(remoteNodeId.value.toArray).update(false), db)
 
   def listHotChannels: Seq[HC_DATA_ESTABLISHED] = Blocking.txRead(Channels.listHotChannelsCompiled.result, db).map(decode)
 

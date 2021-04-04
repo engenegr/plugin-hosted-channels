@@ -127,11 +127,14 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       }
 
     case Event(clientSU: StateUpdate, data: HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE) =>
-      val dh = new DuplicateHandler[HC_DATA_ESTABLISHED] { def insert(data: HC_DATA_ESTABLISHED): Boolean = channelsDb addNewChannel data }
-
       val fullySignedLCSS = LastCrossSignedState(isHost = true, data.invoke.refundScriptPubKey, initHostedChannel = chanParams.initMsg, clientSU.blockDay,
         localBalanceMsat = chanParams.initMsg.channelCapacityMsat, remoteBalanceMsat = MilliSatoshi(0L), localUpdates = 0L, remoteUpdates = 0L, incomingHtlcs = Nil,
         outgoingHtlcs = Nil, remoteSigOfLocal = clientSU.localSigOfRemoteLCSS, localSigOfRemote = ByteVector64.Zeroes).withLocalSigOfRemote(kit.nodeParams.privateKey)
+
+      val dh = new DuplicateHandler[HC_DATA_ESTABLISHED] {
+        def insert(data: HC_DATA_ESTABLISHED): Boolean =
+          channelsDb addNewChannel data
+      }
 
       val data1 = restoreEmptyData(fullySignedLCSS)
       val isLocalSigOk = fullySignedLCSS.verifyRemoteSig(remoteNodeId)
@@ -457,10 +460,10 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     case Event(cmd: HC_CMD_HIDE, data: HC_DATA_ESTABLISHED) =>
       if (data.pendingHtlcs.nonEmpty) {
-        channelsDb.hideHostedChannelFromDb(remoteNodeId)
+        channelsDb.hideHostedChannel(remoteNodeId)
         stop(FSM.Normal) replying CMDResSuccess(cmd)
       } else {
-        // Only cold channel can be dropped, otherwise we'd have dangling HTLCs
+        // Only cold channel can be hidden, otherwise we'd have dangling HTLCs
         stay replying CMDResFailure("Hiding declined: in-flight HTLCs are present")
       }
 
