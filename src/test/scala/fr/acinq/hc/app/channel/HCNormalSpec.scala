@@ -23,15 +23,27 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     HCTestUtils.resetEntireDatabase(aliceDB)
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
-    val (preimage, _) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
-    alice ! PreimageBroadcastCatcher.BroadcastedPreimage(Crypto.sha256(preimage), preimage)
+    val (preimage1, _) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
+    val (preimage2, _) = addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight)
+    alice ! PreimageBroadcastCatcher.BroadcastedPreimage(Crypto.sha256(preimage1), preimage1)
     bob ! alice2bob.expectMsgType[wire.Error]
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
     alice2bob.expectNoMessage()
     aliceRelayer.expectNoMessage()
-    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.isEmpty)
+    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.size == 1)
     awaitCond(alice.stateName == CLOSED)
     awaitCond(bob.stateName == CLOSED)
+    // Second identical broadcast has no effect
+    alice ! PreimageBroadcastCatcher.BroadcastedPreimage(Crypto.sha256(preimage1), preimage1)
+    alice2bob.expectNoMessage()
+    aliceRelayer.expectNoMessage()
+    // Second payment gets resolved despite channel being in error state at this point
+    alice ! PreimageBroadcastCatcher.BroadcastedPreimage(Crypto.sha256(preimage2), preimage2)
+    alice2bob.expectMsgType[wire.Error]
+    aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
+    alice2bob.expectNoMessage()
+    aliceRelayer.expectNoMessage()
+    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.isEmpty)
   }
 
   test("External fulfill while online") { f =>
@@ -55,19 +67,31 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     HCTestUtils.resetEntireDatabase(aliceDB)
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
-    val (preimage, _) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
+    val (preimage1, _) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
+    val (preimage2, _) = addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight)
     alice ! PeerDisconnected(null, null)
     bob ! PeerDisconnected(null, null)
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
-    alice ! PreimageBroadcastCatcher.BroadcastedPreimage(Crypto.sha256(preimage), preimage)
+    alice ! PreimageBroadcastCatcher.BroadcastedPreimage(Crypto.sha256(preimage1), preimage1)
     alice2bob.expectMsgType[wire.Error] // Bob does not get it because OFFLINE
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
     alice2bob.expectNoMessage()
     aliceRelayer.expectNoMessage()
-    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.isEmpty)
+    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.size == 1)
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
+    // Second identical broadcast has no effect
+    alice ! PreimageBroadcastCatcher.BroadcastedPreimage(Crypto.sha256(preimage1), preimage1)
+    alice2bob.expectNoMessage()
+    aliceRelayer.expectNoMessage()
+    // Second payment gets resolved despite channel being in error state at this point
+    alice ! PreimageBroadcastCatcher.BroadcastedPreimage(Crypto.sha256(preimage2), preimage2)
+    alice2bob.expectMsgType[wire.Error]
+    aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
+    alice2bob.expectNoMessage()
+    aliceRelayer.expectNoMessage()
+    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.isEmpty)
   }
 
   test("External fulfill while offline") { f =>
