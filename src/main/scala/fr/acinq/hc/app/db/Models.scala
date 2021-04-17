@@ -28,8 +28,9 @@ object Blocking {
   def txWrite[T](act: DBIOAction[T, NoStream, Effect.Write], db: Database): T = Await.result(db.run(act.transactionally), span)
 
   def createTablesIfNotExist(db: Database): Unit = {
-    val tables = Seq(Channels.model, Updates.model).map(_.schema.createIfNotExists)
-    Await.result(db.run(DBIO.sequence(tables).transactionally), span)
+    val tables = Seq(Channels.model, Updates.model, Preimages.model).map(_.schema.createIfNotExists)
+    val action = db.run(DBIO.sequence(tables).transactionally)
+    Await.result(action, span)
   }
 }
 
@@ -132,4 +133,27 @@ class Updates(tag: Tag) extends Table[Updates.DbType](tag, Updates.tableName) {
   def idx3: Index = index("updates__channel_update_1_opt__channel_update_2_opt__idx", (channelUpdate1, channelUpdate2), unique = false)
 
   def * = (id, shortChannelId, channelAnnounce, channelUpdate1, channelUpdate2, update1Stamp, update2Stamp)
+}
+
+
+object Preimages {
+  final val tableName = "preimages"
+  val model = TableQuery[Preimages]
+
+  type DbType = (Long, ByteArray, ByteArray)
+
+  val insertCompiled = Compiled {
+    for (x <- model) yield (x.hash, x.preimage)
+  }
+
+  val findByHash = Compiled {
+    (hash: RepByteArray) => model.filter(_.hash === hash).map(_.preimage)
+  }
+}
+
+class Preimages(tag: Tag) extends Table[Preimages.DbType](tag, Preimages.tableName) {
+  def id: Rep[Long] = column[Long]("id", O.PrimaryKey, O.AutoInc)
+  def hash: Rep[ByteArray] = column[ByteArray]("hash", O.Unique)
+  def preimage: Rep[ByteArray] = column[ByteArray]("preimage")
+  def * = (id, hash, preimage)
 }

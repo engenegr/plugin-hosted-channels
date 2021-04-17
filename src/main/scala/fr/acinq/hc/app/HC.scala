@@ -110,9 +110,8 @@ class HC extends Plugin {
 
     type PaymentHashAndHtlcId = (ByteVector32, Long)
     type PaymentLocations = Set[PaymentHashAndHtlcId]
-    type OriginMap = Map[Origin, PaymentLocations]
 
-    override def getHtlcsRelayedOut(htlcsIn: Seq[IncomingHtlc], nodeParams: NodeParams, log: LoggingAdapter): OriginMap =
+    override def getHtlcsRelayedOut(htlcsIn: Seq[IncomingHtlc], nodeParams: NodeParams, log: LoggingAdapter): Map[Origin, PaymentLocations] =
       PostRestartHtlcCleaner.groupByOrigin(htlcsOut, htlcsIn)
   }
 }

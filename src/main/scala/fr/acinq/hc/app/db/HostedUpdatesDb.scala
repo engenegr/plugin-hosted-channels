@@ -7,7 +7,6 @@ import fr.acinq.hc.app.network.{PHC, PHCNetwork}
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.ShortChannelId
 import slick.jdbc.PostgresProfile
-import fr.acinq.hc.app.Tools
 import scodec.bits.BitVector
 import slick.sql.SqlAction
 

@@ -2,6 +2,7 @@ package fr.acinq.hc.app
 
 import java.util.UUID
 
+import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto, Satoshi, SatoshiLong}
 import fr.acinq.eclair._
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
@@ -86,6 +87,12 @@ object HostedWireSpec {
 
 class HostedWireSpec extends AnyFunSuite {
   import HostedWireSpec._
+
+  test("hc") {
+    val their = PublicKey.fromBin(ByteVector.fromValidHex("03b9e77cc07ae33660b2ed2f8ae9224c774d8f5876c65b88bf0812fb3a459fba6c"))
+    val our = PublicKey.fromBin(ByteVector.fromValidHex("03144fcc73cea41a002b2865f98190ab90e4ff58a2ce24d3870f5079081e42922d"))
+    println(Tools.hostedChanId(their.value, our.value))
+  }
 
   test("Correctly derive HC id and short id") {
     val pubkey1 = randomKey.publicKey.value
