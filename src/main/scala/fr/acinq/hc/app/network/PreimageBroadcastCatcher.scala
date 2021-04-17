@@ -36,8 +36,8 @@ class PreimageBroadcastCatcher(preimagesDb: PreimagesDb) extends Actor with Logg
 
   def extractPreimages(tx: Transaction): Seq[ByteVector32] =
     tx.txOut.map(transactionOutput => Script parse transactionOutput.publicKeyScript).flatMap {
-      case OP_RETURN :: OP_PUSHDATA(preimage1, 32) +: OP_PUSHDATA(preimage2, 32) +: Nil => List(preimage1, preimage2)
-      case OP_RETURN :: OP_PUSHDATA(preimage1, 32) +: Nil => List(preimage1)
+      case OP_RETURN :: OP_PUSHDATA(preimage1, 32) :: OP_PUSHDATA(preimage2, 32) :: Nil => List(preimage1, preimage2)
+      case OP_RETURN :: OP_PUSHDATA(preimage1, 32) :: Nil => List(preimage1)
       case _ => List.empty[ByteVector]
     }.map(ByteVector32.apply)
 }
