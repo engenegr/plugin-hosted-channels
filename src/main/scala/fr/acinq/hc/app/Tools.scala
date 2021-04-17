@@ -29,8 +29,8 @@ object Tools {
 
   case object DuplicateShortId extends Throwable("Duplicate ShortId is not allowed here")
 
-  abstract class DuplicateHandler[T] { me =>
-    def execute(data: T): Try[Boolean] = Try(me insert data) recover {
+  abstract class DuplicateHandler[T] { self =>
+    def execute(data: T): Try[Boolean] = Try(self insert data) recover {
       case dup: PSQLException if "23505" == dup.getSQLState => throw DuplicateShortId
       case otherError: Throwable => throw otherError
     }

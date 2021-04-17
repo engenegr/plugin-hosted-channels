@@ -84,6 +84,12 @@ object Codecs {
   val replyPublicHostedChannelsEndCodec: Codec[ReplyPublicHostedChannelsEnd] =
     (bytes32 withContext "chainHash").as[ReplyPublicHostedChannelsEnd]
 
+  val queryPreimagesCodec: Codec[QueryPreimages] =
+    (listOfN(uint16, bytes32) withContext "hashes").as[QueryPreimages]
+
+  val replyPreimagesCodec: Codec[ReplyPreimages] =
+    (listOfN(uint16, bytes32) withContext "preimages").as[ReplyPreimages]
+
   val updateMessageWithHasChannelIdCodec: Codec[UpdateMessage with HasChannelId] =
     lightningMessageCodec.narrow(Attempt successful _.asInstanceOf[UpdateMessage with HasChannelId], identity)
 
@@ -104,6 +110,8 @@ object Codecs {
       case HC_HOSTED_CHANNEL_BRANDING_TAG => hostedChannelBrandingCodec.decode(bitVector)
       case HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG => queryPublicHostedChannelsCodec.decode(bitVector)
       case HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG => replyPublicHostedChannelsEndCodec.decode(bitVector)
+      case HC_QUERY_PREIMAGES_TAG => queryPreimagesCodec.decode(bitVector)
+      case HC_REPLY_PREIMAGES_TAG => replyPreimagesCodec.decode(bitVector)
     }
 
     decodeAttempt.map(_.value)
@@ -121,6 +129,8 @@ object Codecs {
     case msg: HostedChannelBranding => UnknownMessage(HC_HOSTED_CHANNEL_BRANDING_TAG, hostedChannelBrandingCodec.encode(msg).require.toByteVector)
     case msg: QueryPublicHostedChannels => UnknownMessage(HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG, queryPublicHostedChannelsCodec.encode(msg).require.toByteVector)
     case msg: ReplyPublicHostedChannelsEnd => UnknownMessage(HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG, replyPublicHostedChannelsEndCodec.encode(msg).require.toByteVector)
+    case msg: QueryPreimages => UnknownMessage(HC_QUERY_PREIMAGES_TAG, queryPreimagesCodec.encode(msg).require.toByteVector)
+    case msg: ReplyPreimages => UnknownMessage(HC_REPLY_PREIMAGES_TAG, replyPreimagesCodec.encode(msg).require.toByteVector)
   }
 
   // Normal channel messages which are also used in HC
