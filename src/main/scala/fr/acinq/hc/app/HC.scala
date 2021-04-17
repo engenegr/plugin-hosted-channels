@@ -4,13 +4,13 @@ import fr.acinq.eclair._
 import fr.acinq.hc.app.HC._
 import scala.concurrent.stm._
 import akka.actor.{ActorSystem, Props}
-import fr.acinq.hc.app.db.{Blocking, HostedChannelsDb, HostedUpdatesDb}
+import fr.acinq.hc.app.network.{HostedSync, PreimageBroadcastCatcher}
+import fr.acinq.hc.app.db.{Blocking, HostedChannelsDb, HostedUpdatesDb, PreimagesDb}
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner.IncomingHtlc
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner
 import fr.acinq.eclair.transactions.DirectedHtlc
 import scala.concurrent.ExecutionContextExecutor
 import fr.acinq.eclair.payment.IncomingPacket
-import fr.acinq.hc.app.network.HostedSync
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.channel.Origin
 import fr.acinq.hc.app.api.HCService
@@ -63,18 +63,20 @@ object HC {
 }
 
 class HC extends Plugin {
-
   var channelsDb: HostedChannelsDb = _
+  var preimagesDb: PreimagesDb = _
 
   override def onSetup(setup: Setup): Unit = {
     // TODO: remove this once slick handles existing indexes correctly
     if (Config.attemptCreateTables) Blocking.createTablesIfNotExist(Config.db)
     channelsDb = new HostedChannelsDb(Config.db)
+    preimagesDb = new PreimagesDb(Config.db)
   }
 
   override def onKit(kit: Kit): Unit = {
     val syncRef = kit.system actorOf Props(classOf[HostedSync], kit, new HostedUpdatesDb(Config.db), Config.vals.phcConfig)
     val workerRef = kit.system actorOf Props(classOf[Worker], kit, syncRef, channelsDb, Config.vals)
+    kit.system actorOf Props(classOf[PreimageBroadcastCatcher], preimagesDb)
 
     implicit val executionContext: ExecutionContextExecutor = kit.system.dispatcher
     implicit val coreActorSystem: ActorSystem = kit.system

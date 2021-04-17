@@ -4,12 +4,15 @@ import fr.acinq.bitcoin.Crypto.PrivateKey
 import fr.acinq.eclair._
 import slick.jdbc.PostgresProfile.api._
 import fr.acinq.eclair.wire.LightningMessageCodecs._
-import fr.acinq.bitcoin.{Block, ByteVector64, Crypto}
+import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto}
 import fr.acinq.eclair.router.Announcements
+import fr.acinq.hc.app.Tools.DuplicateHandler
 import fr.acinq.hc.app.db.{Blocking, HostedUpdatesDb, PreimagesDb, Updates}
 import fr.acinq.hc.app.network.{CollectedGossip, PHC}
 import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits.BitVector
+
+import scala.util.Try
 
 
 class HostedUpdatesDbSpec extends AnyFunSuite {
@@ -132,7 +135,16 @@ class HostedUpdatesDbSpec extends AnyFunSuite {
     val pdb = new PreimagesDb(Config.db)
     val preimage = randomBytes32
 
-    pdb.addPreimage(preimage)
+    val dh = new DuplicateHandler[ByteVector32] {
+      def insert(data: ByteVector32): Boolean = {
+        val hash = Crypto.sha256(preimage)
+        pdb.addPreimage(hash, data)
+      }
+    }
+
+    assert(dh.execute(preimage).isSuccess)
+    assert(dh.execute(preimage).isFailure)
+
     assert(pdb.findByHash(randomBytes32).isEmpty)
     assert(pdb.findByHash(Crypto.sha256(preimage)).contains(preimage))
   }
