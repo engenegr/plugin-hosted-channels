@@ -39,14 +39,13 @@ object HostedSync {
 }
 
 class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) extends FSMDiagnosticActorLogging[HostedSyncState, HostedSyncData] {
-
-  val ipAntiSpam: mutable.Map[Array[Byte], Int] = mutable.Map.empty withDefaultValue 0
-
   context.system.scheduler.scheduleWithFixedDelay(10.minutes, PHC.tickStaggeredBroadcastThreshold, self, TickSendGossip)
+
+  startWith(stateData = WaitForNormalNetworkData(updatesDb.getState), stateName = WAIT_FOR_ROUTER_DATA)
 
   context.system.eventStream.subscribe(channel = classOf[SyncProgress], subscriber = self)
 
-  startWith(stateData = WaitForNormalNetworkData(updatesDb.getState), stateName = WAIT_FOR_ROUTER_DATA)
+  val ipAntiSpam: mutable.Map[Array[Byte], Int] = mutable.Map.empty withDefaultValue 0
 
   private val syncProcessor = new AnnouncementMessageProcessor {
     override val tagsOfInterest: Set[Int] = Set(PHC_ANNOUNCE_SYNC_TAG, PHC_UPDATE_SYNC_TAG)
@@ -126,7 +125,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
   }
 
   whenUnhandled {
-    case Event(TickClearIpAntiSpam, _) =>
+    case Event(HostedSync.TickClearIpAntiSpam, _) =>
       ipAntiSpam.clear
       stay
 
@@ -197,7 +196,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
     case WAIT_FOR_ROUTER_DATA -> WAIT_FOR_PHC_SYNC =>
       context.system.eventStream.unsubscribe(channel = classOf[SyncProgress], subscriber = self)
       // We always ask for full sync on startup, keep asking frequently if no PHC peer is connected yet
-      startTimerWithFixedDelay(TickClearIpAntiSpam.label, TickClearIpAntiSpam, 1.minute)
+      startTimerWithFixedDelay(HostedSync.TickClearIpAntiSpam.label, HostedSync.TickClearIpAntiSpam, 1.minute)
       startTimerWithFixedDelay(RefreshRouterData.label, RefreshRouterData, 10.minutes)
       self ! SyncFromPHCPeers
 

@@ -1,11 +1,13 @@
 package fr.acinq.hc.app.channel
 
+import fr.acinq.bitcoin.Crypto
 import fr.acinq.eclair._
 import fr.acinq.eclair.blockchain.CurrentBlockCount
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.io.PeerDisconnected
 import fr.acinq.eclair.payment.relay.Relayer
 import fr.acinq.eclair.wire.{TemporaryNodeFailure, UpdateAddHtlc, UpdateFailHtlc, UpdateFulfillHtlc}
+import fr.acinq.hc.app.network.PreimageBroadcastCatcher
 import fr.acinq.hc.app.{HCTestUtils, StateUpdate, Worker}
 import org.scalatest.Outcome
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
@@ -15,6 +17,34 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
   protected type FixtureParam = SetupFixture
 
   override def withFixture(test: OneArgTest): Outcome = withFixture(test.toNoArgTest(init()))
+
+  test("Preimage broadcast fulfills an HTLC while online") { f =>
+    import f._
+    HCTestUtils.resetEntireDatabase(aliceDB)
+    HCTestUtils.resetEntireDatabase(bobDB)
+    reachNormal(f)
+    val (preimage1, _) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
+    val (preimage2, _) = addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight)
+    alice ! PreimageBroadcastCatcher.BroadcastedPreimage(Crypto.sha256(preimage1), preimage1)
+    bob ! alice2bob.expectMsgType[wire.Error]
+    aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
+    alice2bob.expectNoMessage()
+    aliceRelayer.expectNoMessage()
+    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.size == 1)
+    awaitCond(alice.stateName == CLOSED)
+    awaitCond(bob.stateName == CLOSED)
+    // Second identical broadcast has no effect
+    alice ! PreimageBroadcastCatcher.BroadcastedPreimage(Crypto.sha256(preimage1), preimage1)
+    alice2bob.expectNoMessage()
+    aliceRelayer.expectNoMessage()
+    // Second payment gets resolved despite channel being in error state at this point
+    alice ! PreimageBroadcastCatcher.BroadcastedPreimage(Crypto.sha256(preimage2), preimage2)
+    alice2bob.expectMsgType[wire.Error]
+    aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
+    alice2bob.expectNoMessage()
+    aliceRelayer.expectNoMessage()
+    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.isEmpty)
+  }
 
   test("External fulfill while online") { f =>
     import f._
@@ -30,6 +60,38 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.isEmpty)
     awaitCond(alice.stateName == CLOSED)
     awaitCond(bob.stateName == CLOSED)
+  }
+
+  test("Preimage broadcast fulfills an HTLC while offline") { f =>
+    import f._
+    HCTestUtils.resetEntireDatabase(aliceDB)
+    HCTestUtils.resetEntireDatabase(bobDB)
+    reachNormal(f)
+    val (preimage1, _) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
+    val (preimage2, _) = addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight)
+    alice ! PeerDisconnected(null, null)
+    bob ! PeerDisconnected(null, null)
+    awaitCond(alice.stateName == OFFLINE)
+    awaitCond(bob.stateName == OFFLINE)
+    alice ! PreimageBroadcastCatcher.BroadcastedPreimage(Crypto.sha256(preimage1), preimage1)
+    alice2bob.expectMsgType[wire.Error] // Bob does not get it because OFFLINE
+    aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
+    alice2bob.expectNoMessage()
+    aliceRelayer.expectNoMessage()
+    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.size == 1)
+    awaitCond(alice.stateName == OFFLINE)
+    awaitCond(bob.stateName == OFFLINE)
+    // Second identical broadcast has no effect
+    alice ! PreimageBroadcastCatcher.BroadcastedPreimage(Crypto.sha256(preimage1), preimage1)
+    alice2bob.expectNoMessage()
+    aliceRelayer.expectNoMessage()
+    // Second payment gets resolved despite channel being in error state at this point
+    alice ! PreimageBroadcastCatcher.BroadcastedPreimage(Crypto.sha256(preimage2), preimage2)
+    alice2bob.expectMsgType[wire.Error]
+    aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
+    alice2bob.expectNoMessage()
+    aliceRelayer.expectNoMessage()
+    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.isEmpty)
   }
 
   test("External fulfill while offline") { f =>

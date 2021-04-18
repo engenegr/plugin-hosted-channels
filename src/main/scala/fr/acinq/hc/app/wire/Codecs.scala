@@ -84,6 +84,14 @@ object Codecs {
   val replyPublicHostedChannelsEndCodec: Codec[ReplyPublicHostedChannelsEnd] =
     (bytes32 withContext "chainHash").as[ReplyPublicHostedChannelsEnd]
 
+  val queryPreimagesCodec: Codec[QueryPreimages] =
+    (listOfN(uint16, bytes32) withContext "hashes").as[QueryPreimages]
+
+  val replyPreimagesCodec: Codec[ReplyPreimages] = {
+    (listOfN(uint16, bytes32) withContext "preimages") ::
+      (bool8 withContext "searchDenied")
+  }.as[ReplyPreimages]
+
   val updateMessageWithHasChannelIdCodec: Codec[UpdateMessage with HasChannelId] =
     lightningMessageCodec.narrow(Attempt successful _.asInstanceOf[UpdateMessage with HasChannelId], identity)
 
@@ -104,6 +112,8 @@ object Codecs {
       case HC_HOSTED_CHANNEL_BRANDING_TAG => hostedChannelBrandingCodec.decode(bitVector)
       case HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG => queryPublicHostedChannelsCodec.decode(bitVector)
       case HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG => replyPublicHostedChannelsEndCodec.decode(bitVector)
+      case HC_QUERY_PREIMAGES_TAG => queryPreimagesCodec.decode(bitVector)
+      case HC_REPLY_PREIMAGES_TAG => replyPreimagesCodec.decode(bitVector)
     }
 
     decodeAttempt.map(_.value)
@@ -121,6 +131,8 @@ object Codecs {
     case msg: HostedChannelBranding => UnknownMessage(HC_HOSTED_CHANNEL_BRANDING_TAG, hostedChannelBrandingCodec.encode(msg).require.toByteVector)
     case msg: QueryPublicHostedChannels => UnknownMessage(HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG, queryPublicHostedChannelsCodec.encode(msg).require.toByteVector)
     case msg: ReplyPublicHostedChannelsEnd => UnknownMessage(HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG, replyPublicHostedChannelsEndCodec.encode(msg).require.toByteVector)
+    case msg: QueryPreimages => UnknownMessage(HC_QUERY_PREIMAGES_TAG, queryPreimagesCodec.encode(msg).require.toByteVector)
+    case msg: ReplyPreimages => UnknownMessage(HC_REPLY_PREIMAGES_TAG, replyPreimagesCodec.encode(msg).require.toByteVector)
   }
 
   // Normal channel messages which are also used in HC
@@ -146,7 +158,7 @@ object Codecs {
     case msg: UpdateFailHtlc => UnknownMessage(HC_UPDATE_FAIL_HTLC_TAG, LightningMessageCodecs.updateFailHtlcCodec.encode(msg).require.toByteVector)
     case msg: UpdateFulfillHtlc => UnknownMessage(HC_UPDATE_FULFILL_HTLC_TAG, LightningMessageCodecs.updateFulfillHtlcCodec.encode(msg).require.toByteVector)
     case msg: UpdateFailMalformedHtlc => UnknownMessage(HC_UPDATE_FAIL_MALFORMED_HTLC_TAG, LightningMessageCodecs.updateFailMalformedHtlcCodec.encode(msg).require.toByteVector)
-    case msg => throw new RuntimeException(s"PLGN PHC, unacceptable HasChannelId message=${msg.getClass.toString}")
+    case msg => throw new RuntimeException(s"PLGN PHC, unacceptable HasChannelId message=${msg.getClass.getName}")
   }
 
   // Normal gossip messages which are also used in PHC gossip
@@ -170,6 +182,6 @@ object Codecs {
     case msg: ChannelAnnouncement => UnknownMessage(PHC_ANNOUNCE_SYNC_TAG, LightningMessageCodecs.channelAnnouncementCodec.encode(msg).require.toByteVector)
     case msg: ChannelUpdate if isGossip => UnknownMessage(PHC_UPDATE_GOSSIP_TAG, LightningMessageCodecs.channelUpdateCodec.encode(msg).require.toByteVector)
     case msg: ChannelUpdate => UnknownMessage(PHC_UPDATE_SYNC_TAG, LightningMessageCodecs.channelUpdateCodec.encode(msg).require.toByteVector)
-    case msg => throw new RuntimeException(s"PLGN PHC, unacceptable Announcement message=${msg.getClass.toString}")
+    case msg => throw new RuntimeException(s"PLGN PHC, unacceptable Announcement message=${msg.getClass.getName}")
   }
 }

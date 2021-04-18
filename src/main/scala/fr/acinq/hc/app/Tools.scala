@@ -29,8 +29,8 @@ object Tools {
 
   case object DuplicateShortId extends Throwable("Duplicate ShortId is not allowed here")
 
-  abstract class DuplicateHandler[T] { me =>
-    def execute(data: T): Try[Boolean] = Try(me insert data) recover {
+  abstract class DuplicateHandler[T] { self =>
+    def execute(data: T): Try[Boolean] = Try(self insert data) recover {
       case dup: PSQLException if "23505" == dup.getSQLState => throw DuplicateShortId
       case otherError: Throwable => throw otherError
     }
@@ -143,6 +143,12 @@ case class PHCConfig(maxPerNode: Long, minNormalChans: Long, maxSyncSendsPerIpPe
 
 case class ApiParams(password: String, bindingIp: String, port: Int)
 
-case class Vals(hcDefaultParams: HCParams, hcOverrideParams: List[HCOverrideParams], maxNewChansPerIpPerHour: Int, branding: Branding, phcConfig: PHCConfig, apiParams: ApiParams) {
-  val hcOverrideMap: Map[PublicKey, HCOverrideParams] = hcOverrideParams.map(hcParams => PublicKey(ByteVector fromValidHex hcParams.nodeId) -> hcParams).toMap
+case class Vals(hcDefaultParams: HCParams, hcOverrideParams: List[HCOverrideParams],
+                maxNewChansPerIpPerHour: Int, maxPreimageRequestsPerIpPerMinute: Int,
+                branding: Branding, phcConfig: PHCConfig, apiParams: ApiParams) {
+
+  val hcOverrideMap: Map[PublicKey, HCOverrideParams] = hcOverrideParams.map { hcParams =>
+    val nodeKey = ByteVector.fromValidHex(hcParams.nodeId)
+    (PublicKey(nodeKey), hcParams)
+  }.toMap
 }
