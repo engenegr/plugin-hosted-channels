@@ -51,13 +51,14 @@ class PreimageBroadcastCatcher(preimagesDb: PreimagesDb, vals: Vals) extends Act
     case msg: UnknownMessageReceived =>
       Tuple3(Codecs decodeHostedMessage msg.message, HC.remoteNode2Connection get msg.nodeId, preimagesDb) match {
         case (Attempt.Successful(query: QueryPreimages), Some(wrap), db) if ipAntiSpam(wrap.remoteIp) < vals.maxPreimageRequestsPerIpPerMinute =>
-          wrap sendHostedChannelMsg ReplyPreimages(query.hashes.take(10).flatMap(db.findByHash), searchDenied = false)
+          val foundPreimages = query.hashes.take(10).flatMap(db.findByHash)
+          wrap sendHostedChannelMsg ReplyPreimages(foundPreimages)
           // Record this request for anti-spam
           ipAntiSpam(wrap.remoteIp) += 1
 
         case (Attempt.Successful(_: QueryPreimages), Some(wrap), _) =>
           logger.info(s"PLGN PHC, PreimageBroadcastCatcher, too many preimage requests, peer=${msg.nodeId}")
-          wrap sendHostedChannelMsg ReplyPreimages(Nil, searchDenied = true)
+          wrap sendHostedChannelMsg ReplyPreimages(Nil)
 
         case (Attempt.Successful(some), _, _) =>
           logger.info(s"PLGN PHC, PreimageBroadcastCatcher, got unrelated message=${some.getClass.getName}, peer=${msg.nodeId}")

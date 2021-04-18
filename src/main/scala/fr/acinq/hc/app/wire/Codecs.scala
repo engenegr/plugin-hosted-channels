@@ -87,10 +87,8 @@ object Codecs {
   val queryPreimagesCodec: Codec[QueryPreimages] =
     (listOfN(uint16, bytes32) withContext "hashes").as[QueryPreimages]
 
-  val replyPreimagesCodec: Codec[ReplyPreimages] = {
-    (listOfN(uint16, bytes32) withContext "preimages") ::
-      (bool8 withContext "searchDenied")
-  }.as[ReplyPreimages]
+  val replyPreimagesCodec: Codec[ReplyPreimages] =
+    (listOfN(uint16, bytes32) withContext "preimages").as[ReplyPreimages]
 
   val updateMessageWithHasChannelIdCodec: Codec[UpdateMessage with HasChannelId] =
     lightningMessageCodec.narrow(Attempt successful _.asInstanceOf[UpdateMessage with HasChannelId], identity)
