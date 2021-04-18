@@ -46,20 +46,16 @@ object HC {
   final val HC_UPDATE_FAIL_MALFORMED_HTLC_TAG = 63499
   final val HC_ERROR_TAG = 63497
 
-  val announceTags: Set[Int] =
-    Set(PHC_ANNOUNCE_GOSSIP_TAG, PHC_ANNOUNCE_SYNC_TAG,
-      PHC_UPDATE_GOSSIP_TAG, PHC_UPDATE_SYNC_TAG)
-
-  val chanIdMessageTags: Set[Int] =
-    Set(HC_UPDATE_ADD_HTLC_TAG, HC_UPDATE_FULFILL_HTLC_TAG,
-      HC_UPDATE_FAIL_HTLC_TAG, HC_UPDATE_FAIL_MALFORMED_HTLC_TAG,
-      HC_ERROR_TAG)
-
   val hostedMessageTags: Set[Int] =
     Set(HC_INVOKE_HOSTED_CHANNEL_TAG, HC_INIT_HOSTED_CHANNEL_TAG, HC_LAST_CROSS_SIGNED_STATE_TAG, HC_STATE_UPDATE_TAG,
       HC_STATE_OVERRIDE_TAG, HC_HOSTED_CHANNEL_BRANDING_TAG, HC_REFUND_PENDING_TAG, HC_ANNOUNCEMENT_SIGNATURE_TAG,
-      HC_RESIZE_CHANNEL_TAG, HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG, HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG,
-      HC_QUERY_PREIMAGES_TAG, HC_REPLY_PREIMAGES_TAG)
+      HC_RESIZE_CHANNEL_TAG, HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG, HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG)
+
+  val preimageQueryTags: Set[Int] = Set(HC_QUERY_PREIMAGES_TAG, HC_REPLY_PREIMAGES_TAG)
+
+  val announceTags: Set[Int] = Set(PHC_ANNOUNCE_GOSSIP_TAG, PHC_ANNOUNCE_SYNC_TAG, PHC_UPDATE_GOSSIP_TAG, PHC_UPDATE_SYNC_TAG)
+
+  val chanIdMessageTags: Set[Int] = Set(HC_UPDATE_ADD_HTLC_TAG, HC_UPDATE_FULFILL_HTLC_TAG, HC_UPDATE_FAIL_HTLC_TAG, HC_UPDATE_FAIL_MALFORMED_HTLC_TAG, HC_ERROR_TAG)
 
   val remoteNode2Connection: mutable.Map[PublicKey, PeerConnectedWrap] = TMap.empty[PublicKey, PeerConnectedWrap].single
 
@@ -68,22 +64,18 @@ object HC {
 
 class HC extends Plugin {
   var channelsDb: HostedChannelsDb = _
-  var preimagesDb: PreimagesDb = _
 
   override def onSetup(setup: Setup): Unit = {
     // TODO: remove this once slick handles existing indexes correctly
     if (Config.attemptCreateTables) Blocking.createTablesIfNotExist(Config.db)
     channelsDb = new HostedChannelsDb(Config.db)
-    preimagesDb = new PreimagesDb(Config.db)
   }
 
   override def onKit(kit: Kit): Unit = {
-    val syncRef = kit.system actorOf Props(classOf[HostedSync], kit, new HostedUpdatesDb(Config.db), Config.vals.phcConfig)
-    val workerRef = kit.system actorOf Props(classOf[Worker], kit, syncRef, channelsDb, Config.vals)
-    kit.system actorOf Props(classOf[PreimageBroadcastCatcher], preimagesDb)
-
-    implicit val executionContext: ExecutionContextExecutor = kit.system.dispatcher
     implicit val coreActorSystem: ActorSystem = kit.system
+    val preimageRef = kit.system actorOf Props(classOf[PreimageBroadcastCatcher], new PreimagesDb(Config.db), Config.vals)
+    val syncRef = kit.system actorOf Props(classOf[HostedSync], kit, new HostedUpdatesDb(Config.db), Config.vals.phcConfig)
+    val workerRef = kit.system actorOf Props(classOf[Worker], kit, syncRef, preimageRef, channelsDb, Config.vals)
 
     val clientHCs = channelsDb.listClientChannels
     val hcServiceRoute = new HCService(kit, channelsDb, workerRef, syncRef, Config.vals).finalRoute
@@ -95,9 +87,9 @@ class HC extends Plugin {
 
   override def params: PluginParams = new CustomFeaturePlugin with ConnectionControlPlugin with CustomCommitmentsPlugin {
 
-    override def forceReconnect(nodeId: PublicKey): Boolean = HC.clientChannelRemoteNodeIds.contains(nodeId)
+    override def messageTags: Set[Int] = hostedMessageTags ++ preimageQueryTags ++ announceTags ++ chanIdMessageTags
 
-    override def messageTags: Set[Int] = announceTags ++ chanIdMessageTags ++ hostedMessageTags
+    override def forceReconnect(nodeId: PublicKey): Boolean = HC.clientChannelRemoteNodeIds.contains(nodeId)
 
     override def name: String = "Hosted channels"
 

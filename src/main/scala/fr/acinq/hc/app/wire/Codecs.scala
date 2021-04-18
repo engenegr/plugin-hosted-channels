@@ -87,8 +87,10 @@ object Codecs {
   val queryPreimagesCodec: Codec[QueryPreimages] =
     (listOfN(uint16, bytes32) withContext "hashes").as[QueryPreimages]
 
-  val replyPreimagesCodec: Codec[ReplyPreimages] =
-    (listOfN(uint16, bytes32) withContext "preimages").as[ReplyPreimages]
+  val replyPreimagesCodec: Codec[ReplyPreimages] = {
+    (listOfN(uint16, bytes32) withContext "preimages") ::
+      (bool8 withContext "searchDenied")
+  }.as[ReplyPreimages]
 
   val updateMessageWithHasChannelIdCodec: Codec[UpdateMessage with HasChannelId] =
     lightningMessageCodec.narrow(Attempt successful _.asInstanceOf[UpdateMessage with HasChannelId], identity)
@@ -156,7 +158,7 @@ object Codecs {
     case msg: UpdateFailHtlc => UnknownMessage(HC_UPDATE_FAIL_HTLC_TAG, LightningMessageCodecs.updateFailHtlcCodec.encode(msg).require.toByteVector)
     case msg: UpdateFulfillHtlc => UnknownMessage(HC_UPDATE_FULFILL_HTLC_TAG, LightningMessageCodecs.updateFulfillHtlcCodec.encode(msg).require.toByteVector)
     case msg: UpdateFailMalformedHtlc => UnknownMessage(HC_UPDATE_FAIL_MALFORMED_HTLC_TAG, LightningMessageCodecs.updateFailMalformedHtlcCodec.encode(msg).require.toByteVector)
-    case msg => throw new RuntimeException(s"PLGN PHC, unacceptable HasChannelId message=${msg.getClass.toString}")
+    case msg => throw new RuntimeException(s"PLGN PHC, unacceptable HasChannelId message=${msg.getClass.getName}")
   }
 
   // Normal gossip messages which are also used in PHC gossip
@@ -180,6 +182,6 @@ object Codecs {
     case msg: ChannelAnnouncement => UnknownMessage(PHC_ANNOUNCE_SYNC_TAG, LightningMessageCodecs.channelAnnouncementCodec.encode(msg).require.toByteVector)
     case msg: ChannelUpdate if isGossip => UnknownMessage(PHC_UPDATE_GOSSIP_TAG, LightningMessageCodecs.channelUpdateCodec.encode(msg).require.toByteVector)
     case msg: ChannelUpdate => UnknownMessage(PHC_UPDATE_SYNC_TAG, LightningMessageCodecs.channelUpdateCodec.encode(msg).require.toByteVector)
-    case msg => throw new RuntimeException(s"PLGN PHC, unacceptable Announcement message=${msg.getClass.toString}")
+    case msg => throw new RuntimeException(s"PLGN PHC, unacceptable Announcement message=${msg.getClass.getName}")
   }
 }

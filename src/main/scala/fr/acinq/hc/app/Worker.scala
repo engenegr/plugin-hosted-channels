@@ -32,8 +32,8 @@ object Worker {
   val isHidden: CMDResFailure = CMDResFailure("HC with remote node is hidden")
 }
 
-class Worker(kit: eclair.Kit, hostedSync: ActorRef, channelsDb: HostedChannelsDb, vals: Vals) extends Actor with Logging { me =>
-  context.system.scheduler.scheduleWithFixedDelay(60.minutes, 60.minutes, self, TickClearIpAntiSpam)
+class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, channelsDb: HostedChannelsDb, vals: Vals) extends Actor with Logging { me =>
+  context.system.scheduler.scheduleWithFixedDelay(60.minutes, 60.minutes, self, Worker.TickClearIpAntiSpam)
   context.system.scheduler.scheduleWithFixedDelay(2.days, 2.days, self, TickRemoveIdleChannels)
 
   context.system.eventStream.subscribe(channel = classOf[UnknownMessageReceived], subscriber = self)
@@ -55,30 +55,30 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, channelsDb: HostedChannelsDb
       val refOpt = Option(inMemoryHostedChannels get systemMessage.nodeId)
       refOpt.foreach(_ ! systemMessage)
 
-    case TickClearIpAntiSpam => ipAntiSpam.clear
+    case Worker.TickClearIpAntiSpam => ipAntiSpam.clear
 
-    case peerMessage: UnknownMessageReceived if HC.announceTags.contains(peerMessage.message.tag) => hostedSync ! peerMessage
+    case peerMsg @ UnknownMessageReceived(_, nodeId, message, _) =>
+      if (HC.hostedMessageTags contains message.tag) {
+        Tuple3(Codecs decodeHostedMessage message, HC.remoteNode2Connection get nodeId, inMemoryHostedChannels get nodeId) match {
+          case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, Hosted message decoding fail, messageTag=${message.tag}, peer=$nodeId")
+          case (_, None, _) => logger.info(s"PLGN PHC, no connection found for message=${message.getClass.getSimpleName}, peer=$nodeId")
+          case (Attempt.Successful(_: ReplyPublicHostedChannelsEnd), Some(wrap), _) => hostedSync ! HostedSync.GotAllSyncFrom(wrap)
+          case (Attempt.Successful(_: QueryPublicHostedChannels), Some(wrap), _) => hostedSync ! HostedSync.SendSyncTo(wrap)
 
-    case UnknownMessageReceived(_, nodeId, message, _) if HC.hostedMessageTags.contains(message.tag) =>
-      Tuple3(Codecs decodeHostedMessage message, HC.remoteNode2Connection get nodeId, inMemoryHostedChannels get nodeId) match {
-        case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, Hosted message decoding fail, messageTag=${message.tag}, peer=$nodeId")
-        case (_, None, _) => logger.info(s"PLGN PHC, no connection found for message=${message.getClass.getSimpleName}, peer=$nodeId")
-        case (Attempt.Successful(_: ReplyPublicHostedChannelsEnd), Some(wrap), _) => hostedSync ! HostedSync.GotAllSyncFrom(wrap)
-        case (Attempt.Successful(_: QueryPublicHostedChannels), Some(wrap), _) => hostedSync ! HostedSync.SendSyncTo(wrap)
-
-        // Special handling for InvokeHostedChannel: if chan exists neither in memory nor in db, then this is a new chan request and anti-spam rules apply
-        case (Attempt.Successful(invoke: InvokeHostedChannel), Some(wrap), null) => restore(guardSpawn(nodeId, wrap, invoke), Tools.none, _ !> HCPeerConnected !> invoke)(nodeId)
-        case (Attempt.Successful(_: HostedChannelMessage), _, null) => logger.info(s"PLGN PHC, no target for HostedMessage, messageTag=${message.tag}, peer=$nodeId")
-        case (Attempt.Successful(hosted: HostedChannelMessage), _, channelRef) => channelRef ! hosted
-      }
-
-    case UnknownMessageReceived(_, nodeId, message, _) if HC.chanIdMessageTags.contains(message.tag) =>
-      Tuple3(Codecs decodeHasChanIdMessage message, HC.remoteNode2Connection get nodeId, inMemoryHostedChannels get nodeId) match {
-        case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, HasChannelId message decoding fail, tag=${message.tag}, peer=$nodeId")
-        case (_, None, _) => logger.info(s"PLGN PHC, no connection found for message=${message.getClass.getSimpleName}, peer=$nodeId")
-        case (_, _, null) => logger.info(s"PLGN PHC, no target for HasChannelIdMessage, tag=${message.tag}, peer=$nodeId")
-        case (Attempt.Successful(msg), _, channelRef) => channelRef ! msg
-      }
+          // Special handling for InvokeHostedChannel: if chan exists neither in memory nor in db, then this is a new chan request and anti-spam rules apply
+          case (Attempt.Successful(invoke: InvokeHostedChannel), Some(wrap), null) => restore(guardSpawn(nodeId, wrap, invoke), Tools.none, _ !> HCPeerConnected !> invoke)(nodeId)
+          case (Attempt.Successful(_: HostedChannelMessage), _, null) => logger.info(s"PLGN PHC, no target for HostedMessage, messageTag=${message.tag}, peer=$nodeId")
+          case (Attempt.Successful(hosted: HostedChannelMessage), _, channelRef) => channelRef ! hosted
+        }
+      } else if (HC.chanIdMessageTags contains message.tag) {
+        Tuple3(Codecs decodeHasChanIdMessage message, HC.remoteNode2Connection get nodeId, inMemoryHostedChannels get nodeId) match {
+          case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, HasChannelId message decoding fail, tag=${message.tag}, peer=$nodeId")
+          case (_, None, _) => logger.info(s"PLGN PHC, no connection found for message=${message.getClass.getSimpleName}, peer=$nodeId")
+          case (_, _, null) => logger.info(s"PLGN PHC, no target for HasChannelIdMessage, tag=${message.tag}, peer=$nodeId")
+          case (Attempt.Successful(msg), _, channelRef) => channelRef ! msg
+        }
+      } else if (HC.preimageQueryTags contains message.tag) preimageCatcher ! peerMsg
+      else if (HC.announceTags contains message.tag) hostedSync ! peerMsg
 
     case cmd: HC_CMD_LOCAL_INVOKE =>
       val isConnected = HC.remoteNode2Connection.contains(cmd.remoteNodeId)
