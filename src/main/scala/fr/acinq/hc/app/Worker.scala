@@ -77,8 +77,11 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
           case (_, _, null) => logger.info(s"PLGN PHC, no target for HasChannelIdMessage, tag=${message.tag}, peer=$nodeId")
           case (Attempt.Successful(msg), _, channelRef) => channelRef ! msg
         }
-      } else if (HC.preimageQueryTags contains message.tag) preimageCatcher ! peerMsg
-      else if (HC.announceTags contains message.tag) hostedSync ! peerMsg
+      } else if (HC.preimageQueryTags contains message.tag) {
+        preimageCatcher ! peerMsg
+      } else if (HC.announceTags contains message.tag) {
+        hostedSync ! peerMsg
+      }
 
     case cmd: HC_CMD_LOCAL_INVOKE =>
       val isConnected = HC.remoteNode2Connection.contains(cmd.remoteNodeId)
