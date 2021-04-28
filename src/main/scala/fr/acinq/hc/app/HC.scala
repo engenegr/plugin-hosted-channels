@@ -116,5 +116,5 @@ class HC extends Plugin {
 case object HCFeature extends Feature {
   val plugin: UnknownFeature = UnknownFeature(optional)
   val rfcName = "hosted_channels"
-  val mandatory = 32772
+  lazy val mandatory = 32772
 }

@@ -87,6 +87,10 @@ object HostedWireSpec {
 class HostedWireSpec extends AnyFunSuite {
   import HostedWireSpec._
 
+  test("Correct feature") {
+    assert(HCFeature.plugin.bitIndex == HCFeature.optional)
+  }
+
   test("Correctly derive HC id and short id") {
     val pubkey1 = randomKey.publicKey.value
     val pubkey2 = randomKey.publicKey.value
