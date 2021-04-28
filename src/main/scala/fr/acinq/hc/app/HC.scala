@@ -9,7 +9,6 @@ import fr.acinq.hc.app.db.{Blocking, HostedChannelsDb, HostedUpdatesDb, Preimage
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner.IncomingHtlc
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner
 import fr.acinq.eclair.transactions.DirectedHtlc
-import scala.concurrent.ExecutionContextExecutor
 import fr.acinq.eclair.payment.IncomingPacket
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.channel.Origin
