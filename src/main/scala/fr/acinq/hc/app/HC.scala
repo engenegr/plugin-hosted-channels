@@ -118,3 +118,9 @@ case object HCFeature extends Feature {
   val rfcName = "hosted_channels"
   lazy val mandatory = 32772
 }
+
+// Depends on https://github.com/engenegr/eclair-alarmbot-plugin
+case class AlmostTimedoutIncomingHtlc(theirAdd: wire.UpdateAddHtlc, fulfill: wire.UpdateFulfillHtlc, nodeId: PublicKey, blockCount: Long) extends fr.acinq.alarmbot.CustomAlarmBotMessage {
+  override def message: String = s"AlmostTimedoutIncomingHtlc, htlcId=${theirAdd.id}, hash=${theirAdd.paymentHash}, preimage=${fulfill.paymentPreimage}, peer=$nodeId, expiry=${theirAdd.cltvExpiry}/$blockCount"
+  override def senderEntity: String = "HC"
+}

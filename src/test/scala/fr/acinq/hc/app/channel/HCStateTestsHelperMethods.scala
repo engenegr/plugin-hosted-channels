@@ -62,6 +62,7 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
     val bobSync = TestProbe()
 
     val channelUpdateListener = TestProbe()
+    system.eventStream.subscribe(channelUpdateListener.ref, classOf[AlmostTimedoutIncomingHtlc])
     system.eventStream.subscribe(channelUpdateListener.ref, classOf[LocalChannelUpdate])
     system.eventStream.subscribe(channelUpdateListener.ref, classOf[LocalChannelDown])
 

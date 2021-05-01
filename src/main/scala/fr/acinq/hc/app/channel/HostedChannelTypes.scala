@@ -94,7 +94,9 @@ case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
 
   def timedOutOutgoingHtlcs(blockHeight: Long): Set[wire.UpdateAddHtlc] = pendingHtlcs.collect(DirectedHtlc.outgoing).filter(blockHeight > _.cltvExpiry.toLong)
 
-  def findOutgoingHtlcsByHash(hash: ByteVector32): Set[wire.UpdateAddHtlc] = pendingHtlcs.collect(DirectedHtlc.outgoing).filter(_.paymentHash == hash)
+  def almostTimedOutIncomingHtlcs(blockHeight: Long, fulfillSafety: Long): Set[wire.UpdateAddHtlc] = pendingHtlcs.collect(DirectedHtlc.incoming).filter(blockHeight > _.cltvExpiry.toLong - fulfillSafety)
+
+  def outgoingHtlcsByHash(hash: ByteVector32): Set[wire.UpdateAddHtlc] = pendingHtlcs.collect(DirectedHtlc.outgoing).filter(hash == _.paymentHash)
 
   def withResize(resize: ResizeChannel): HC_DATA_ESTABLISHED =
     me.modify(_.commitments.lastCrossSignedState.initHostedChannel.maxHtlcValueInFlightMsat).setTo(resize.newCapacityMsatU64)
@@ -131,6 +133,8 @@ case class HostedCommitments(localNodeId: PublicKey,
   val availableBalanceForReceive: MilliSatoshi = nextLocalSpec.toRemote
 
   val capacity: Satoshi = lastCrossSignedState.initHostedChannel.channelCapacityMsat.truncateToSatoshi
+
+  def pendingOutgoingFulfills: Seq[wire.UpdateFulfillHtlc] = nextLocalUpdates.collect { case fulfill: wire.UpdateFulfillHtlc => fulfill }
 
   def addLocalProposal(update: wire.UpdateMessage with wire.HasChannelId): HostedCommitments = copy(nextLocalUpdates = nextLocalUpdates :+ update)
 

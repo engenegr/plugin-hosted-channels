@@ -5,12 +5,13 @@ import fr.acinq.hc.app._
 import fr.acinq.eclair.channel._
 import scala.concurrent.duration._
 import com.softwaremill.quicklens._
+
 import fr.acinq.hc.app.network.{HostedSync, OperationalData, PHC, PreimageBroadcastCatcher}
 import fr.acinq.eclair.wire.{ChannelUpdate, UpdateAddHtlc, UpdateFailHtlc, UpdateFulfillHtlc}
 import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc, IncomingHtlc, OutgoingHtlc}
 import fr.acinq.eclair.db.PendingRelayDb.{ackCommand, getPendingFailsAndFulfills}
+import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, SatoshiLong}
 import fr.acinq.hc.app.Tools.{DuplicateHandler, DuplicateShortId}
-import fr.acinq.bitcoin.{ByteVector32, ByteVector64}
 import fr.acinq.hc.app.db.Blocking.{span, timeout}
 import scala.util.{Failure, Success}
 import akka.actor.{ActorRef, FSM}
@@ -24,7 +25,6 @@ import fr.acinq.eclair.router.Announcements
 import fr.acinq.hc.app.db.HostedChannelsDb
 import fr.acinq.eclair.io.PeerDisconnected
 import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.bitcoin.SatoshiLong
 import fr.acinq.hc.app.wire.Codecs
 import scodec.bits.ByteVector
 import scala.concurrent.Await
@@ -87,7 +87,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     case Event(resize: ResizeChannel, data: HC_DATA_ESTABLISHED) if data.commitments.lastCrossSignedState.isHost => processResizeProposal(stay, resize, data)
 
-    case Event(cmd: CurrentBlockCount, data: HC_DATA_ESTABLISHED) => processBlockCount(stay, data.timedOutOutgoingHtlcs(cmd.blockCount), data)
+    case Event(cmd: CurrentBlockCount, data: HC_DATA_ESTABLISHED) => processBlockCount(stay, cmd.blockCount, data)
 
     case Event(fulfill: UpdateFulfillHtlc, data: HC_DATA_ESTABLISHED) => processIncomingFulfill(stay, fulfill, data)
 
@@ -393,7 +393,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
   whenUnhandled {
     case Event(resize: ResizeChannel, data: HC_DATA_ESTABLISHED) if data.commitments.lastCrossSignedState.isHost => processResizeProposal(goto(CLOSED), resize, data)
 
-    case Event(cmd: CurrentBlockCount, data: HC_DATA_ESTABLISHED) => processBlockCount(goto(CLOSED), data.timedOutOutgoingHtlcs(cmd.blockCount), data)
+    case Event(cmd: CurrentBlockCount, data: HC_DATA_ESTABLISHED) => processBlockCount(goto(CLOSED), cmd.blockCount, data)
 
     case Event(fulfill: UpdateFulfillHtlc, data: HC_DATA_ESTABLISHED) => processIncomingFulfill(goto(CLOSED), fulfill, data)
 
@@ -474,8 +474,9 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       goto(CLOSED) StoringAndUsing data1 replying CMDResSuccess(cmd) SendingHasChannelId error
 
     case Event(PreimageBroadcastCatcher.BroadcastedPreimage(hash, preimage), data: HC_DATA_ESTABLISHED) =>
+      // We have a preimage, but we also need a payment id to fulfill it properly, see if we have any pending payments with given hash
       val toFulfillCmd: UpdateAddHtlc => HC_CMD_EXTERNAL_FULFILL = add => HC_CMD_EXTERNAL_FULFILL(remoteNodeId, add.id, preimage)
-      data.findOutgoingHtlcsByHash(hash).map(toFulfillCmd).foreach(externalFulfillCmd => self ! externalFulfillCmd)
+      data.outgoingHtlcsByHash(hash).map(toFulfillCmd).foreach(externalFulfillCmd => self ! externalFulfillCmd)
       stay
 
     case Event(cmd: HC_CMD_EXTERNAL_FULFILL, data: HC_DATA_ESTABLISHED) => processExternalFulfill(goto(CLOSED), cmd, data)
@@ -526,8 +527,8 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
         case (Some(connection), SYNCING, NORMAL | CLOSED, _: HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE, d1: HC_DATA_ESTABLISHED) if d1.commitments.lastCrossSignedState.isHost =>
           vals.branding.brandingMessageOpt.foreach { brandingMessage => connection sendHostedChannelMsg brandingMessage }
         case (Some(connection), OFFLINE | SYNCING, CLOSED, _, d1: HC_DATA_ESTABLISHED) =>
-          // We may get fulfills for peer payments while offline when channel is in error state, resend them on reconnect
-          d1.commitments.nextLocalUpdates.collect { case msg: UpdateFulfillHtlc => connection sendHasChannelIdMsg msg }
+          // We may get fulfills for peer payments while offline when channel is in error state
+          d1.commitments.pendingOutgoingFulfills.foreach(connection.sendHasChannelIdMsg)
         case _ =>
       }
   }
@@ -683,14 +684,25 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     else stay replying CMDResFailure(s"Not enough days passed since=${data.commitments.lastCrossSignedState.blockDay} blockday")
   }
 
-  def processBlockCount(errorState: FsmStateExt, failedAdds: Set[UpdateAddHtlc], data: HC_DATA_ESTABLISHED): HostedFsmState =
-    if (failedAdds.nonEmpty) {
-      failTimedoutOutgoing(localAdds = failedAdds, data) // Catch all outgoing HTLCs, even the ones they have failed but not signed yet
+  def processBlockCount(errorState: FsmStateExt, blockCount: Long, data: HC_DATA_ESTABLISHED): HostedFsmState = {
+    lazy val preimageMap = data.commitments.pendingOutgoingFulfills.map(fulfill => Crypto.sha256(fulfill.paymentPreimage) -> fulfill).toMap
+    val almostTimedOutIncomingHtlcs = data.almostTimedOutIncomingHtlcs(blockCount, fulfillSafety = chanParams.cltvDeltaBlocks / 4 * 3)
+    val timedoutOutgoingAdds = data.timedOutOutgoingHtlcs(blockCount)
+
+    for {
+      theirAdd <- almostTimedOutIncomingHtlcs
+      fulfill <- preimageMap.get(theirAdd.paymentHash)
+      msg = AlmostTimedoutIncomingHtlc(theirAdd, fulfill, remoteNodeId, blockCount)
+    } context.system.eventStream publish msg
+
+    if (timedoutOutgoingAdds.nonEmpty) {
+      failTimedoutOutgoing(localAdds = timedoutOutgoingAdds, data) // Catch all outgoing HTLCs, even the ones they have failed but not signed yet
       val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_TIMED_OUT_OUTGOING_HTLC) // Remove all their updates except fulfills, transition to error state
-      val fakeFailsForOutgoingAdds = for (add <- failedAdds) yield UpdateFailHtlc(channelId, add.id, reason = ByteVector.empty) // Fake-fail timedout outgoing HTLCs
+      val fakeFailsForOutgoingAdds = for (add <- timedoutOutgoingAdds) yield UpdateFailHtlc(channelId, add.id, reason = ByteVector.empty) // Fake-fail timedout outgoing HTLCs
       val commits1 = data1.commitments.copy(nextRemoteUpdates = data1.commitments.nextRemoteUpdates ++ fakeFailsForOutgoingAdds)
       errorState StoringAndUsing data1.copy(commitments = commits1) SendingHasChannelId error
     } else stay
+  }
 
   def processExternalFulfill(errorState: FsmStateExt, cmd: HC_CMD_EXTERNAL_FULFILL, data: HC_DATA_ESTABLISHED): HostedFsmState = {
     val fulfill = UpdateFulfillHtlc(channelId, cmd.htlcId, cmd.paymentPreimage)

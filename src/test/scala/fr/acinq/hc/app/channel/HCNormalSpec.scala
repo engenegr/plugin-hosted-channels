@@ -8,15 +8,35 @@ import fr.acinq.eclair.io.PeerDisconnected
 import fr.acinq.eclair.payment.relay.Relayer
 import fr.acinq.eclair.wire.{TemporaryNodeFailure, UpdateAddHtlc, UpdateFailHtlc, UpdateFulfillHtlc}
 import fr.acinq.hc.app.network.PreimageBroadcastCatcher
-import fr.acinq.hc.app.{HCTestUtils, StateUpdate, Worker}
-import org.scalatest.Outcome
+import fr.acinq.hc.app.{AlmostTimedoutIncomingHtlc, HCTestUtils, StateUpdate, Worker}
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
+import org.scalatest.Outcome
 
 class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCStateTestsHelperMethods {
 
   protected type FixtureParam = SetupFixture
 
   override def withFixture(test: OneArgTest): Outcome = withFixture(test.toNoArgTest(init()))
+
+  test("Warn about pending incoming HTLCs with revealed preimages") { f =>
+    import f._
+    HCTestUtils.resetEntireDatabase(aliceDB)
+    HCTestUtils.resetEntireDatabase(bobDB)
+    reachNormal(f)
+    val (preimage1, add1) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
+
+    alice ! PeerDisconnected(null, null)
+    bob ! CMD_FULFILL_HTLC(add1.id, preimage1)
+    bob ! PeerDisconnected(null, null)
+    channelUpdateListener.expectMsgType[LocalChannelDown]
+    channelUpdateListener.expectMsgType[LocalChannelDown]
+    awaitCond(alice.stateName == OFFLINE)
+    awaitCond(bob.stateName == OFFLINE)
+
+    bob ! CurrentBlockCount(currentBlockHeight + 37)
+    // 144 - 37 blocks left until timely knowledge of preimage is unprovable
+    channelUpdateListener.expectMsgType[AlmostTimedoutIncomingHtlc]
+  }
 
   test("Preimage broadcast fulfills an HTLC while online") { f =>
     import f._
