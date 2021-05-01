@@ -24,6 +24,7 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
     val (preimage1, add1) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
+    addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight)
 
     alice ! PeerDisconnected(null, null)
     bob ! CMD_FULFILL_HTLC(add1.id, preimage1)
@@ -36,6 +37,8 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     bob ! CurrentBlockCount(currentBlockHeight + 37)
     // 144 - (144 - 37) blocks left until timely knowledge of preimage is unprovable
     channelUpdateListener.expectMsgType[AlmostTimedoutIncomingHtlc]
+    // No preimage for a second payment
+    channelUpdateListener.expectNoMessage
   }
 
   test("Preimage broadcast fulfills an HTLC while online") { f =>
