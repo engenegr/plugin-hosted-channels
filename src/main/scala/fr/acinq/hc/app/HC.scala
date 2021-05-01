@@ -7,6 +7,7 @@ import akka.actor.{ActorSystem, Props}
 import fr.acinq.hc.app.network.{HostedSync, PreimageBroadcastCatcher}
 import fr.acinq.hc.app.db.{Blocking, HostedChannelsDb, HostedUpdatesDb, PreimagesDb}
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner.IncomingHtlc
+import fr.acinq.eclair.blockchain.bitcoind.rpc.ExtendedBitcoinClient
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner
 import fr.acinq.eclair.transactions.DirectedHtlc
 import fr.acinq.eclair.payment.IncomingPacket
@@ -21,29 +22,51 @@ import akka.http.scaladsl.Http
 
 object HC {
   final val HC_INVOKE_HOSTED_CHANNEL_TAG = 65535
+
   final val HC_INIT_HOSTED_CHANNEL_TAG = 65533
+
   final val HC_LAST_CROSS_SIGNED_STATE_TAG = 65531
+
   final val HC_STATE_UPDATE_TAG = 65529
+
   final val HC_STATE_OVERRIDE_TAG = 65527
+
   final val HC_HOSTED_CHANNEL_BRANDING_TAG = 65525
+
   final val HC_REFUND_PENDING_TAG = 65523
+
   final val HC_ANNOUNCEMENT_SIGNATURE_TAG = 65521
+
   final val HC_RESIZE_CHANNEL_TAG = 65519
+
   final val HC_QUERY_PUBLIC_HOSTED_CHANNELS_TAG = 65517
+
   final val HC_REPLY_PUBLIC_HOSTED_CHANNELS_END_TAG = 65515
+
   final val HC_QUERY_PREIMAGES_TAG = 65513
+
   final val HC_REPLY_PREIMAGES_TAG = 65511
 
+
   final val PHC_ANNOUNCE_GOSSIP_TAG = 64513
+
   final val PHC_ANNOUNCE_SYNC_TAG = 64511
+
   final val PHC_UPDATE_GOSSIP_TAG = 64509
+
   final val PHC_UPDATE_SYNC_TAG = 64507
 
+
   final val HC_UPDATE_ADD_HTLC_TAG = 63505
+
   final val HC_UPDATE_FULFILL_HTLC_TAG = 63503
+
   final val HC_UPDATE_FAIL_HTLC_TAG = 63501
+
   final val HC_UPDATE_FAIL_MALFORMED_HTLC_TAG = 63499
+
   final val HC_ERROR_TAG = 63497
+
 
   val hostedMessageTags: Set[Int] =
     Set(HC_INVOKE_HOSTED_CHANNEL_TAG, HC_INIT_HOSTED_CHANNEL_TAG, HC_LAST_CROSS_SIGNED_STATE_TAG, HC_STATE_UPDATE_TAG,
@@ -63,10 +86,11 @@ object HC {
 
 class HC extends Plugin {
   var channelsDb: HostedChannelsDb = _
+  var bitcoinClient: ExtendedBitcoinClient = _
 
   override def onSetup(setup: Setup): Unit = {
-    // TODO: remove this once slick handles existing indexes correctly
     if (Config.attemptCreateTables) Blocking.createTablesIfNotExist(Config.db)
+    bitcoinClient = new ExtendedBitcoinClient(setup.bitcoin.asInstanceOf[Bitcoind].bitcoinClient)
     channelsDb = new HostedChannelsDb(Config.db)
   }
 
