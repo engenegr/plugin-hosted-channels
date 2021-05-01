@@ -103,7 +103,7 @@ class HC extends Plugin {
     val clientHCs = channelsDb.listClientChannels
     val hcServiceRoute = new HCService(kit, channelsDb, workerRef, syncRef, Config.vals).finalRoute
     require(clientHCs.forall(_.commitments.localNodeId == kit.nodeParams.nodeId), "PLGN PHC, localNodeId mismatch")
-    Http().newServerAt(Config.vals.apiParams.bindingIp, Config.vals.apiParams.port).bindFlow(hcServiceRoute)
+    Http.apply.newServerAt(Config.vals.apiParams.bindingIp, Config.vals.apiParams.port).bindFlow(hcServiceRoute)
     HC.clientChannelRemoteNodeIds = clientHCs.map(_.commitments.remoteNodeId).toSet
     workerRef ! Worker.ClientChannels(clientHCs)
   }
