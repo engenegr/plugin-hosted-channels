@@ -34,7 +34,7 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     awaitCond(bob.stateName == OFFLINE)
 
     bob ! CurrentBlockCount(currentBlockHeight + 37)
-    // 144 - 37 blocks left until timely knowledge of preimage is unprovable
+    // 144 - (144 - 37) blocks left until timely knowledge of preimage is unprovable
     channelUpdateListener.expectMsgType[AlmostTimedoutIncomingHtlc]
   }
 
