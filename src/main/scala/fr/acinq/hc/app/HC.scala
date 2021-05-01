@@ -120,7 +120,7 @@ case object HCFeature extends Feature {
 }
 
 // Depends on https://github.com/engenegr/eclair-alarmbot-plugin
-case class AlmostTimedoutIncomingHtlc(theirAdd: wire.UpdateAddHtlc, fulfill: wire.UpdateFulfillHtlc, nodeId: PublicKey, blockCount: Long) extends fr.acinq.alarmbot.CustomAlarmBotMessage {
-  override def message: String = s"AlmostTimedoutIncomingHtlc, htlcId=${theirAdd.id}, hash=${theirAdd.paymentHash}, preimage=${fulfill.paymentPreimage}, peer=$nodeId, expiry=${theirAdd.cltvExpiry}/$blockCount"
+case class AlmostTimedoutIncomingHtlc(add: wire.UpdateAddHtlc, fulfill: wire.UpdateFulfillHtlc, nodeId: PublicKey, blockCount: Long) extends fr.acinq.alarmbot.CustomAlarmBotMessage {
+  override def message: String = s"AlmostTimedoutIncomingHtlc, htlcId=${add.id}, amount=${add.amountMsat}, hash=${add.paymentHash}, expiry=${add.cltvExpiry.toLong}/$blockCount, preimage=${fulfill.paymentPreimage}, peer=$nodeId"
   override def senderEntity: String = "HC"
 }
