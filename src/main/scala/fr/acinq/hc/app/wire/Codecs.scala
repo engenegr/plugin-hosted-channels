@@ -7,7 +7,7 @@ import fr.acinq.eclair.wire.CommonCodecs._
 import fr.acinq.eclair.wire.ChannelCodecs._
 import fr.acinq.eclair.wire.LightningMessageCodecs._
 import fr.acinq.eclair.wire.ChannelCodecs.channelVersionCodec
-import scodec.codecs.{listOfN, uint16, uint32, variableSizeBytes, utf8}
+import scodec.codecs.{listOfN, uint16, optional, uint32, variableSizeBytes, utf8}
 import scodec.{Attempt, Codec, Err}
 
 
@@ -31,7 +31,8 @@ object Codecs {
 
   val hostedChannelBrandingCodec: Codec[HostedChannelBranding] = {
     (rgb withContext "rgbColor") ::
-      (varsizebinarydata withContext "pngIcon") ::
+      (optional(bool8, varsizebinarydata) withContext "pngIcon") ::
+      (optional(bool8, varsizebinarydata) withContext "pngBackground") ::
       (variableSizeBytes(uint16, utf8) withContext "contactInfo")
   }.as[HostedChannelBranding]
 

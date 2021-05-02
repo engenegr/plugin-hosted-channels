@@ -524,8 +524,9 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       }
 
       (HC.remoteNode2Connection.get(remoteNodeId), state, nextState, stateData, nextStateData) match {
-        case (Some(connection), SYNCING, NORMAL | CLOSED, _: HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE, d1: HC_DATA_ESTABLISHED) if d1.commitments.lastCrossSignedState.isHost =>
-          vals.branding.brandingMessageOpt.foreach { brandingMessage => connection sendHostedChannelMsg brandingMessage }
+        case (Some(connection), SYNCING, NORMAL | CLOSED, _: HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE, d1: HC_DATA_ESTABLISHED) =>
+          val sendBrandingMessage = vals.branding.enabled && d1.commitments.lastCrossSignedState.isHost
+          if (sendBrandingMessage) connection sendHostedChannelMsg vals.branding.brandingMessage
         case (Some(connection), OFFLINE | SYNCING, CLOSED, _, d1: HC_DATA_ESTABLISHED) =>
           // We may get fulfills for peer payments while offline when channel is in error state
           d1.commitments.pendingOutgoingFulfills.foreach(connection.sendHasChannelIdMsg)
