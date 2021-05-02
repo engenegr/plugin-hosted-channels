@@ -7,7 +7,6 @@ import akka.actor.{ActorSystem, Props}
 import fr.acinq.hc.app.network.{HostedSync, PreimageBroadcastCatcher}
 import fr.acinq.hc.app.db.{Blocking, HostedChannelsDb, HostedUpdatesDb, PreimagesDb}
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner.IncomingHtlc
-import fr.acinq.eclair.blockchain.bitcoind.rpc.ExtendedBitcoinClient
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner
 import fr.acinq.eclair.transactions.DirectedHtlc
 import fr.acinq.eclair.payment.IncomingPacket
@@ -86,11 +85,10 @@ object HC {
 
 class HC extends Plugin {
   var channelsDb: HostedChannelsDb = _
-  var bitcoinClient: ExtendedBitcoinClient = _
 
   override def onSetup(setup: Setup): Unit = {
+    // TODO: remove this once slick handles existing indexes correctly
     if (Config.attemptCreateTables) Blocking.createTablesIfNotExist(Config.db)
-    bitcoinClient = new ExtendedBitcoinClient(setup.bitcoin.asInstanceOf[Bitcoind].bitcoinClient)
     channelsDb = new HostedChannelsDb(Config.db)
   }
 
