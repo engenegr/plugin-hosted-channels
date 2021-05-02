@@ -28,7 +28,6 @@ case class InitHostedChannel(maxHtlcValueInFlightMsat: UInt64,
 
 case class HostedChannelBranding(rgbColor: Color,
                                  pngIcon: Option[ByteVector],
-                                 pngBackground: Option[ByteVector],
                                  contactInfo: String) extends HostedChannelMessage
 
 case class LastCrossSignedState(isHost: Boolean,

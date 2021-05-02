@@ -125,16 +125,11 @@ case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long,
 
 case class HCOverrideParams(nodeId: String, params: HCParams)
 
-case class Branding(logo: String, background: String, color: Color, contactInfo: String, enabled: Boolean) {
-  lazy val brandingMessage: HostedChannelBranding = HostedChannelBranding(color, logoBytes.toOption, backgroundBytes.toOption, contactInfo)
+case class Branding(logo: String, color: Color, contactInfo: String, enabled: Boolean) {
+  lazy val brandingMessage: HostedChannelBranding = HostedChannelBranding(color, logoBytes.toOption, contactInfo)
 
   var logoBytes: Try[ByteVector] = Try {
     val pngBytes = Paths.get(s"${Config.resourcesDir}/$logo")
-    ByteVector(Files readAllBytes pngBytes)
-  }
-
-  var backgroundBytes: Try[ByteVector] = Try {
-    val pngBytes = Paths.get(s"${Config.resourcesDir}/$background")
     ByteVector(Files readAllBytes pngBytes)
   }
 }
