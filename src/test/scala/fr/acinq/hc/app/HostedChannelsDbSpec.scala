@@ -46,7 +46,7 @@ class HostedChannelsDbSpec extends AnyFunSuite {
     val secret = ByteVector32.Zeroes.bytes
 
     val hdc1 = hdc.copy(nextLocalUpdates = Nil, nextRemoteUpdates = Nil, originChannels = Map.empty)
-    val data1 = data.copy(commitments = hdc1, remoteError = None, refundPendingInfo = None, refundCompleteInfo = None)
+    val data1 = data.copy(commitments = hdc1, remoteError = None)
 
     cdb.updateOrAddNewChannel(data1)
     assert(cdb.getChannelBySecret(secret).isEmpty)

@@ -15,20 +15,20 @@ class HostedChannelsDb(db: PostgresProfile.backend.Database) {
 
   def addNewChannel(data: HC_DATA_ESTABLISHED): Boolean =
     Blocking.txWrite(Channels.insertCompiled += (data.commitments.remoteNodeId.value.toArray, data.channelUpdate.shortChannelId.toLong,
-      0, data.commitments.lastCrossSignedState.isHost, None, None, data.commitments.lastCrossSignedState.blockDay, System.currentTimeMillis,
+      0, data.commitments.lastCrossSignedState.isHost, data.commitments.lastCrossSignedState.blockDay, System.currentTimeMillis,
       HC_DATA_ESTABLISHED_Codec.encode(data).require.toByteArray, Array.emptyByteArray, true), db) > 0
 
   def updateOrAddNewChannel(data: HC_DATA_ESTABLISHED): Unit = {
     val encoded = HC_DATA_ESTABLISHED_Codec.encode(data).require.toByteArray
     val remoteNodeId = data.commitments.remoteNodeId.value.toArray
-    val pendingRefund = data.refundPendingInfo.map(_.startedAt)
     val inFlightHtlcs = data.pendingHtlcs.size
 
-    val updateTuple = (inFlightHtlcs, data.commitments.lastCrossSignedState.isHost, data.refundCompleteInfo, pendingRefund, data.commitments.lastCrossSignedState.blockDay, encoded, true)
+    val updateTuple = (inFlightHtlcs, data.commitments.lastCrossSignedState.isHost, data.commitments.lastCrossSignedState.blockDay, encoded, true)
 
     if (Blocking.txWrite(Channels.findByRemoteNodeIdUpdatableCompiled(remoteNodeId).update(updateTuple), db) == 0)
-      Blocking.txWrite(Channels.insertCompiled += (remoteNodeId, data.channelUpdate.shortChannelId.toLong, inFlightHtlcs, data.commitments.lastCrossSignedState.isHost,
-        data.refundCompleteInfo, pendingRefund, data.commitments.lastCrossSignedState.blockDay, System.currentTimeMillis, encoded, Array.emptyByteArray, true), db)
+      Blocking.txWrite(Channels.insertCompiled += (remoteNodeId, data.channelUpdate.shortChannelId.toLong, inFlightHtlcs,
+        data.commitments.lastCrossSignedState.isHost, data.commitments.lastCrossSignedState.blockDay, System.currentTimeMillis,
+        encoded, Array.emptyByteArray, true), db)
   }
 
   def updateSecretById(remoteNodeId: PublicKey, secret: ByteVector): Boolean =
@@ -36,7 +36,7 @@ class HostedChannelsDb(db: PostgresProfile.backend.Database) {
 
   type ChannelDataAndVsisible = (HC_DATA_ESTABLISHED, Boolean)
   def getChannelByRemoteNodeId(remoteNodeId: PublicKey): Option[ChannelDataAndVsisible] = for {
-    (_, _, _, _, _, data, isVisible) <- Blocking.txRead(Channels.findByRemoteNodeIdUpdatableCompiled(remoteNodeId.value.toArray).result.headOption, db)
+    (_, _, _, data, isVisible) <- Blocking.txRead(Channels.findByRemoteNodeIdUpdatableCompiled(remoteNodeId.value.toArray).result.headOption, db)
   } yield (decode(data), isVisible)
 
   def getChannelBySecret(secret: ByteVector): Option[HC_DATA_ESTABLISHED] = Blocking.txRead(Channels.findBySecretCompiled(secret.toArray).result.headOption, db).map(decode)

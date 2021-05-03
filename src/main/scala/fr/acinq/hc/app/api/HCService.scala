@@ -69,16 +69,6 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
           complete(worker ? HC_CMD_OVERRIDE_ACCEPT(remoteNodeId))
         }
       } ~
-      path("startrefund") {
-        formFields(nodeIdFormParam) { remoteNodeId =>
-          complete(worker ? HC_CMD_INIT_PENDING_REFUND(remoteNodeId))
-        }
-      } ~
-      path("finalizerefund") {
-        formFields(nodeIdFormParam, "info".as[String]) { case (remoteNodeId, info) =>
-          complete(worker ? HC_CMD_FINALIZE_REFUND(remoteNodeId, info))
-        }
-      } ~
       path("makepublic") {
         formFields(nodeIdFormParam) { remoteNodeId =>
           complete(worker ? HC_CMD_PUBLIC(remoteNodeId))

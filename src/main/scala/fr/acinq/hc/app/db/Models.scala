@@ -14,12 +14,9 @@ import akka.util.Timeout
 
 object Blocking {
   type ByteArray = Array[Byte]
-  type PendingRefund = Option[Long]
-  type CompleteRefund = Option[String]
   type OptionalUpdate = Option[String]
-
-  type RepLong = Rep[Long]
   type RepByteArray = Rep[ByteArray]
+  type RepLong = Rep[Long]
 
   val span: FiniteDuration = 25.seconds
   implicit val timeout: Timeout = Timeout(span)
@@ -39,14 +36,14 @@ object Channels {
   final val tableName = "channels"
   val model = TableQuery[Channels]
 
-  type DbType = (Long, ByteArray, Long, Int, Boolean, CompleteRefund, PendingRefund, Long, Long, ByteArray, ByteArray, Boolean)
+  type DbType = (Long, ByteArray, Long, Int, Boolean, Long, Long, ByteArray, ByteArray, Boolean)
 
   val insertCompiled = Compiled {
-    for (x <- model) yield (x.remoteNodeId, x.shortChannelId, x.inFlightHtlcs, x.isHost, x.completeRefund, x.pendingRefund, x.lastBlockDay, x.createdAt, x.data, x.secret, x.isVisible)
+    for (x <- model) yield (x.remoteNodeId, x.shortChannelId, x.inFlightHtlcs, x.isHost, x.lastBlockDay, x.createdAt, x.data, x.secret, x.isVisible)
   }
 
   val findByRemoteNodeIdUpdatableCompiled = Compiled {
-    (nodeId: RepByteArray) => for (x <- model if x.remoteNodeId === nodeId) yield (x.inFlightHtlcs, x.isHost, x.completeRefund, x.pendingRefund, x.lastBlockDay, x.data, x.isVisible)
+    (nodeId: RepByteArray) => for (x <- model if x.remoteNodeId === nodeId) yield (x.inFlightHtlcs, x.isHost, x.lastBlockDay, x.data, x.isVisible)
   }
 
   val findSecretUpdatableByRemoteNodeIdCompiled = Compiled { nodeId: RepByteArray => for (x <- model if x.remoteNodeId === nodeId) yield x.secret }
@@ -69,8 +66,6 @@ class Channels(tag: Tag) extends Table[Channels.DbType](tag, Channels.tableName)
   // These get derived from data when updating
   def inFlightHtlcs: Rep[Int] = column[Int]("in_flight_htlcs")
   def isHost: Rep[Boolean] = column[Boolean]("is_host")
-  def completeRefund: Rep[CompleteRefund] = column[CompleteRefund]("complete_refund")
-  def pendingRefund: Rep[PendingRefund] = column[PendingRefund]("pending_refund")
   def lastBlockDay: Rep[Long] = column[Long]("last_block_day")
   // These have special update rules
   def data: Rep[ByteArray] = column[ByteArray]("data")
@@ -81,7 +76,7 @@ class Channels(tag: Tag) extends Table[Channels.DbType](tag, Channels.tableName)
   def idx2: Index = index("channels__in_flight_htlcs__is_visible__idx", (inFlightHtlcs, isVisible), unique = false) // Select these on startup for HTLC resolution
   def idx3: Index = index("channels__secret__idx", secret, unique = false) // Find these on user request
 
-  def * = (id, remoteNodeId, shortChannelId, inFlightHtlcs, isHost, completeRefund, pendingRefund, lastBlockDay, createdAt, data, secret, isVisible)
+  def * = (id, remoteNodeId, shortChannelId, inFlightHtlcs, isHost, lastBlockDay, createdAt, data, secret, isVisible)
 }
 
 

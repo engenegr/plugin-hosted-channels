@@ -4,7 +4,7 @@ import fr.acinq.eclair._
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import fr.acinq.eclair.wire.{AnnouncementMessage, ChannelAnnouncement, ChannelUpdate, Color, HasChannelId, UnknownMessage}
-import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol, Satoshi, SatoshiLong}
+import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol}
 import fr.acinq.hc.app.channel.{HostedChannelVersion, HostedCommitments}
 import com.typesafe.config.{ConfigFactory, Config => TypesafeConfig}
 import java.io.{ByteArrayInputStream, File}
@@ -102,21 +102,18 @@ object Config {
 
 
 case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long,
-                    cltvDeltaBlocks: Int, onChainRefundThresholdSat: Long,
-                    liabilityDeadlineBlockdays: Int, channelCapacityMsat: Long,
+                    cltvDeltaBlocks: Int, channelCapacityMsat: Long,
                     htlcMinimumMsat: Long, maxAcceptedHtlcs: Int, isResizable: Boolean) {
 
   val feeBase: MilliSatoshi = feeBaseMsat.msat
 
   val htlcMinimum: MilliSatoshi = htlcMinimumMsat.msat
 
-  val onChainRefundThreshold: Satoshi = onChainRefundThresholdSat.sat
-
   val channelVersion: ChannelVersion = if (isResizable) HostedChannelVersion.RESIZABLE else ChannelVersion.STANDARD
 
   val initMsg: InitHostedChannel =
-    InitHostedChannel(UInt64(channelCapacityMsat), htlcMinimum, maxAcceptedHtlcs, channelCapacityMsat.msat,
-      liabilityDeadlineBlockdays, onChainRefundThreshold, initialClientBalanceMsat = 0L.msat, channelVersion)
+    InitHostedChannel(UInt64(channelCapacityMsat), htlcMinimum, maxAcceptedHtlcs,
+      channelCapacityMsat.msat, initialClientBalanceMsat = 0L.msat, channelVersion)
 
   def areDifferent(cu: ChannelUpdate): Boolean =
     cu.cltvExpiryDelta.toInt != cltvDeltaBlocks || !cu.htlcMaximumMsat.contains(htlcMinimum) ||
@@ -129,8 +126,9 @@ case class Branding(logo: String, color: Color, contactInfo: String, enabled: Bo
   lazy val brandingMessage: HostedChannelBranding = HostedChannelBranding(color, logoBytes.toOption, contactInfo)
 
   var logoBytes: Try[ByteVector] = Try {
-    val pngBytes = Paths.get(s"${Config.resourcesDir}/$logo")
-    ByteVector(Files readAllBytes pngBytes)
+    val path = s"${Config.resourcesDir}/$logo"
+    val pngBytes = Files.readAllBytes(Paths get path)
+    ByteVector(pngBytes)
   }
 }
 

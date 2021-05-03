@@ -21,8 +21,6 @@ case class InitHostedChannel(maxHtlcValueInFlightMsat: UInt64,
                              htlcMinimumMsat: MilliSatoshi,
                              maxAcceptedHtlcs: Int,
                              channelCapacityMsat: MilliSatoshi,
-                             liabilityDeadlineBlockdays: Int,
-                             minimalOnchainRefundAmountSatoshis: Satoshi,
                              initialClientBalanceMsat: MilliSatoshi,
                              version: ChannelVersion) extends HostedChannelMessage
 
@@ -55,8 +53,6 @@ case class LastCrossSignedState(isHost: Boolean,
     val hostFlag = if (isHost) 1 else 0
 
     Crypto.sha256(refundScriptPubKey ++
-      Protocol.writeUInt16(initHostedChannel.liabilityDeadlineBlockdays, ByteOrder.LITTLE_ENDIAN) ++
-      Protocol.writeUInt64(initHostedChannel.minimalOnchainRefundAmountSatoshis.toLong, ByteOrder.LITTLE_ENDIAN) ++
       Protocol.writeUInt64(initHostedChannel.channelCapacityMsat.toLong, ByteOrder.LITTLE_ENDIAN) ++
       Protocol.writeUInt64(initHostedChannel.initialClientBalanceMsat.toLong, ByteOrder.LITTLE_ENDIAN) ++
       Protocol.writeUInt32(blockDay, ByteOrder.LITTLE_ENDIAN) ++
@@ -82,8 +78,6 @@ case class LastCrossSignedState(isHost: Boolean,
 case class StateUpdate(blockDay: Long, localUpdates: Long, remoteUpdates: Long, localSigOfRemoteLCSS: ByteVector64) extends HostedChannelMessage
 
 case class StateOverride(blockDay: Long, localBalanceMsat: MilliSatoshi, localUpdates: Long, remoteUpdates: Long, localSigOfRemoteLCSS: ByteVector64) extends HostedChannelMessage
-
-case class RefundPending(startedAt: Long) extends HostedChannelMessage
 
 case class AnnouncementSignature(nodeSignature: ByteVector64, wantsReply: Boolean) extends HostedChannelMessage
 

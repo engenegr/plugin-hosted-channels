@@ -31,9 +31,6 @@ case class HC_CMD_EXTERNAL_FULFILL(remoteNodeId: PublicKey, htlcId: Long, paymen
 case class HC_CMD_OVERRIDE_PROPOSE(remoteNodeId: PublicKey, newLocalBalance: MilliSatoshi) extends HasRemoteNodeIdHostedCommand
 case class HC_CMD_OVERRIDE_ACCEPT(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 
-case class HC_CMD_INIT_PENDING_REFUND(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
-case class HC_CMD_FINALIZE_REFUND(remoteNodeId: PublicKey, info: String, force: Boolean = false) extends HasRemoteNodeIdHostedCommand
-
 case class HC_CMD_PUBLIC(remoteNodeId: PublicKey, force: Boolean = false) extends HasRemoteNodeIdHostedCommand
 case class HC_CMD_PRIVATE(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 
@@ -73,8 +70,6 @@ case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
                                remoteError: Option[ErrorExt] = None,
                                resizeProposal: Option[ResizeChannel] = None,
                                overrideProposal: Option[StateOverride] = None, // CLOSED channel override can be initiated by Host
-                               refundPendingInfo: Option[RefundPending] = None, // Will be present in case if funds should be refunded
-                               refundCompleteInfo: Option[String] = None, // Will be present after channel has been manually updated as a refunded
                                channelAnnouncement: Option[wire.ChannelAnnouncement] = None) extends HostedData { me =>
 
   lazy val errorExt: Option[ErrorExt] = localErrors.headOption orElse remoteError

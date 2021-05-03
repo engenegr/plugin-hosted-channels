@@ -23,8 +23,6 @@ object Codecs {
       (millisatoshi withContext "htlcMinimumMsat") ::
       (uint16 withContext "maxAcceptedHtlcs") ::
       (millisatoshi withContext "channelCapacityMsat") ::
-      (uint16 withContext "liabilityDeadlineBlockdays") ::
-      (satoshi withContext "minimalOnchainRefundAmountSatoshis") ::
       (millisatoshi withContext "initialClientBalanceMsat") ::
       (channelVersionCodec withContext "version")
   }.as[InitHostedChannel]
@@ -65,9 +63,6 @@ object Codecs {
       (bytes64 withContext "localSigOfRemoteLCSS")
   }.as[StateOverride]
 
-  val refundPendingCodec: Codec[RefundPending] =
-    (uint32 withContext "startedAt").as[RefundPending]
-
   val announcementSignatureCodec: Codec[AnnouncementSignature] = {
     (bytes64 withContext "nodeSignature") ::
       (bool8 withContext "wantsReply")
@@ -101,7 +96,6 @@ object Codecs {
     val decodeAttempt = wrap.tag match {
       case HC_STATE_UPDATE_TAG => stateUpdateCodec.decode(bitVector)
       case HC_STATE_OVERRIDE_TAG => stateOverrideCodec.decode(bitVector)
-      case HC_REFUND_PENDING_TAG => refundPendingCodec.decode(bitVector)
       case HC_RESIZE_CHANNEL_TAG => resizeChannelCodec.decode(bitVector)
       case HC_INIT_HOSTED_CHANNEL_TAG => initHostedChannelCodec.decode(bitVector)
       case HC_INVOKE_HOSTED_CHANNEL_TAG => invokeHostedChannelCodec.decode(bitVector)
@@ -120,7 +114,6 @@ object Codecs {
   def toUnknownHostedMessage(message: HostedChannelMessage): UnknownMessage = message match {
     case msg: StateUpdate => UnknownMessage(HC_STATE_UPDATE_TAG, stateUpdateCodec.encode(msg).require.toByteVector)
     case msg: StateOverride => UnknownMessage(HC_STATE_OVERRIDE_TAG, stateOverrideCodec.encode(msg).require.toByteVector)
-    case msg: RefundPending => UnknownMessage(HC_REFUND_PENDING_TAG, refundPendingCodec.encode(msg).require.toByteVector)
     case msg: ResizeChannel => UnknownMessage(HC_RESIZE_CHANNEL_TAG, resizeChannelCodec.encode(msg).require.toByteVector)
     case msg: InitHostedChannel => UnknownMessage(HC_INIT_HOSTED_CHANNEL_TAG, initHostedChannelCodec.encode(msg).require.toByteVector)
     case msg: InvokeHostedChannel => UnknownMessage(HC_INVOKE_HOSTED_CHANNEL_TAG, invokeHostedChannelCodec.encode(msg).require.toByteVector)

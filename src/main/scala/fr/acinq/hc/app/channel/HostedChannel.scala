@@ -69,9 +69,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     case Event(Worker.HCPeerConnected, data: HC_DATA_ESTABLISHED) if data.commitments.lastCrossSignedState.isHost =>
       // Host is the one who awaits for client InvokeHostedChannel or Error on reconnect
-      if (data.refundCompleteInfo.isDefined) goto(CLOSED)
-      else if (data.errorExt.isDefined) goto(CLOSED)
-      else goto(SYNCING)
+      if (data.errorExt.isDefined) goto(CLOSED) else goto(SYNCING)
 
     case Event(Worker.HCPeerConnected, data: HC_DATA_ESTABLISHED) =>
       // Client is the one who sends either an Error or InvokeHostedChannel on reconnect
@@ -93,8 +91,6 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     case Event(error: wire.Error, data: HC_DATA_ESTABLISHED) => processRemoteError(stay, error, data)
 
-    case Event(cmd: HC_CMD_FINALIZE_REFUND, data: HC_DATA_ESTABLISHED) => processFinalizeRefund(stay, cmd, data)
-
     case Event(cmd: HC_CMD_EXTERNAL_FULFILL, data: HC_DATA_ESTABLISHED) => processExternalFulfill(stay, cmd, data)
 
     case Event(cmd: HC_CMD_SUSPEND, data: HC_DATA_ESTABLISHED) =>
@@ -115,9 +111,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       else stay using HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE(remoteInvoke) SendingHosted chanParams.initMsg
 
     case Event(hostInit: InitHostedChannel, data: HC_DATA_CLIENT_WAIT_HOST_INIT) =>
-      if (hostInit.liabilityDeadlineBlockdays < vals.hcDefaultParams.liabilityDeadlineBlockdays) stop(FSM.Normal) SendingHasChannelId wire.Error(channelId, "Proposed liability deadline is too low")
-      else if (hostInit.minimalOnchainRefundAmountSatoshis > vals.hcDefaultParams.initMsg.minimalOnchainRefundAmountSatoshis) stop(FSM.Normal) SendingHasChannelId wire.Error(channelId, "Proposed minimal refund is too high")
-      else if (hostInit.initialClientBalanceMsat > vals.hcDefaultParams.initMsg.channelCapacityMsat) stop(FSM.Normal) SendingHasChannelId wire.Error(channelId, "Proposed init balance for us is larger than capacity")
+      if (hostInit.initialClientBalanceMsat > vals.hcDefaultParams.initMsg.channelCapacityMsat) stop(FSM.Normal) SendingHasChannelId wire.Error(channelId, "Proposed init balance for us is larger than capacity")
       else if (hostInit.channelCapacityMsat < vals.hcDefaultParams.initMsg.channelCapacityMsat) stop(FSM.Normal) SendingHasChannelId wire.Error(channelId, "Proposed channel capacity is too low")
       else {
         val fullySignedLCSS = LastCrossSignedState(isHost = false, data.refundScriptPubKey, initHostedChannel = hostInit, currentBlockDay,
@@ -339,14 +333,12 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     case Event(_: InvokeHostedChannel, data: HC_DATA_ESTABLISHED) if data.commitments.lastCrossSignedState.isHost =>
       if (data.localErrors.nonEmpty) stay SendingHosted data.commitments.lastCrossSignedState SendingHasChannelId data.localErrors.head.error
       else if (data.remoteError.isDefined) stay SendingHosted data.commitments.lastCrossSignedState SendingHasChannelId wire.Error(channelId, ErrorCodes.ERR_HOSTED_CLOSED_BY_REMOTE_PEER)
-      else if (data.refundCompleteInfo.isDefined) stay SendingHosted data.commitments.lastCrossSignedState SendingHasChannelId wire.Error(channelId, data.refundCompleteInfo.get)
       else stay
 
     // OVERRIDING
 
     case Event(remoteSO: StateOverride, data: HC_DATA_ESTABLISHED) if !data.commitments.lastCrossSignedState.isHost =>
-      val data1 = data.copy(overrideProposal = Some(remoteSO), refundPendingInfo = None)
-      stay StoringAndUsing data1
+      stay StoringAndUsing data.copy(overrideProposal = Some(remoteSO))
 
     case Event(cmd: HC_CMD_OVERRIDE_ACCEPT, data: HC_DATA_ESTABLISHED) =>
       if (data.errorExt.isEmpty) stay replying CMDResFailure("Overriding declined: channel is in normal state")
@@ -431,20 +423,10 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       log.info(s"PLGN PHC, rejecting htlc in state=$stateName, peer=$remoteNodeId")
       stay
 
-    // Refunds
-
-    case Event(cmd: HC_CMD_INIT_PENDING_REFUND, data: HC_DATA_ESTABLISHED) if data.commitments.lastCrossSignedState.isHost =>
-      val refundPending = RefundPending(startedAt = System.currentTimeMillis.millis.toSeconds)
-      val data1 = data.copy(refundPendingInfo = Some(refundPending), overrideProposal = None)
-      stay StoringAndUsing data1 replying CMDResSuccess(cmd) SendingHosted refundPending
-
-    case Event(cmd: HC_CMD_FINALIZE_REFUND, data: HC_DATA_ESTABLISHED) => processFinalizeRefund(goto(CLOSED), cmd, data)
-
     // Scheduling override
 
     case Event(cmd: HC_CMD_OVERRIDE_PROPOSE, data: HC_DATA_ESTABLISHED) =>
       if (data.errorExt.isEmpty) stay replying CMDResFailure("Overriding declined: channel is in normal state")
-      else if (data.refundCompleteInfo.isDefined) stay replying CMDResFailure("Overriding declined: target channel has been refunded")
       else if (!data.commitments.lastCrossSignedState.isHost) stay replying CMDResFailure("Overriding declined: only host side can initiate override")
       else if (cmd.newLocalBalance > data.commitments.capacity) stay replying CMDResFailure("Overriding declined: new local balance exceeds capacity")
       else if (cmd.newLocalBalance < 0L.msat) stay replying CMDResFailure("Overriding declined: new local balance is less than zero")
@@ -454,20 +436,18 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
         val newRemoteUpdates = data.commitments.lastCrossSignedState.remoteUpdates + data.commitments.nextRemoteUpdates.size + 1
         val overrideLCSS = makeOverridingLocallySignedLCSS(data.commitments, cmd.newLocalBalance, newLocalUpdates, newRemoteUpdates, currentBlockDay)
         val localSO = StateOverride(overrideLCSS.blockDay, overrideLCSS.localBalanceMsat, overrideLCSS.localUpdates, overrideLCSS.remoteUpdates, overrideLCSS.localSigOfRemote)
-        val data1 = data.copy(overrideProposal = Some(localSO), refundPendingInfo = None)
-        stay StoringAndUsing data1 replying CMDResSuccess(cmd) SendingHosted localSO
+        stay StoringAndUsing data.copy(overrideProposal = Some(localSO)) replying CMDResSuccess(cmd) SendingHosted localSO
       }
 
     // Misc
 
+    case Event(_: HC_CMD_HIDE, data: HC_DATA_ESTABLISHED) if data.pendingHtlcs.nonEmpty =>
+      // Only cold channel can be hidden, otherwise we'd have dangling HTLCs present
+      stay replying CMDResFailure("Hiding declined: in-flight HTLCs are present")
+
     case Event(cmd: HC_CMD_HIDE, data: HC_DATA_ESTABLISHED) =>
-      if (data.pendingHtlcs.nonEmpty) {
-        channelsDb.hideHostedChannel(remoteNodeId)
-        stop(FSM.Normal) replying CMDResSuccess(cmd)
-      } else {
-        // Only cold channel can be hidden, otherwise we'd have dangling HTLCs
-        stay replying CMDResFailure("Hiding declined: in-flight HTLCs are present")
-      }
+      channelsDb.hideHostedChannel(remoteNodeId = remoteNodeId)
+      stop(FSM.Normal) replying CMDResSuccess(cmd)
 
     case Event(cmd: HC_CMD_SUSPEND, data: HC_DATA_ESTABLISHED) =>
       val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_MANUAL_SUSPEND)
@@ -518,7 +498,6 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       (HC.remoteNode2Connection.get(remoteNodeId), state, nextState, nextStateData) match {
         case (Some(connection), OFFLINE | SYNCING, NORMAL | CLOSED, d1: HC_DATA_ESTABLISHED) =>
           context.system.eventStream publish ChannelStateChanged(self, channelId, connection.info.peer, remoteNodeId, state, nextState, Some(d1.commitments))
-          for (refundPendingInfo <- d1.refundPendingInfo if d1.commitments.lastCrossSignedState.isHost) connection sendHostedChannelMsg refundPendingInfo
           for (overrideProposal <- d1.overrideProposal if d1.commitments.lastCrossSignedState.isHost) connection sendHostedChannelMsg overrideProposal
         case _ =>
       }
@@ -676,15 +655,6 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     errorState StoringAndUsing data1
   } else stay
 
-  def processFinalizeRefund(errorState: FsmStateExt, cmd: HC_CMD_FINALIZE_REFUND, data: HC_DATA_ESTABLISHED): HostedFsmState = {
-    val liabilityBlockdays = data.commitments.lastCrossSignedState.initHostedChannel.liabilityDeadlineBlockdays
-    val enoughDays = data.commitments.lastCrossSignedState.blockDay + liabilityBlockdays < currentBlockDay
-    val data1 = data.copy(refundCompleteInfo = Some(cmd.info), refundPendingInfo = None)
-
-    if (cmd.force || enoughDays) errorState StoringAndUsing data1 replying CMDResSuccess(cmd) SendingHasChannelId wire.Error(channelId, cmd.info)
-    else stay replying CMDResFailure(s"Not enough days passed since=${data.commitments.lastCrossSignedState.blockDay} blockday")
-  }
-
   def processBlockCount(errorState: FsmStateExt, blockCount: Long, data: HC_DATA_ESTABLISHED): HostedFsmState = {
     lazy val preimageMap = data.commitments.pendingOutgoingFulfills.map(fulfill => Crypto.sha256(fulfill.paymentPreimage) -> fulfill).toMap
     val almostTimedOutIncomingHtlcs = data.almostTimedOutIncomingHtlcs(blockCount, fulfillSafety = chanParams.cltvDeltaBlocks / 4 * 3)
@@ -753,9 +723,9 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
           goto(CLOSED) StoringAndUsing data1 SendingHasChannelId error
       }
     } else {
-      val data1 = data.copy(commitments = clearOrigin(commits1, data.commitments), refundPendingInfo = None, overrideProposal = None)
-      context.system.eventStream publish AvailableBalanceChanged(self, channelId, shortChannelId, commitments = data1.commitments)
-      stay StoringAndUsing data1 RelayingRemoteUpdates data.commitments SendingHosted commits1.lastCrossSignedState.stateUpdate
+      val commitments1 = clearOrigin(commits1, data.commitments)
+      context.system.eventStream publish AvailableBalanceChanged(self, channelId, shortChannelId, commitments = commitments1)
+      stay StoringAndUsing data.copy(commitments = commitments1) RelayingRemoteUpdates data.commitments SendingHosted commits1.lastCrossSignedState.stateUpdate
     }
   }
 

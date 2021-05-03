@@ -15,8 +15,6 @@ import fr.acinq.eclair.wire.{ChannelUpdate, UpdateAddHtlc, UpdateFulfillHtlc}
 import fr.acinq.hc.app.channel.{HC_DATA_ESTABLISHED, HostedChannelVersion, HostedCommitments}
 import org.scalatest.funsuite.AnyFunSuite
 
-import scala.util.Success
-
 
 class HostedChannelTypesSpec extends AnyFunSuite {
   val alicePrivKey: Crypto.PrivateKey = randomKey
@@ -24,8 +22,8 @@ class HostedChannelTypesSpec extends AnyFunSuite {
 
   val channelId: ByteVector32 = randomBytes32
 
-  val initHostedChannel: InitHostedChannel = InitHostedChannel(maxHtlcValueInFlightMsat = UInt64(90000L), htlcMinimumMsat = 10.msat,
-    maxAcceptedHtlcs = 3, 1000000L.msat, 5000, 1000000.sat, initialClientBalanceMsat = 0.msat, ChannelVersion.STANDARD)
+  val initHostedChannel: InitHostedChannel = InitHostedChannel(maxHtlcValueInFlightMsat = UInt64(90000L),
+    htlcMinimumMsat = 10.msat, maxAcceptedHtlcs = 3, 1000000L.msat, initialClientBalanceMsat = 0.msat, ChannelVersion.STANDARD)
 
   val preimage1: ByteVector32 = randomBytes32
   val preimage2: ByteVector32 = randomBytes32

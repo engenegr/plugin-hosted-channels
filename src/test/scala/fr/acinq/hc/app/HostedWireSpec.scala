@@ -2,7 +2,7 @@ package fr.acinq.hc.app
 
 import java.util.UUID
 
-import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto, Satoshi, SatoshiLong}
+import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto, Satoshi}
 import fr.acinq.eclair._
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.channel.{Channel, Origin}
@@ -40,7 +40,7 @@ object HostedWireSpec {
 
   val invoke_hosted_channel: InvokeHostedChannel = InvokeHostedChannel(Block.LivenetGenesisBlock.hash, ByteVector.fromValidHex("00" * 32), secret = ByteVector.fromValidHex("00" * 32))
 
-  val init_hosted_channel: InitHostedChannel = InitHostedChannel(UInt64(6), 10.msat, 20, 500000000L.msat, 5000, 1000000.sat, 1000000.msat, HostedChannelVersion.RESIZABLE)
+  val init_hosted_channel: InitHostedChannel = InitHostedChannel(UInt64(6), 10.msat, 20, 500000000L.msat, 1000000.msat, HostedChannelVersion.RESIZABLE)
 
   val state_update: StateUpdate = StateUpdate(blockDay = 20020L, localUpdates = 1202L, remoteUpdates = 10L, ByteVector64.Zeroes)
 
@@ -62,26 +62,11 @@ object HostedWireSpec {
 
   val localNodeId: Crypto.PublicKey = randomKey.publicKey
 
-  val hdc: HostedCommitments = HostedCommitments(
-    localNodeId,
-    randomKey.publicKey,
-    channelId = randomBytes32,
-    localSpec = cs,
-    originChannels = Map(42L -> Origin.LocalCold(UUID.randomUUID),
-      15000L -> Origin.ChannelRelayedCold(ByteVector32(ByteVector.fill(32)(42)), 43, MilliSatoshi(11000000L), MilliSatoshi(10000000L))),
-    last_cross_signed_state_1,
-    nextLocalUpdates = List(add1, add2),
-    nextRemoteUpdates = Nil,
-    announceChannel = false)
+  val hdc: HostedCommitments = HostedCommitments(localNodeId, randomKey.publicKey, channelId = randomBytes32, localSpec = cs,
+    originChannels = Map(42L -> Origin.LocalCold(UUID.randomUUID), 15000L -> Origin.ChannelRelayedCold(ByteVector32(ByteVector.fill(32)(42)), 43, MilliSatoshi(11000000L), MilliSatoshi(10000000L))),
+    last_cross_signed_state_1, nextLocalUpdates = List(add1, add2), nextRemoteUpdates = Nil, announceChannel = false)
 
-  val data: HC_DATA_ESTABLISHED = HC_DATA_ESTABLISHED(
-    hdc,
-    channelUpdate,
-    localErrors = Nil,
-    remoteError = Some(ErrorExt generateFrom error),
-    overrideProposal = None,
-    refundPendingInfo = Some(RefundPending(System.currentTimeMillis / 1000)),
-    refundCompleteInfo = Some("Has been refunded to address n3RzaNTD8LnBGkREBjSkouy5gmd2dVf7jQ"))
+  val data: HC_DATA_ESTABLISHED = HC_DATA_ESTABLISHED(hdc, channelUpdate, localErrors = Nil, remoteError = Some(ErrorExt generateFrom error), overrideProposal = None)
 }
 
 class HostedWireSpec extends AnyFunSuite {
@@ -162,17 +147,5 @@ class HostedWireSpec extends AnyFunSuite {
     assert(Codecs.decodeHasChanIdMessage(Codecs.toUnknownHasChanIdMessage(update_fail_htlc)).require === update_fail_htlc)
     assert(Codecs.decodeHasChanIdMessage(Codecs.toUnknownHasChanIdMessage(update_add_htlc)).require === update_add_htlc)
     assert(Codecs.decodeHostedMessage(Codecs.toUnknownHostedMessage(announcement_signature)).require === announcement_signature)
-  }
-
-  test("Test vectors") {
-    val invoke_hosted_channel_raw = Codecs.invokeHostedChannelCodec.encode(invoke_hosted_channel).require.toHex
-    assert(invoke_hosted_channel_raw == s"6fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000002000000000000000000000000000000000000000000000000000000000000000000020" +
-      s"0000000000000000000000000000000000000000000000000000000000000000")
-
-    val init_hosted_channel_raw = Codecs.initHostedChannelCodec.encode(init_hosted_channel).require.toHex
-    assert(init_hosted_channel_raw == s"0000000000000006000000000000000a0014000000001dcd6500138800000000000f424000000000000f424000000003")
-
-    val state_update_raw = Codecs.stateUpdateCodec.encode(state_update).require.toHex
-    assert(state_update_raw == s"00004e34000004b20000000a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")
   }
 }
