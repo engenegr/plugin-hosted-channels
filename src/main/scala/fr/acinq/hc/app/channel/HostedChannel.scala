@@ -23,7 +23,6 @@ import fr.acinq.eclair.channel.Origin.LocalCold
 import fr.acinq.eclair.payment.relay.Relayer
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.hc.app.db.HostedChannelsDb
-import fr.acinq.eclair.io.PeerDisconnected
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.hc.app.wire.Codecs
 import scodec.bits.ByteVector
@@ -393,9 +392,9 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     case Event(_: wire.Error, _) => stop(FSM.Normal)
 
-    case Event(_: PeerDisconnected, _: HC_DATA_ESTABLISHED) => goto(OFFLINE)
+    case Event(Worker.HCPeerDisconnected, _: HC_DATA_ESTABLISHED) => goto(OFFLINE)
 
-    case Event(_: PeerDisconnected, _) => stop(FSM.Normal)
+    case Event(Worker.HCPeerDisconnected, _) => stop(FSM.Normal)
 
     case Event(cmd: CMD_FULFILL_HTLC, data: HC_DATA_ESTABLISHED) =>
       data.commitments.sendFulfill(cmd) match {

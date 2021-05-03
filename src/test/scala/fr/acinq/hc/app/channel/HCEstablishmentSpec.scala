@@ -1,13 +1,10 @@
 package fr.acinq.hc.app.channel
 
-import akka.actor.FSM.StateTimeout
 import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.eclair.TestConstants.{Alice, Bob}
 import fr.acinq.eclair.channel._
-import fr.acinq.eclair.io.PeerDisconnected
 import fr.acinq.eclair.{TestKitBaseClass, wire}
 import fr.acinq.eclair.wire.ChannelUpdate
-import fr.acinq.hc.app.channel._
 import fr.acinq.hc.app._
 import org.scalatest.Outcome
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
@@ -60,8 +57,8 @@ class HCEstablishmentSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     bob ! alice2bob.expectMsgType[InitHostedChannel]
     awaitCond(bob.stateData.isInstanceOf[HC_DATA_CLIENT_WAIT_HOST_STATE_UPDATE])
     bob2alice.expectMsgType[StateUpdate] // This message does not reach Alice so channel is not persisted
-    alice ! PeerDisconnected(null, null)
-    bob ! PeerDisconnected(null, null)
+    alice ! Worker.HCPeerDisconnected
+    bob ! Worker.HCPeerDisconnected
     alice2bob.expectTerminated(alice)
     bob2alice.expectTerminated(bob)
 
@@ -106,8 +103,8 @@ class HCEstablishmentSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     HCTestUtils.resetEntireDatabase(aliceDB)
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
-    alice ! PeerDisconnected(null, null)
-    bob ! PeerDisconnected(null, null)
+    alice ! Worker.HCPeerDisconnected
+    bob ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
     alice ! Worker.TickRemoveIdleChannels
@@ -121,8 +118,8 @@ class HCEstablishmentSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     HCTestUtils.resetEntireDatabase(aliceDB)
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
-    alice ! PeerDisconnected(null, null)
-    bob ! PeerDisconnected(null, null)
+    alice ! Worker.HCPeerDisconnected
+    bob ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
     channelUpdateListener.expectMsgType[LocalChannelDown]

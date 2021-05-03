@@ -2,7 +2,6 @@ package fr.acinq.hc.app.channel
 
 import fr.acinq.eclair._
 import fr.acinq.eclair.channel.{CMD_FULFILL_HTLC, CMD_SIGN, NORMAL, OFFLINE, RES_ADD_SETTLED}
-import fr.acinq.eclair.io.PeerDisconnected
 import fr.acinq.eclair.wire.{ChannelUpdate, UpdateAddHtlc, UpdateFulfillHtlc}
 import fr.acinq.hc.app.{HCTestUtils, InvokeHostedChannel, LastCrossSignedState, ResizeChannel, StateUpdate, Worker}
 import org.scalatest.Outcome
@@ -90,8 +89,8 @@ class HCResizeSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     bob2alice.expectMsgType[ResizeChannel] // Alice does not get it
     bob2alice.expectMsgType[StateUpdate]
 
-    alice ! PeerDisconnected(null, null)
-    bob ! PeerDisconnected(null, null)
+    alice ! Worker.HCPeerDisconnected
+    bob ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
 
@@ -127,8 +126,8 @@ class HCResizeSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     bob2alice.expectNoMessage()
     alice2bob.expectNoMessage()
 
-    alice ! PeerDisconnected(null, null)
-    bob ! PeerDisconnected(null, null)
+    alice ! Worker.HCPeerDisconnected
+    bob ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
 
@@ -158,8 +157,8 @@ class HCResizeSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     bob2alice.expectNoMessage()
     alice2bob.expectNoMessage()
 
-    alice ! PeerDisconnected(null, null)
-    bob ! PeerDisconnected(null, null)
+    alice ! Worker.HCPeerDisconnected
+    bob ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
 
@@ -207,8 +206,8 @@ class HCResizeSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     bob2alice.expectNoMessage()
     alice2bob.expectNoMessage()
 
-    alice ! PeerDisconnected(null, null)
-    bob ! PeerDisconnected(null, null)
+    alice ! Worker.HCPeerDisconnected
+    bob ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
 

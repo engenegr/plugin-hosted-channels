@@ -3,7 +3,6 @@ package fr.acinq.hc.app.channel
 import akka.actor.PoisonPill
 import fr.acinq.eclair._
 import fr.acinq.eclair.channel._
-import fr.acinq.eclair.io.PeerDisconnected
 import fr.acinq.eclair.payment.relay.Relayer
 import fr.acinq.eclair.wire.{ChannelUpdate, UpdateAddHtlc, UpdateFulfillHtlc}
 import slick.jdbc.PostgresProfile.api._
@@ -35,8 +34,8 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     alice2bob.expectNoMessage()
     bob2alice.expectNoMessage()
 
-    alice ! PeerDisconnected(null, null)
-    bob ! PeerDisconnected(null, null)
+    alice ! Worker.HCPeerDisconnected
+    bob ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
 
@@ -68,8 +67,8 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     alice ! bob2alice.expectMsgType[UpdateFulfillHtlc]
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
 
-    alice ! PeerDisconnected(null, null)
-    bob ! PeerDisconnected(null, null)
+    alice ! Worker.HCPeerDisconnected
+    bob ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
 
@@ -115,8 +114,8 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     alice2bob.expectNoMessage()
     bob2alice.expectNoMessage()
 
-    alice ! PeerDisconnected(null, null)
-    bob ! PeerDisconnected(null, null)
+    alice ! Worker.HCPeerDisconnected
+    bob ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
 
@@ -188,8 +187,8 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     alice2bob.expectNoMessage()
     bob2alice.expectNoMessage()
 
-    alice ! PeerDisconnected(null, null)
-    bob ! PeerDisconnected(null, null)
+    alice ! Worker.HCPeerDisconnected
+    bob ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
 
@@ -253,8 +252,8 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     bob ! aliceAdd2 // Will be removed on restart because no state update
     bobRelayer.expectNoMessage()
 
-    alice ! PeerDisconnected(null, null)
-    bob ! PeerDisconnected(null, null)
+    alice ! Worker.HCPeerDisconnected
+    bob ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
 
@@ -271,8 +270,8 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     bobRelayer.expectMsgType[Relayer.RelayForward]
     bob2alice.expectMsgType[StateUpdate] // Goes nowhere
 
-    alice ! PeerDisconnected(null, null)
-    bob ! PeerDisconnected(null, null)
+    alice ! Worker.HCPeerDisconnected
+    bob ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
 
@@ -302,8 +301,8 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     bob2alice.expectNoMessage()
     alice2bob.expectNoMessage()
 
-    alice ! PeerDisconnected(null, null)
-    bob ! PeerDisconnected(null, null)
+    alice ! Worker.HCPeerDisconnected
+    bob ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
 
@@ -375,8 +374,8 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     reachNormal(f)
     val (preimage3, alice2bobUpdateAdd3) = addHtlcFromAliceToBob(15000L.msat, f, currentBlockHeight)
 
-    alice ! PeerDisconnected(null, null)
-    bob ! PeerDisconnected(null, null)
+    alice ! Worker.HCPeerDisconnected
+    bob ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
 
@@ -410,8 +409,8 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     val (preimage1, alice2bobUpdateAdd1) = addHtlcFromAliceToBob(10000L.msat, f, f.currentBlockHeight)
     val (preimage2, alice2bobUpdateAdd2) = addHtlcFromBob2Alice(10000L.msat, f)
 
-    f.alice ! PeerDisconnected(null, null)
-    f.bob ! PeerDisconnected(null, null)
+    f.alice ! Worker.HCPeerDisconnected
+    f.bob ! Worker.HCPeerDisconnected
     awaitCond(f.alice.stateName == OFFLINE)
     awaitCond(f.bob.stateName == OFFLINE)
 
@@ -436,8 +435,8 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     f3.aliceKit.nodeParams.db.pendingRelay.addPendingRelay(channelId, CMD_FULFILL_HTLC(alice2bobUpdateAdd2.id, preimage2)) // Alice gets Bob's payment fulfilled, HC is not there
     f3.alice ! HC_CMD_RESTORE(bobData.nodeId1, bobData)
 
-    f3.alice ! PeerDisconnected(null, null)
-    f.bob ! PeerDisconnected(null, null)
+    f3.alice ! Worker.HCPeerDisconnected
+    f.bob ! Worker.HCPeerDisconnected
     awaitCond(f3.alice.stateName == OFFLINE)
     awaitCond(f.bob.stateName == OFFLINE)
 

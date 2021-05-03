@@ -4,7 +4,6 @@ import fr.acinq.bitcoin.{ByteVector32, ByteVector64}
 import fr.acinq.eclair._
 import fr.acinq.eclair.blockchain.CurrentBlockCount
 import fr.acinq.eclair.channel._
-import fr.acinq.eclair.io.PeerDisconnected
 import fr.acinq.eclair.transactions.DirectedHtlc
 import fr.acinq.eclair.wire.{ChannelUpdate, UpdateFailHtlc, UpdateFulfillHtlc}
 import fr.acinq.hc.app.{StateOverride, HCTestUtils, StateUpdate, Worker, InvokeHostedChannel, LastCrossSignedState}
@@ -83,8 +82,8 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     bob ! alice2bob.expectMsgType[wire.Error]
     awaitCond(alice.stateName == CLOSED)
     awaitCond(bob.stateName == CLOSED)
-    alice ! PeerDisconnected(null, null)
-    bob ! PeerDisconnected(null, null)
+    alice ! Worker.HCPeerDisconnected
+    bob ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
     alice ! HC_CMD_OVERRIDE_PROPOSE(bobKit.nodeParams.nodeId, newLocalBalance = 9999899999L.msat)
@@ -187,8 +186,8 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     HCTestUtils.resetEntireDatabase(aliceDB)
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
-    alice ! PeerDisconnected(null, null)
-    bob ! PeerDisconnected(null, null)
+    alice ! Worker.HCPeerDisconnected
+    bob ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
     alice ! wire.Error(randomBytes32, "Error in offline mode")

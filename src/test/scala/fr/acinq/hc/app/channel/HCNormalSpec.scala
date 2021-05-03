@@ -4,7 +4,6 @@ import fr.acinq.bitcoin.Crypto
 import fr.acinq.eclair._
 import fr.acinq.eclair.blockchain.CurrentBlockCount
 import fr.acinq.eclair.channel._
-import fr.acinq.eclair.io.PeerDisconnected
 import fr.acinq.eclair.payment.relay.Relayer
 import fr.acinq.eclair.wire.{TemporaryNodeFailure, UpdateAddHtlc, UpdateFailHtlc, UpdateFulfillHtlc}
 import fr.acinq.hc.app.network.PreimageBroadcastCatcher
@@ -26,9 +25,9 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     val (preimage1, add1) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
     addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight)
 
-    alice ! PeerDisconnected(null, null)
+    alice ! Worker.HCPeerDisconnected
     bob ! CMD_FULFILL_HTLC(add1.id, preimage1)
-    bob ! PeerDisconnected(null, null)
+    bob ! Worker.HCPeerDisconnected
     channelUpdateListener.expectMsgType[LocalChannelDown]
     channelUpdateListener.expectMsgType[LocalChannelDown]
     awaitCond(alice.stateName == OFFLINE)
@@ -92,8 +91,8 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     reachNormal(f)
     val (preimage1, _) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
     val (preimage2, _) = addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight)
-    alice ! PeerDisconnected(null, null)
-    bob ! PeerDisconnected(null, null)
+    alice ! Worker.HCPeerDisconnected
+    bob ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
     alice ! PreimageBroadcastCatcher.BroadcastedPreimage(Crypto.sha256(preimage1), preimage1)
@@ -123,8 +122,8 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
     val (preimage, alice2bobUpdateAdd) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
-    alice ! PeerDisconnected(null, null)
-    bob ! PeerDisconnected(null, null)
+    alice ! Worker.HCPeerDisconnected
+    bob ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
     alice ! HC_CMD_EXTERNAL_FULFILL(bobKit.nodeParams.nodeId, alice2bobUpdateAdd.id, preimage)
@@ -386,7 +385,7 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     alice ! CurrentBlockCount(currentBlockHeight + 245)
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]] // One HTLC timed out
     awaitCond(alice.stateName == CLOSED)
-    alice ! PeerDisconnected(null, null)
+    alice ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     alice ! Worker.TickRemoveIdleChannels // Has no effect because 1 payment is pending
     alice ! CurrentBlockCount(currentBlockHeight + 345)
@@ -420,7 +419,7 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     alice2bob.expectNoMessage()
     bob2alice.expectNoMessage()
     awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.isEmpty)
-    alice ! PeerDisconnected(null, null)
+    alice ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     alice ! Worker.TickRemoveIdleChannels
     alice2bob.expectTerminated(alice)
