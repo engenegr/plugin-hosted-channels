@@ -46,11 +46,13 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
 
   override def receive: Receive = {
     case systemMessage: PeerConnected if systemMessage.connectionInfo.remoteInit.features.hasPluginFeature(HCFeature.plugin) =>
+      logger.info(s"PLGN PHC, PEER CONNECTED")
       HC.remoteNode2Connection addOne systemMessage.nodeId -> PeerConnectedWrapNormal(systemMessage)
       val refOpt = Option(inMemoryHostedChannels get systemMessage.nodeId)
       refOpt.foreach(_ ! HCPeerConnected)
 
     case systemMessage: PeerDisconnected =>
+      logger.info(s"PLGN PHC, PEER DISCONNECTED")
       HC.remoteNode2Connection subtractOne systemMessage.nodeId
       val refOpt = Option(inMemoryHostedChannels get systemMessage.nodeId)
       refOpt.foreach(_ ! systemMessage)
@@ -68,7 +70,9 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
           // Special handling for InvokeHostedChannel: if chan exists neither in memory nor in db, then this is a new chan request and anti-spam rules apply
           case (Attempt.Successful(invoke: InvokeHostedChannel), Some(wrap), null) => restore(guardSpawn(nodeId, wrap, invoke), Tools.none, _ |> HCPeerConnected |> invoke)(nodeId)
           case (Attempt.Successful(_: HostedChannelMessage), _, null) => logger.info(s"PLGN PHC, no target for HostedMessage, messageTag=${message.tag}, peer=$nodeId")
-          case (Attempt.Successful(hosted: HostedChannelMessage), _, channelRef) => channelRef ! hosted
+          case (Attempt.Successful(hosted: HostedChannelMessage), _, channelRef) =>
+            logger.info(s"PLGN PHC, CHAN -> $hosted")
+            channelRef ! hosted
         }
       } else if (HC.chanIdMessageTags contains message.tag) {
         Tuple3(Codecs decodeHasChanIdMessage message, HC.remoteNode2Connection get nodeId, inMemoryHostedChannels get nodeId) match {

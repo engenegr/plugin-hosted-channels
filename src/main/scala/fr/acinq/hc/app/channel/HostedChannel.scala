@@ -177,11 +177,11 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     case Event(_: LastCrossSignedState, _: HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE) => stop(FSM.Normal) SendingHasChannelId wire.Error(channelId, ErrorCodes.ERR_MISSING_CHANNEL)
 
+    // NORMAL PATHWAY
+
     case Event(_: InvokeHostedChannel, data: HC_DATA_ESTABLISHED) if data.commitments.lastCrossSignedState.isHost => stay SendingHosted data.commitments.lastCrossSignedState
 
     case Event(_: InitHostedChannel, data: HC_DATA_ESTABLISHED) if !data.commitments.lastCrossSignedState.isHost => stay SendingHosted data.commitments.lastCrossSignedState
-
-    // NORMAL PATHWAY
 
     case Event(remoteLCSS: LastCrossSignedState, data: HC_DATA_ESTABLISHED) =>
       val localLCSS: LastCrossSignedState = data.commitments.lastCrossSignedState // In any case our LCSS is the current one
