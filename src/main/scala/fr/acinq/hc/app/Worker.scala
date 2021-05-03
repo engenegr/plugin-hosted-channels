@@ -60,7 +60,9 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
     case Worker.TickClearIpAntiSpam => ipAntiSpam.clear
 
     case peerMsg @ UnknownMessageReceived(_, nodeId, message, _) =>
-      if (HC.hostedMessageTags contains message.tag) {
+      if (HC.preimageQueryTags contains message.tag) preimageCatcher ! peerMsg
+      else if (HC.announceTags contains message.tag) hostedSync ! peerMsg
+      else if (HC.hostedMessageTags contains message.tag) {
         Tuple3(Codecs decodeHostedMessage message, HC.remoteNode2Connection get nodeId, inMemoryHostedChannels get nodeId) match {
           case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, Hosted message decoding fail, messageTag=${message.tag}, peer=$nodeId")
           case (_, None, _) => logger.info(s"PLGN PHC, no connection found for message=${message.getClass.getSimpleName}, peer=$nodeId")
@@ -79,10 +81,6 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
           case (_, _, null) => logger.info(s"PLGN PHC, no target for HasChannelIdMessage, tag=${message.tag}, peer=$nodeId")
           case (Attempt.Successful(msg), _, channelRef) => channelRef ! msg
         }
-      } else if (HC.preimageQueryTags contains message.tag) {
-        preimageCatcher ! peerMsg
-      } else if (HC.announceTags contains message.tag) {
-        hostedSync ! peerMsg
       }
 
     case cmd: HC_CMD_LOCAL_INVOKE =>
