@@ -109,7 +109,10 @@ class HC extends Plugin {
 
     override def messageTags: Set[Int] = hostedMessageTags ++ preimageQueryTags ++ announceTags ++ chanIdMessageTags
 
-    override def forceReconnect(nodeId: PublicKey): Boolean = HC.clientChannelRemoteNodeIds.contains(nodeId)
+    override def forceReconnect(nodeId: PublicKey): Boolean = {
+      println(s"Attempting force-reconnect=${HC.clientChannelRemoteNodeIds.contains(nodeId)}")
+      HC.clientChannelRemoteNodeIds.contains(nodeId)
+    }
 
     override def name: String = "Hosted channels"
 
