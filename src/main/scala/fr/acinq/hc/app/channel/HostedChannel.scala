@@ -444,7 +444,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       // Only cold channel can be hidden, otherwise we'd have dangling HTLCs present
       stay replying CMDResFailure("Hiding declined: in-flight HTLCs are present")
 
-    case Event(cmd: HC_CMD_HIDE, data: HC_DATA_ESTABLISHED) =>
+    case Event(cmd: HC_CMD_HIDE, _: HC_DATA_ESTABLISHED) =>
       channelsDb.hideHostedChannel(remoteNodeId = remoteNodeId)
       stop(FSM.Normal) replying CMDResSuccess(cmd)
 
