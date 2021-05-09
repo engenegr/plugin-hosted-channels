@@ -95,8 +95,6 @@ object Config {
 
   val db: PostgresProfile.backend.Database = PostgresProfile.backend.Database.forConfig("config.relationalDb", config)
 
-  val attemptCreateTables: Boolean = config.as[Boolean]("config.attemptCreateTables")
-
   val vals: Vals = config.as[Vals]("config.vals")
 }
 

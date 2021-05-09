@@ -17,6 +17,7 @@ import fr.acinq.bitcoin.ByteVector32
 import akka.event.LoggingAdapter
 import scala.collection.mutable
 import akka.http.scaladsl.Http
+import scala.util.Try
 
 
 object HC {
@@ -85,8 +86,7 @@ class HC extends Plugin {
   var channelsDb: HostedChannelsDb = _
 
   override def onSetup(setup: Setup): Unit = {
-    // TODO: remove this once slick handles existing indexes correctly
-    if (Config.attemptCreateTables) Blocking.createTablesIfNotExist(Config.db)
+    Try(Blocking createTablesIfNotExist Config.db)
     channelsDb = new HostedChannelsDb(Config.db)
   }
 
