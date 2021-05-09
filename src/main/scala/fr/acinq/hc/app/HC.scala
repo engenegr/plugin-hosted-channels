@@ -101,6 +101,7 @@ class HC extends Plugin {
     require(clientHCs.forall(_.commitments.localNodeId == kit.nodeParams.nodeId), "PLGN PHC, localNodeId mismatch")
     Http.apply.newServerAt(Config.vals.apiParams.bindingIp, Config.vals.apiParams.port).bindFlow(hcServiceRoute)
     HC.clientChannelRemoteNodeIds = clientHCs.map(_.commitments.remoteNodeId).toSet
+    println(s"HC.clientChannelRemoteNodeIds: ${HC.clientChannelRemoteNodeIds}")
     workerRef ! Worker.ClientChannels(clientHCs)
   }
 

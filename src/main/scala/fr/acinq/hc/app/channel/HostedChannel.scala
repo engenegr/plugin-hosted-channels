@@ -62,7 +62,9 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       val data1 = restoreEmptyData(localLCSS).modify(_.commitments.localSpec.htlcs).setTo(htlcSet).modify(_.commitments.originChannels).setTo(fakeOrigins)
       stay StoringAndUsing data1 replying CMDResSuccess(cmd)
 
-    case Event(data: HC_DATA_ESTABLISHED, HC_NOTHING) => stay using data
+    case Event(data: HC_DATA_ESTABLISHED, HC_NOTHING) =>
+      println("Client channel got data")
+      stay using data
 
     case Event(Worker.HCPeerConnected, HC_NOTHING) => goto(SYNCING)
 
@@ -71,10 +73,14 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       if (data.errorExt.isDefined) goto(CLOSED) else goto(SYNCING)
 
     case Event(Worker.HCPeerConnected, data: HC_DATA_ESTABLISHED) =>
+      println("Client channel got Worker.HCPeerConnected")
       // Client is the one who sends either an Error or InvokeHostedChannel on reconnect
       if (data.localErrors.nonEmpty) goto(CLOSED) SendingHasChannelId data.localErrors.head.error
       else if (data.remoteError.isDefined) goto(CLOSED) SendingHasChannelId wire.Error(channelId, ErrorCodes.ERR_HOSTED_CLOSED_BY_REMOTE_PEER)
-      else goto(SYNCING) SendingHosted InvokeHostedChannel(kit.nodeParams.chainHash, data.commitments.lastCrossSignedState.refundScriptPubKey)
+      else {
+        println("Client channel sending InvokeHostedChannel")
+        goto(SYNCING) SendingHosted InvokeHostedChannel(kit.nodeParams.chainHash, data.commitments.lastCrossSignedState.refundScriptPubKey)
+      }
 
     case Event(Worker.TickRemoveIdleChannels, HC_NOTHING) => stop(FSM.Normal)
 
