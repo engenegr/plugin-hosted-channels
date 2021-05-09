@@ -37,7 +37,9 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
     post {
       path("invoke") {
         formFields(nodeIdFormParam, "refundAddress".as[String], "secret".as[ByteVector](binaryDataUnmarshaller)) { case (remoteNodeId, refundAddress, secret) =>
-          complete(worker ? HC_CMD_LOCAL_INVOKE(remoteNodeId, Script.write(fr.acinq.eclair.addressToPublicKeyScript(refundAddress, kit.nodeParams.chainHash)), secret))
+          val refundPubkeyScript = Script.write(fr.acinq.eclair.addressToPublicKeyScript(refundAddress, kit.nodeParams.chainHash))
+          val response = (worker ? HC_CMD_LOCAL_INVOKE(remoteNodeId, refundPubkeyScript, secret)).map(_.toString)
+          complete(response)
         }
       } ~
       path("externalfulfill") {

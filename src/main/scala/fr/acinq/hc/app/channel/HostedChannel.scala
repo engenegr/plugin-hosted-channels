@@ -98,9 +98,9 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
   }
 
   when(SYNCING) {
-    case Event(HC_CMD_LOCAL_INVOKE(_, scriptPubKey, secret), HC_NOTHING) =>
+    case Event(cmd @ HC_CMD_LOCAL_INVOKE(_, scriptPubKey, secret), HC_NOTHING) =>
       val invokeMsg = InvokeHostedChannel(kit.nodeParams.chainHash, scriptPubKey, secret)
-      stay using HC_DATA_CLIENT_WAIT_HOST_INIT(scriptPubKey) SendingHosted invokeMsg
+      stay using HC_DATA_CLIENT_WAIT_HOST_INIT(scriptPubKey) SendingHosted invokeMsg replying CMDResSuccess(cmd)
 
     case Event(remoteInvoke: InvokeHostedChannel, HC_NOTHING) =>
       val isWrongChain = kit.nodeParams.chainHash != remoteInvoke.chainHash
