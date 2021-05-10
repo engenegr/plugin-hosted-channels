@@ -53,7 +53,6 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
       refOpt.foreach(_ |> HCPeerDisconnected |> HCPeerConnected)
 
     case systemMessage: PeerDisconnected =>
-      println("Peer disconnected")
       HC.remoteNode2Connection subtractOne systemMessage.nodeId
       val refOpt = Option(inMemoryHostedChannels get systemMessage.nodeId)
       refOpt.foreach(_ ! HCPeerDisconnected)
