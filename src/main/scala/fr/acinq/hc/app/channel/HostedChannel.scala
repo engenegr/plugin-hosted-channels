@@ -62,7 +62,8 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       val data1 = restoreEmptyData(localLCSS).modify(_.commitments.localSpec.htlcs).setTo(htlcSet).modify(_.commitments.originChannels).setTo(fakeOrigins)
       stay StoringAndUsing data1 replying CMDResSuccess(cmd)
 
-    case Event(data: HC_DATA_ESTABLISHED, HC_NOTHING) => stay using data
+    case Event(data: HC_DATA_ESTABLISHED, HC_NOTHING) =>
+      stay using data
 
     case Event(Worker.HCPeerConnected, HC_NOTHING) => goto(SYNCING)
 
@@ -98,9 +99,9 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
   }
 
   when(SYNCING) {
-    case Event(HC_CMD_LOCAL_INVOKE(_, scriptPubKey, secret), HC_NOTHING) =>
+    case Event(cmd @ HC_CMD_LOCAL_INVOKE(_, scriptPubKey, secret), HC_NOTHING) =>
       val invokeMsg = InvokeHostedChannel(kit.nodeParams.chainHash, scriptPubKey, secret)
-      stay using HC_DATA_CLIENT_WAIT_HOST_INIT(scriptPubKey) SendingHosted invokeMsg
+      stay using HC_DATA_CLIENT_WAIT_HOST_INIT(scriptPubKey) SendingHosted invokeMsg replying CMDResSuccess(cmd)
 
     case Event(remoteInvoke: InvokeHostedChannel, HC_NOTHING) =>
       val isWrongChain = kit.nodeParams.chainHash != remoteInvoke.chainHash
@@ -460,7 +461,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     case Event(cmd: HC_CMD_EXTERNAL_FULFILL, data: HC_DATA_ESTABLISHED) => processExternalFulfill(goto(CLOSED), cmd, data)
 
-    case Event(HC_CMD_GET_INFO, data: HC_DATA_ESTABLISHED) => stay replying CMDResInfo(stateName, data, data.commitments.nextLocalSpec)
+    case Event(_: HC_CMD_GET_INFO, data: HC_DATA_ESTABLISHED) => stay replying CMDResInfo(stateName, data, data.commitments.nextLocalSpec)
 
     case Event(cmd: HC_CMD_RESIZE, data: HC_DATA_ESTABLISHED) =>
       val msg = ResizeChannel(cmd.newCapacity).sign(kit.nodeParams.privateKey)

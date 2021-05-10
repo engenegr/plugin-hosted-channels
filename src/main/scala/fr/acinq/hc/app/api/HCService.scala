@@ -37,73 +37,74 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
     post {
       path("invoke") {
         formFields(nodeIdFormParam, "refundAddress".as[String], "secret".as[ByteVector](binaryDataUnmarshaller)) { case (remoteNodeId, refundAddress, secret) =>
-          complete(worker ? HC_CMD_LOCAL_INVOKE(remoteNodeId, Script.write(fr.acinq.eclair.addressToPublicKeyScript(refundAddress, kit.nodeParams.chainHash)), secret))
+          val refundPubkeyScript = Script.write(fr.acinq.eclair.addressToPublicKeyScript(refundAddress, kit.nodeParams.chainHash))
+          complete((worker ? HC_CMD_LOCAL_INVOKE(remoteNodeId, refundPubkeyScript, secret)).map(_.toString))
         }
       } ~
       path("externalfulfill") {
         formFields(nodeIdFormParam, "htlcId".as[Long], "paymentPreimage".as[ByteVector32](sha256HashUnmarshaller)) { case (remoteNodeId, htlcId, paymentPreimage) =>
-          complete(worker ? HC_CMD_EXTERNAL_FULFILL(remoteNodeId, htlcId, paymentPreimage))
+          complete((worker ? HC_CMD_EXTERNAL_FULFILL(remoteNodeId, htlcId, paymentPreimage)).map(_.toString))
         }
       } ~
       path("findbyremoteid") {
         formFields(nodeIdFormParam) { remoteNodeId =>
-          complete(worker ? HC_CMD_GET_INFO(remoteNodeId))
+          complete((worker ? HC_CMD_GET_INFO(remoteNodeId)).map(_.toString))
         }
       } ~
       path("findbysecret") {
         formFields("plainUserSecret".as[String]) { secret =>
           val trimmedUserSecret = ByteVector.view(secret.toLowerCase.trim getBytes "UTF-8")
           channelsDb.getChannelBySecret(Mac32.hmac256(trimmedUserSecret, kit.nodeParams.nodeId.value)) match {
-            case Some(data) => complete(worker ? HC_CMD_GET_INFO(data.commitments.remoteNodeId))
+            case Some(data) => complete((worker ? HC_CMD_GET_INFO(data.commitments.remoteNodeId)).map(_.toString))
             case None => complete(s"Could not find and HC with secret: $secret")
           }
         }
       } ~
       path("overridepropose") {
         formFields(nodeIdFormParam, "newLocalBalanceMsat".as[MilliSatoshi]) { case (remoteNodeId, newLocalBalance) =>
-          complete(worker ? HC_CMD_OVERRIDE_PROPOSE(remoteNodeId, newLocalBalance))
+          complete((worker ? HC_CMD_OVERRIDE_PROPOSE(remoteNodeId, newLocalBalance)).map(_.toString))
         }
       } ~
       path("overrideaccept") {
         formFields(nodeIdFormParam) { remoteNodeId =>
-          complete(worker ? HC_CMD_OVERRIDE_ACCEPT(remoteNodeId))
+          complete((worker ? HC_CMD_OVERRIDE_ACCEPT(remoteNodeId)).map(_.toString))
         }
       } ~
       path("makepublic") {
         formFields(nodeIdFormParam) { remoteNodeId =>
-          complete(worker ? HC_CMD_PUBLIC(remoteNodeId))
+          complete((worker ? HC_CMD_PUBLIC(remoteNodeId)).map(_.toString))
         }
       } ~
       path("makeprivate") {
         formFields(nodeIdFormParam) { remoteNodeId =>
-          complete(worker ? HC_CMD_PRIVATE(remoteNodeId))
+          complete((worker ? HC_CMD_PRIVATE(remoteNodeId)).map(_.toString))
         }
       } ~
       path("resize") {
         formFields(nodeIdFormParam, "newCapacitySat".as[Satoshi]) { case (remoteNodeId, newCapacity) =>
-          complete(worker ? HC_CMD_RESIZE(remoteNodeId, newCapacity))
+          complete((worker ? HC_CMD_RESIZE(remoteNodeId, newCapacity)).map(_.toString))
         }
       } ~
       path("suspend") {
         formFields(nodeIdFormParam) { remoteNodeId =>
-          complete(worker ? HC_CMD_SUSPEND(remoteNodeId))
+          complete((worker ? HC_CMD_SUSPEND(remoteNodeId)).map(_.toString))
         }
       } ~
       path("hide") {
         formFields(nodeIdFormParam) { remoteNodeId =>
-          complete(worker ? HC_CMD_HIDE(remoteNodeId))
+          complete((worker ? HC_CMD_HIDE(remoteNodeId)).map(_.toString))
         }
       } ~
       path("verifyremotestate") {
         formFields("state".as[ByteVector](binaryDataUnmarshaller)) { state =>
-          complete(getHostedStateResult(state))
+          complete(getHostedStateResult(state).toString)
         }
       } ~
       path("restorefromremotestate") {
         formFields("state".as[ByteVector](binaryDataUnmarshaller)) { state =>
           val RemoteHostedStateResult(remoteState, Some(remoteNodeId), isLocalSigOk) = getHostedStateResult(state)
           require(isLocalSigOk, "Can't proceed: local signature of provided HC state is invalid")
-          complete(worker ? HC_CMD_RESTORE(remoteNodeId, remoteState))
+          complete((worker ? HC_CMD_RESTORE(remoteNodeId, remoteState)).map(_.toString))
         }
       } ~
       path("broadcastpreimages") {

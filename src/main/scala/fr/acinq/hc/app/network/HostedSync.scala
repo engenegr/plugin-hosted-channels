@@ -84,6 +84,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
 
   when(WAIT_FOR_PHC_SYNC) {
     case Event(Nothing, _) =>
+      // Placeholder matching nothing
       stay
   }
 
@@ -96,7 +97,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
       stay using syncProcessor.process(msg.nodeId, msg.message, data)
 
     case Event(GotAllSyncFrom(wrap), data: OperationalData) if data.syncNodeId.contains(wrap.info.nodeId) =>
-      // It's important to check that ending messages comes exactly from a node we have requested a sync from
+      // It's important to check that ending message comes exactly from a node we have requested a re-sync from
 
       tryPersist(data.phcNetwork) match {
         case Failure(unkownMessageError) =>
@@ -121,6 +122,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
 
   when(OPERATIONAL) {
     case Event(Nothing, _) =>
+      // Placeholder matching nothing
       stay
   }
 
@@ -151,13 +153,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
       if (ipAntiSpam(wrap.remoteIp) > phcConfig.maxSyncSendsPerIpPerMinute) {
         wrap sendHostedChannelMsg ReplyPublicHostedChannelsEnd(kit.nodeParams.chainHash)
         log.info(s"PLGN PHC, SendSyncTo, abuse, peer=${wrap.info.nodeId}")
-      } else Future {
-        data.phcNetwork.channels.values.flatMap(_.orderedMessages).foreach(wrap.sendUnknownMsg)
-        wrap sendHostedChannelMsg ReplyPublicHostedChannelsEnd(kit.nodeParams.chainHash)
-      } onComplete {
-        case Failure(err) => log.info(s"PLGN PHC, SendSyncTo, fail, peer=${wrap.info.nodeId} error=${err.getMessage}")
-        case _ => log.info(s"PLGN PHC, SendSyncTo, success, peer=${wrap.info.nodeId}")
-      }
+      } else broadcastSync(data, wrap)
 
       // Record this request for anti-spam
       ipAntiSpam(wrap.remoteIp) += 1
@@ -166,7 +162,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
     // PERIODIC SYNC
 
     case Event(SyncFromPHCPeers, data: OperationalData) =>
-      randomPublicPeers(data).headOption map { publicPeer =>
+      randomPublicPeers(data).headOption.map { publicPeer =>
         val selectedSyncNodeIdOpt = Some(publicPeer.info.nodeId)
         log.info(s"PLGN PHC, HostedSync, with peer=${publicPeer.info.nodeId}")
         publicPeer sendHostedChannelMsg QueryPublicHostedChannels(kit.nodeParams.chainHash)
@@ -180,6 +176,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
     // LISTENING TO GOSSIP
 
     case Event(msg: UnknownMessageReceived, data: OperationalData) if gossipProcessor.tagsOfInterest.contains(msg.message.tag) =>
+      // This is a remote announce or update which we have received from remote peer
       stay using gossipProcessor.process(msg.nodeId, msg.message, data)
 
     case Event(msg: UnknownMessage, data: OperationalData) if gossipProcessor.tagsOfInterest.contains(msg.tag) =>
@@ -195,17 +192,19 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
   onTransition {
     case WAIT_FOR_ROUTER_DATA -> WAIT_FOR_PHC_SYNC =>
       context.system.eventStream.unsubscribe(channel = classOf[SyncProgress], subscriber = self)
-      // We always ask for full sync on startup, keep asking frequently if no PHC peer is connected yet
+      // On getting router data for the first time we schedule spam cleanup and subsequent router data requests
       startTimerWithFixedDelay(HostedSync.TickClearIpAntiSpam.label, HostedSync.TickClearIpAntiSpam, 1.minute)
       startTimerWithFixedDelay(RefreshRouterData.label, RefreshRouterData, 10.minutes)
+      // We always ask for full sync on startup
       self ! SyncFromPHCPeers
 
     case _ -> WAIT_FOR_PHC_SYNC =>
-      // PHC sync has been taking too long, try again with hopefully another PHC peer
+      // SyncFromPHCPeers -> DOING_PHC_SYNC (timer becomes rare) | WAIT_FOR_PHC_SYNC (timer becomes frequent)
+      // DOING_PHC_SYNC -> WAIT_FOR_PHC_SYNC (timer becomes frequent) | OPERATIONAL (timer becomes rare)
       startTimerWithFixedDelay(SyncFromPHCPeers.label, SyncFromPHCPeers, 2.minutes)
 
     case WAIT_FOR_PHC_SYNC -> _ =>
-      // Once PHC sync is started we schedule a less frequent periodic re-sync (timer is restarted)
+      // Once PHC sync is started we schedule a less frequent periodic re-sync (frequent timer gets replaced)
       startTimerWithFixedDelay(SyncFromPHCPeers.label, SyncFromPHCPeers, PHC.tickRequestFullSyncThreshold)
   }
 
@@ -214,32 +213,6 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
   private def randomPublicPeers(data: OperationalData): Seq[PeerConnectedWrap] = Random shuffle {
     HC.remoteNode2Connection.values.toList.filter(wrap => data.normalGraph.getIncomingEdgesOf(wrap.info.nodeId).nonEmpty)
   }
-
-  private def isUpdateAcceptable(update: ChannelUpdate, data: OperationalData): Boolean =
-    data.phcNetwork.channels.get(update.shortChannelId) match {
-      case Some(phc) if data.tooFewNormalChans(phc.channelAnnounce.nodeId1, phc.channelAnnounce.nodeId2, phcConfig).isDefined =>
-        log.info(s"PLGN PHC, gossip update fail: too few normal channels, msg=$update")
-        false
-
-      case _ if update.htlcMaximumMsat.forall(_ > phcConfig.maxCapacity) =>
-        log.info(s"PLGN PHC, gossip update fail: capacity is above max, msg=$update")
-        false
-
-      case _ if update.htlcMaximumMsat.forall(_ < phcConfig.minCapacity) =>
-        log.info(s"PLGN PHC, gossip update fail: capacity is below min, msg=$update")
-        false
-
-      case Some(phc) if !phc.isUpdateFresh(update) =>
-        log.info(s"PLGN PHC, gossip update fail: not fresh, msg=$update")
-        false
-
-      case Some(phc) if !phc.verifySig(update) =>
-        log.info(s"PLGN PHC, gossip update fail: wrong signature, msg=$update")
-        false
-
-      case None => false
-      case _ => true
-    }
 
   private def tryPersist(phcNetwork: PHCNetwork) = Try {
     Blocking.txWrite(DBIO.sequence(phcNetwork.unsaved.orderedMessages.map {
@@ -270,6 +243,14 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
     case _ => log.info(s"PLGN PHC, TickSendGossip, success, ${data.phcGossip.asString}")
   }
 
+  private def broadcastSync(data: OperationalData, wrap: PeerConnectedWrap): Unit = Future {
+    data.phcNetwork.channels.values.flatMap(_.orderedMessages).foreach(wrap.sendUnknownMsg)
+    wrap sendHostedChannelMsg ReplyPublicHostedChannelsEnd(kit.nodeParams.chainHash)
+  } onComplete {
+    case Failure(err) => log.info(s"PLGN PHC, SendSyncTo, fail, peer=${wrap.info.nodeId} error=${err.getMessage}")
+    case _ => log.info(s"PLGN PHC, SendSyncTo, success, peer=${wrap.info.nodeId}")
+  }
+
   private def tryPersistLog(phcNetwork: PHCNetwork): Unit = tryPersist(phcNetwork) match {
     case Failure(error) => log.info(s"PLGN PHC, TickSendGossip, db fail=${error.getMessage}")
     case Success(adds) => log.info(s"PLGN PHC, TickSendGossip, db adds=${adds.sum}")
@@ -285,7 +266,34 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
       data.tooFewNormalChans(ann.nodeId1, ann.nodeId2, phcConfig).isEmpty &&
         data.phcNetwork.isAnnounceAcceptable(ann)
 
+    def isUpdateAcceptable(update: ChannelUpdate, data: OperationalData): Boolean =
+      data.phcNetwork.channels.get(update.shortChannelId) match {
+        case Some(phc) if data.tooFewNormalChans(phc.channelAnnounce.nodeId1, phc.channelAnnounce.nodeId2, phcConfig).isDefined =>
+          log.info(s"PLGN PHC, gossip update fail: too few normal channels, msg=$update")
+          false
+
+        case _ if update.htlcMaximumMsat.forall(_ > phcConfig.maxCapacity) =>
+          log.info(s"PLGN PHC, gossip update fail: capacity is above max, msg=$update")
+          false
+
+        case _ if update.htlcMaximumMsat.forall(_ < phcConfig.minCapacity) =>
+          log.info(s"PLGN PHC, gossip update fail: capacity is below min, msg=$update")
+          false
+
+        case Some(phc) if !phc.isUpdateFresh(update) =>
+          log.info(s"PLGN PHC, gossip update fail: not fresh, msg=$update")
+          false
+
+        case Some(phc) if !phc.verifySig(update) =>
+          log.info(s"PLGN PHC, gossip update fail: wrong signature, msg=$update")
+          false
+
+        case None => false
+        case _ => true
+      }
+
     def process(fromNodeId: PublicKey, receivedMessage: UnknownMessage, data: OperationalData): OperationalData =
+      // Order matters here: first we check if this is an update for an existing channel, then try a new one
       Codecs.decodeAnnounceMessage(receivedMessage) match {
         case Attempt.Successful(msg: ChannelAnnouncement) if baseCheck(msg, data) && data.phcNetwork.channels.contains(msg.shortChannelId) =>
           // This is an update of an already existing PHC because it's contained in channels map
