@@ -210,8 +210,9 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
 
   initialize()
 
-  private def randomPublicPeers(data: OperationalData): Seq[PeerConnectedWrap] = Random shuffle {
-    HC.remoteNode2Connection.values.toList.filter(wrap => data.normalGraph.getIncomingEdgesOf(wrap.info.nodeId).nonEmpty)
+  private def randomPublicPeers(data: OperationalData): Seq[PeerConnectedWrap] = {
+    val PHCNodes = HC.remoteNode2Connection.values.filter(wrap => data.tooFewNormalChans(wrap.info.nodeId, phcConfig).isEmpty)
+    Random.shuffle(PHCNodes.toList)
   }
 
   private def tryPersist(phcNetwork: PHCNetwork) = Try {
@@ -262,57 +263,57 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
     def processUpdate(update: ChannelUpdate, data: OperationalData, seenFrom: PublicKey): OperationalData
     val tagsOfInterest: Set[Int]
 
-    def baseCheck(ann: ChannelAnnouncement, data: OperationalData): Boolean =
-      data.tooFewNormalChans(ann.nodeId1, ann.nodeId2, phcConfig).isEmpty &&
-        data.phcNetwork.isAnnounceAcceptable(ann)
+    def baseCheck(ann: ChannelAnnouncement, data: OperationalData): Boolean = {
+      val okNormalChans = data.tooFewNormalChans(ann.nodeId1, ann.nodeId2, phcConfig).isEmpty
+      okNormalChans && data.phcNetwork.isAnnounceAcceptable(ann)
+    }
 
-    def isUpdateAcceptable(update: ChannelUpdate, data: OperationalData): Boolean =
-      data.phcNetwork.channels.get(update.shortChannelId) match {
-        case Some(phc) if data.tooFewNormalChans(phc.channelAnnounce.nodeId1, phc.channelAnnounce.nodeId2, phcConfig).isDefined =>
-          log.info(s"PLGN PHC, gossip update fail: too few normal channels, msg=$update")
-          false
+    def isUpdateAcceptable(update: ChannelUpdate, data: OperationalData): Boolean = data.phcNetwork.channels.get(update.shortChannelId) match {
+      case Some(pubHostedChan) if data.tooFewNormalChans(pubHostedChan.channelAnnounce.nodeId1, pubHostedChan.channelAnnounce.nodeId2, phcConfig).isDefined =>
+        log.info(s"PLGN PHC, gossip update fail: too few normal channels, msg=$update")
+        false
 
-        case _ if update.htlcMaximumMsat.forall(_ > phcConfig.maxCapacity) =>
-          log.info(s"PLGN PHC, gossip update fail: capacity is above max, msg=$update")
-          false
+      case _ if update.htlcMaximumMsat.forall(_ > phcConfig.maxCapacity) =>
+        log.info(s"PLGN PHC, gossip update fail: capacity is above max, msg=$update")
+        false
 
-        case _ if update.htlcMaximumMsat.forall(_ < phcConfig.minCapacity) =>
-          log.info(s"PLGN PHC, gossip update fail: capacity is below min, msg=$update")
-          false
+      case _ if update.htlcMaximumMsat.forall(_ < phcConfig.minCapacity) =>
+        log.info(s"PLGN PHC, gossip update fail: capacity is below min, msg=$update")
+        false
 
-        case Some(phc) if !phc.isUpdateFresh(update) =>
-          log.info(s"PLGN PHC, gossip update fail: not fresh, msg=$update")
-          false
+      case Some(pubHostedChan) if !pubHostedChan.isUpdateFresh(update) =>
+        log.info(s"PLGN PHC, gossip update fail: not fresh, msg=$update")
+        false
 
-        case Some(phc) if !phc.verifySig(update) =>
-          log.info(s"PLGN PHC, gossip update fail: wrong signature, msg=$update")
-          false
+      case Some(pubHostedChan) if !pubHostedChan.verifySig(update) =>
+        log.info(s"PLGN PHC, gossip update fail: wrong signature, msg=$update")
+        false
 
-        case None => false
-        case _ => true
-      }
+      case None => false
 
-    def process(fromNodeId: PublicKey, receivedMessage: UnknownMessage, data: OperationalData): OperationalData =
-      // Order matters here: first we check if this is an update for an existing channel, then try a new one
-      Codecs.decodeAnnounceMessage(receivedMessage) match {
-        case Attempt.Successful(msg: ChannelAnnouncement) if baseCheck(msg, data) && data.phcNetwork.channels.contains(msg.shortChannelId) =>
-          // This is an update of an already existing PHC because it's contained in channels map
-          processKnownAnnounce(msg, data, fromNodeId)
+      case _ => true
+    }
 
-        case Attempt.Successful(msg: ChannelAnnouncement) if baseCheck(msg, data) && data.phcNetwork.tooManyPHCs(msg.nodeId1, msg.nodeId2, phcConfig).isEmpty =>
-          // This is a new PHC so we must check if any of related nodes already has too many PHCs before proceeding
-          processNewAnnounce(msg, data, fromNodeId)
+    // Order matters here: first we check if this is an update for an existing channel, then try a new one
+    def process(fromNodeId: PublicKey, msg: UnknownMessage, data: OperationalData): OperationalData = Codecs.decodeAnnounceMessage(msg) match {
+      case Attempt.Successful(message: ChannelAnnouncement) if baseCheck(message, data) && data.phcNetwork.channels.contains(message.shortChannelId) =>
+        // This is an update of an already existing PHC because it's contained in channels map
+        processKnownAnnounce(message, data, fromNodeId)
 
-        case Attempt.Successful(msg: ChannelUpdate) if isUpdateAcceptable(msg, data) =>
-          processUpdate(msg, data, fromNodeId)
+      case Attempt.Successful(message: ChannelAnnouncement) if baseCheck(message, data) && data.phcNetwork.tooManyPHCs(message.nodeId1, message.nodeId2, phcConfig).isEmpty =>
+        // This is a new PHC so we must check if any of related nodes already has too many PHCs before proceeding
+        processNewAnnounce(message, data, fromNodeId)
 
-        case Attempt.Successful(something) =>
-          log.info(s"PLGN PHC, HostedSync, unacceptable message=$something, peer=$fromNodeId")
-          data
+      case Attempt.Successful(msg: ChannelUpdate) if isUpdateAcceptable(msg, data) =>
+        processUpdate(msg, data, fromNodeId)
 
-        case _: Attempt.Failure =>
-          log.info(s"PLGN PHC, HostedSync, parsing fail, peer=$fromNodeId")
-          data
-      }
+      case Attempt.Successful(something) =>
+        log.info(s"PLGN PHC, HostedSync, unacceptable message=$something, peer=$fromNodeId")
+        data
+
+      case _: Attempt.Failure =>
+        log.info(s"PLGN PHC, HostedSync, parsing fail, peer=$fromNodeId")
+        data
+    }
   }
 }
