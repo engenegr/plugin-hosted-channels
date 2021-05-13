@@ -47,7 +47,7 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
 
   val findByRemoteId: Route = postRequest("findbyremoteid") { implicit t =>
     formFields(nodeIdFormParam) { remoteNodeId =>
-      complete((worker ? HC_CMD_GET_INFO(remoteNodeId)).mapTo[HCCommandResponse].map(serialization.write))
+      complete((worker ? HC_CMD_GET_INFO(remoteNodeId)).mapTo[HCCommandResponse])
     }
   }
 
