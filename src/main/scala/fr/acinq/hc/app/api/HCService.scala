@@ -13,9 +13,7 @@ import fr.acinq.eclair.wire.internal.channel.version2.HostedChannelCodecs
 import fr.acinq.eclair.blockchain.bitcoind.BitcoinCoreWallet
 import scala.concurrent.ExecutionContext.Implicits.global
 import fr.acinq.eclair.api.AbstractService
-import fr.acinq.hc.app.db.HostedChannelsDb
 import fr.acinq.eclair.router.Router
-import fr.acinq.eclair.crypto.Mac32
 import scala.concurrent.Future
 import scodec.bits.ByteVector
 import fr.acinq.hc.app.Vals
@@ -23,7 +21,7 @@ import akka.util.Timeout
 import akka.pattern.ask
 
 
-class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: ActorRef, vals: Vals) extends AbstractService {
+class HCService(kit: Kit, worker: ActorRef, sync: ActorRef, vals: Vals) extends AbstractService {
 
   import fr.acinq.eclair.api.serde.JsonSupport.{formats, marshaller, serialization}
 
@@ -51,16 +49,6 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
   val findByRemoteId: Route = postRequest("findbyremoteid") { implicit t =>
     formFields(nodeIdFormParam) { remoteNodeId =>
       completeCommand(HC_CMD_GET_INFO(remoteNodeId))
-    }
-  }
-
-  val findBySecret: Route = postRequest("findbysecret") { implicit t =>
-    formFields("plainUserSecret") { secret =>
-      val trimmedUserSecret = ByteVector.view(secret.toLowerCase.trim getBytes "UTF-8")
-      channelsDb.getChannelBySecret(Mac32.hmac256(trimmedUserSecret, kit.nodeParams.nodeId.value)) match {
-        case Some(data) => completeCommand(HC_CMD_GET_INFO(data.commitments.remoteNodeId))
-        case None => complete(s"Could not find and HC with secret: $secret")
-      }
     }
   }
 
@@ -142,9 +130,8 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
   }
 
   val compoundRoute: Route = securedHandler {
-    invoke ~ externalFulfill ~ findByRemoteId ~ findBySecret ~ overridePropose ~
-      overrideAccept ~ makePublic ~ makePrivate ~ resize ~ suspend ~ hide ~ verifyRemoteState ~
-      restoreFromRemoteState ~ broadcastPreimages ~ phcNodes
+    invoke ~ externalFulfill ~ findByRemoteId  ~ overridePropose ~ overrideAccept ~ makePublic ~ makePrivate ~
+      resize ~ suspend ~ hide ~ verifyRemoteState ~ restoreFromRemoteState ~ broadcastPreimages ~ phcNodes
   }
 
   private def completeCommand(cmd: HasRemoteNodeIdHostedCommand)(implicit timeout: Timeout) = {

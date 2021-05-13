@@ -31,7 +31,6 @@ and COMMAND is one of the available commands:
   - invoke                  --nodeId --refundAddress --secret
   - externalfulfill         --nodeId --htlcId --paymentPreimage
   - findbyremoteid          --nodeId
-  - findbysecret            --plainUserSecret
   - overridepropose         --nodeId --newLocalBalanceMsat
   - overrideaccept          --nodeId
   - makepublic              --nodeId

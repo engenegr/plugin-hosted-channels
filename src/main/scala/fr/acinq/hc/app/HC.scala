@@ -93,7 +93,8 @@ class HC extends Plugin {
     val preimageRef = kit.system actorOf Props(classOf[PreimageBroadcastCatcher], new PreimagesDb(Config.db), Config.vals)
     val syncRef = kit.system actorOf Props(classOf[HostedSync], kit, new HostedUpdatesDb(Config.db), Config.vals.phcConfig)
     val workerRef = kit.system actorOf Props(classOf[Worker], kit, syncRef, preimageRef, channelsDb, Config.vals)
-    val hcServiceRoute = new HCService(kit, channelsDb, workerRef, syncRef, Config.vals).compoundRoute
+
+    val hcServiceRoute = new HCService(kit, workerRef, syncRef, Config.vals).compoundRoute
     val api = Http.apply.newServerAt(Config.vals.apiParams.bindingIp, Config.vals.apiParams.port)
     api.bindFlow(hcServiceRoute)
   }
