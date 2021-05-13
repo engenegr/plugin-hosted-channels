@@ -7,7 +7,7 @@ import fr.acinq.eclair.wire.protocol._
 import fr.acinq.eclair.wire.protocol.CommonCodecs._
 import fr.acinq.eclair.wire.protocol.LightningMessageCodecs._
 import fr.acinq.eclair.wire.internal.channel.version2.ChannelCodecs2.Codecs.channelVersionCodec
-import scodec.{Attempt, Codec, Err}
+import scodec.{Attempt, Err}
 
 
 object HCProtocolCodecs {

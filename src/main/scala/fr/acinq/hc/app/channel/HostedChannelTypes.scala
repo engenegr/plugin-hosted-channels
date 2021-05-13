@@ -4,6 +4,7 @@ import fr.acinq.eclair._
 import fr.acinq.hc.app._
 import fr.acinq.eclair.channel._
 import com.softwaremill.quicklens._
+import fr.acinq.eclair.wire.protocol._
 import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
 import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc}
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, Satoshi}
@@ -11,7 +12,6 @@ import fr.acinq.eclair.channel.ChannelVersion
 import fr.acinq.eclair.payment.OutgoingPacket
 import fr.acinq.bitcoin.SatoshiLong
 import scodec.bits.ByteVector
-import fr.acinq.eclair.wire.protocol._
 
 
 case class RemoteHostedStateResult(state: HostedState, remoteNodeId: Option[PublicKey], isLocalSigValid: Boolean)
