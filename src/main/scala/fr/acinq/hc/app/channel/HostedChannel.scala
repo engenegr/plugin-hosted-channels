@@ -110,16 +110,13 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       else stay using HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE(remoteInvoke) SendingHosted chanParams.initMsg
 
     case Event(hostInit: InitHostedChannel, data: HC_DATA_CLIENT_WAIT_HOST_INIT) =>
+      val fullySignedLCSS = LastCrossSignedState(isHost = false, data.refundScriptPubKey, initHostedChannel = hostInit, currentBlockDay,
+        localBalanceMsat = hostInit.initialClientBalanceMsat, remoteBalanceMsat = hostInit.channelCapacityMsat - hostInit.initialClientBalanceMsat, localUpdates = 0L, remoteUpdates = 0L,
+        incomingHtlcs = Nil, outgoingHtlcs = Nil, localSigOfRemote = ByteVector64.Zeroes, remoteSigOfLocal = ByteVector64.Zeroes).withLocalSigOfRemote(kit.nodeParams.privateKey)
+
       if (hostInit.initialClientBalanceMsat > vals.hcDefaultParams.initMsg.channelCapacityMsat) stop(FSM.Normal) SendingHasChannelId wire.Error(channelId, "Proposed init balance for us is larger than capacity")
       else if (hostInit.channelCapacityMsat < vals.hcDefaultParams.initMsg.channelCapacityMsat) stop(FSM.Normal) SendingHasChannelId wire.Error(channelId, "Proposed channel capacity is too low")
-      else {
-        val fullySignedLCSS = LastCrossSignedState(isHost = false, data.refundScriptPubKey, initHostedChannel = hostInit, currentBlockDay,
-          localBalanceMsat = hostInit.initialClientBalanceMsat, remoteBalanceMsat = hostInit.channelCapacityMsat - hostInit.initialClientBalanceMsat, localUpdates = 0L, remoteUpdates = 0L,
-          incomingHtlcs = Nil, outgoingHtlcs = Nil, localSigOfRemote = ByteVector64.Zeroes, remoteSigOfLocal = ByteVector64.Zeroes).withLocalSigOfRemote(kit.nodeParams.privateKey)
-
-        val data1 = HC_DATA_CLIENT_WAIT_HOST_STATE_UPDATE(restoreEmptyData(fullySignedLCSS).commitments)
-        stay using data1 SendingHosted data1.commitments.lastCrossSignedState.stateUpdate
-      }
+      else stay using HC_DATA_CLIENT_WAIT_HOST_STATE_UPDATE(restoreEmptyData(fullySignedLCSS).commitments) SendingHosted fullySignedLCSS.stateUpdate
 
     case Event(clientSU: StateUpdate, data: HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE) =>
       val fullySignedLCSS = LastCrossSignedState(isHost = true, data.invoke.refundScriptPubKey, initHostedChannel = chanParams.initMsg, clientSU.blockDay,
@@ -137,19 +134,21 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
       if (isBlockDayWrong) stop(FSM.Normal) SendingHasChannelId wire.Error(channelId, ErrorCodes.ERR_HOSTED_WRONG_BLOCKDAY)
       else if (!isLocalSigOk) stop(FSM.Normal) SendingHasChannelId wire.Error(channelId, ErrorCodes.ERR_HOSTED_WRONG_REMOTE_SIG)
-      else dh.execute(data1) match {
-        case Failure(DuplicateShortId) =>
-          log.info(s"PLGN PHC, DuplicateShortId when storing new HC, peer=$remoteNodeId")
-          stop(FSM.Normal) SendingHasChannelId wire.Error(channelId, ErrorCodes.ERR_HOSTED_CHANNEL_DENIED)
+      else {
+        dh.execute(data1) match {
+          case Failure(DuplicateShortId) =>
+            log.info(s"PLGN PHC, DuplicateShortId when storing new HC, peer=$remoteNodeId")
+            stop(FSM.Normal) SendingHasChannelId wire.Error(channelId, ErrorCodes.ERR_HOSTED_CHANNEL_DENIED)
 
-        case Success(true) =>
-          log.info(s"PLGN PHC, stored new HC with peer=$remoteNodeId")
-          channelsDb.updateSecretById(remoteNodeId, data.invoke.finalSecret)
-          goto(NORMAL) using data1 SendingHosted fullySignedLCSS.stateUpdate
+          case Success(true) =>
+            log.info(s"PLGN PHC, stored new HC with peer=$remoteNodeId")
+            channelsDb.updateSecretById(remoteNodeId, data.invoke.finalSecret)
+            goto(NORMAL) using data1 SendingHosted fullySignedLCSS.stateUpdate
 
-        case _ =>
-          log.info(s"PLGN PHC, database error when storing new HC, peer=$remoteNodeId")
-          stop(FSM.Normal) SendingHasChannelId wire.Error(channelId, ErrorCodes.ERR_HOSTED_CHANNEL_DENIED)
+          case _ =>
+            log.info(s"PLGN PHC, database error when trying to store new HC, peer=$remoteNodeId")
+            stop(FSM.Normal) SendingHasChannelId wire.Error(channelId, ErrorCodes.ERR_HOSTED_CHANNEL_DENIED)
+        }
       }
 
     case Event(hostSU: StateUpdate, data: HC_DATA_CLIENT_WAIT_HOST_STATE_UPDATE) =>
@@ -158,17 +157,12 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       val isLocalUpdatesMismatch = data.commitments.lastCrossSignedState.localUpdates != hostSU.remoteUpdates
       val isLocalSigOk = fullySignedLCSS.verifyRemoteSig(remoteNodeId)
       val isBlockDayWrong = isBlockDayOutOfSync(hostSU)
-      val data1 = restoreEmptyData(fullySignedLCSS)
 
       if (isBlockDayWrong) stop(FSM.Normal) SendingHasChannelId wire.Error(channelId, ErrorCodes.ERR_HOSTED_WRONG_BLOCKDAY)
       else if (!isLocalSigOk) stop(FSM.Normal) SendingHasChannelId wire.Error(channelId, ErrorCodes.ERR_HOSTED_WRONG_REMOTE_SIG)
       else if (isRemoteUpdatesMismatch) stop(FSM.Normal) SendingHasChannelId wire.Error(channelId, "Proposed remote/local update number mismatch")
       else if (isLocalUpdatesMismatch) stop(FSM.Normal) SendingHasChannelId wire.Error(channelId, "Proposed local/remote update number mismatch")
-      else {
-        // Client HC is established, add to reconnect list
-        HC.clientChannelRemoteNodeIds += remoteNodeId
-        goto(NORMAL) StoringAndUsing data1
-      }
+      else goto(NORMAL) StoringAndUsing restoreEmptyData(fullySignedLCSS)
 
     // MISSING CHANNEL
 
@@ -623,8 +617,8 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
   }
 
   def failTimedoutOutgoing(localAdds: Set[wire.UpdateAddHtlc], data: HC_DATA_ESTABLISHED): Unit = localAdds foreach { add =>
-    val reasonChain = HtlcResult OnChainFail HtlcsTimedoutDownstream(htlcs = Set(add), channelId = channelId)
     log.info(s"PLGN PHC, failing timed out outgoing htlc, hash=${add.paymentHash}, peer=$remoteNodeId")
+    val reasonChain = HtlcResult OnChainFail HtlcOverriddenByLocalCommit(channelId, htlc = add)
     kit.relayer ! RES_ADD_SETTLED(data.commitments.originChannels(add.id), add, reasonChain)
   }
 

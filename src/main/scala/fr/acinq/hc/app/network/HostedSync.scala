@@ -49,6 +49,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
 
   private val syncProcessor = new AnnouncementMessageProcessor {
     override val tagsOfInterest: Set[Int] = Set(PHC_ANNOUNCE_SYNC_TAG, PHC_UPDATE_SYNC_TAG)
+
     override def processNewAnnounce(announce: ChannelAnnouncement, data: OperationalData, seenFrom: PublicKey): OperationalData =
       data.copy(phcNetwork = data.phcNetwork addNewAnnounce announce)
 
@@ -61,6 +62,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
 
   private val gossipProcessor = new AnnouncementMessageProcessor {
     override val tagsOfInterest: Set[Int] = Set(PHC_ANNOUNCE_GOSSIP_TAG, PHC_UPDATE_GOSSIP_TAG)
+
     override def processNewAnnounce(announce: ChannelAnnouncement, data: OperationalData, seenFrom: PublicKey): OperationalData =
       data.copy(phcGossip = data.phcGossip.addAnnounce(announce, seenFrom), phcNetwork = data.phcNetwork addNewAnnounce announce)
 
@@ -289,9 +291,11 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
         log.info(s"PLGN PHC, gossip update fail: wrong signature, msg=$update")
         false
 
-      case None => false
+      case None =>
+        false
 
-      case _ => true
+      case _ =>
+        true
     }
 
     // Order matters here: first we check if this is an update for an existing channel, then try a new one

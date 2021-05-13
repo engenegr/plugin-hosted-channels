@@ -78,8 +78,6 @@ object HC {
   val chanIdMessageTags: Set[Int] = Set(HC_UPDATE_ADD_HTLC_TAG, HC_UPDATE_FULFILL_HTLC_TAG, HC_UPDATE_FAIL_HTLC_TAG, HC_UPDATE_FAIL_MALFORMED_HTLC_TAG, HC_ERROR_TAG)
 
   val remoteNode2Connection: mutable.Map[PublicKey, PeerConnectedWrap] = TMap.empty[PublicKey, PeerConnectedWrap].single
-
-  var clientChannelRemoteNodeIds: Set[PublicKey] = Set.empty
 }
 
 class HC extends Plugin {
@@ -95,20 +93,14 @@ class HC extends Plugin {
     val preimageRef = kit.system actorOf Props(classOf[PreimageBroadcastCatcher], new PreimagesDb(Config.db), Config.vals)
     val syncRef = kit.system actorOf Props(classOf[HostedSync], kit, new HostedUpdatesDb(Config.db), Config.vals.phcConfig)
     val workerRef = kit.system actorOf Props(classOf[Worker], kit, syncRef, preimageRef, channelsDb, Config.vals)
-
-    val clientHCs = channelsDb.listClientChannels
     val hcServiceRoute = new HCService(kit, channelsDb, workerRef, syncRef, Config.vals).finalRoute
-    require(clientHCs.forall(_.commitments.localNodeId == kit.nodeParams.nodeId), "PLGN PHC, localNodeId mismatch")
-    Http.apply.newServerAt(Config.vals.apiParams.bindingIp, Config.vals.apiParams.port).bindFlow(hcServiceRoute)
-    HC.clientChannelRemoteNodeIds = clientHCs.map(_.commitments.remoteNodeId).toSet
-    workerRef ! Worker.ClientChannels(clientHCs)
+    val api = Http.apply.newServerAt(Config.vals.apiParams.bindingIp, Config.vals.apiParams.port)
+    api.bindFlow(hcServiceRoute)
   }
 
-  override def params: PluginParams = new CustomFeaturePlugin with ConnectionControlPlugin with CustomCommitmentsPlugin {
+  override def params: PluginParams = new CustomFeaturePlugin with CustomCommitmentsPlugin {
 
     override def messageTags: Set[Int] = hostedMessageTags ++ preimageQueryTags ++ announceTags ++ chanIdMessageTags
-
-    override def forceReconnect(nodeId: PublicKey): Boolean = HC.clientChannelRemoteNodeIds.contains(nodeId)
 
     override def name: String = "Hosted channels"
 
