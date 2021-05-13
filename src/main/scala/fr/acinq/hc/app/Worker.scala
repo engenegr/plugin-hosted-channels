@@ -127,6 +127,7 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
 
   def reconnect(remoteHostNodeIds: PublicKey*): Unit = {
     val routerData = (kit.router ? Router.GetRouterData).mapTo[Router.Data]
+    logger.info(s"PLGN PHC, reconnecting ${remoteHostNodeIds mkString ", "} hosts")
 
     for {
       data <- routerData
