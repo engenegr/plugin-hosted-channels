@@ -118,8 +118,16 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
     case TickRemoveIdleChannels => inMemoryHostedChannels.values.forEach(_ ! TickRemoveIdleChannels)
 
     case SyncProgress(1D) =>
-      val clientChannels: Seq[HC_DATA_ESTABLISHED] = channelsDb.listClientChannels
+      val clientChannels = channelsDb.listClientChannels
+      val nodeIdCheck = clientChannels.forall(_.commitments.localNodeId == kit.nodeParams.nodeId)
       val clientRemoteNodeIds = clientChannels.map(_.commitments.remoteNodeId)
+
+      if (!nodeIdCheck) {
+        // Our nodeId has changed, this is very bad
+        logger.info("PLGN PHC, NODE CHECK FAILED")
+        System.exit(0)
+      }
+
       clientChannelRemoteNodeIds ++= clientRemoteNodeIds
       clientChannels.foreach(spawnPreparedChannel)
       reconnect(clientRemoteNodeIds:_*)
