@@ -2,16 +2,17 @@ package fr.acinq.hc.app
 
 import fr.acinq.eclair._
 import com.softwaremill.quicklens._
+import scala.collection.parallel.CollectionConverters._
+import fr.acinq.hc.app.Tools.{DuplicateHandler, DuplicateShortId}
 import fr.acinq.bitcoin.{ByteVector32, Satoshi}
-import fr.acinq.eclair.ShortChannelId
+import scala.util.{Failure, Random}
+
+import fr.acinq.hc.app.channel.HC_DATA_ESTABLISHED
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.transactions.CommitmentSpec
-import fr.acinq.hc.app.Tools.{DuplicateHandler, DuplicateShortId}
-import fr.acinq.hc.app.channel.HC_DATA_ESTABLISHED
 import fr.acinq.hc.app.db.HostedChannelsDb
 import org.scalatest.funsuite.AnyFunSuite
-
-import scala.util.{Failure, Random}
+import fr.acinq.eclair.ShortChannelId
 
 
 class HostedChannelsDbSpec extends AnyFunSuite {
@@ -107,13 +108,13 @@ class HostedChannelsDbSpec extends AnyFunSuite {
     {
       // Adding
       val hdcs = for (n <- 0 to 1000) yield data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(n)), commitments = hdc.copy(remoteNodeId = keys(n), channelId = randomBytes32))
-      hdcs.foreach(cdb.updateOrAddNewChannel)
+      hdcs.par.foreach(cdb.updateOrAddNewChannel)
     }
 
     {
       // Updating
       val hdcs = for (n <- 0 to 1000) yield data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(n)), commitments = hdc.copy(remoteNodeId = keys(n), channelId = randomBytes32))
-      hdcs.foreach(cdb.updateOrAddNewChannel)
+      hdcs.par.foreach(cdb.updateOrAddNewChannel)
     }
 
     {
