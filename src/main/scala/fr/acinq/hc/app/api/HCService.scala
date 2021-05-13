@@ -19,6 +19,7 @@ import fr.acinq.eclair.crypto.Mac32
 import scala.concurrent.Future
 import scodec.bits.ByteVector
 import fr.acinq.hc.app.Vals
+import akka.util.Timeout
 import akka.pattern.ask
 
 
@@ -35,19 +36,19 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
   val invoke: Route = postRequest("invoke") { implicit t =>
     formFields(nodeIdFormParam, "refundAddress", "secret".as[ByteVector](binaryDataUnmarshaller)) { case (remoteNodeId, refundAddress, secret) =>
       val refundPubkeyScript = Script.write(fr.acinq.eclair.addressToPublicKeyScript(refundAddress, kit.nodeParams.chainHash))
-      complete(worker ? HC_CMD_LOCAL_INVOKE(remoteNodeId, refundPubkeyScript, secret))
+      completeCommand(HC_CMD_LOCAL_INVOKE(remoteNodeId, refundPubkeyScript, secret))
     }
   }
 
   val externalFulfill: Route = postRequest("externalfulfill") { implicit t =>
     formFields(nodeIdFormParam, "htlcId".as[Long], "paymentPreimage".as[ByteVector32](sha256HashUnmarshaller)) { case (remoteNodeId, htlcId, paymentPreimage) =>
-      complete(worker ? HC_CMD_EXTERNAL_FULFILL(remoteNodeId, htlcId, paymentPreimage))
+      completeCommand(HC_CMD_EXTERNAL_FULFILL(remoteNodeId, htlcId, paymentPreimage))
     }
   }
 
   val findByRemoteId: Route = postRequest("findbyremoteid") { implicit t =>
     formFields(nodeIdFormParam) { remoteNodeId =>
-      complete((worker ? HC_CMD_GET_INFO(remoteNodeId)).mapTo[HCCommandResponse])
+      completeCommand(HC_CMD_GET_INFO(remoteNodeId))
     }
   }
 
@@ -55,7 +56,7 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
     formFields("plainUserSecret") { secret =>
       val trimmedUserSecret = ByteVector.view(secret.toLowerCase.trim getBytes "UTF-8")
       channelsDb.getChannelBySecret(Mac32.hmac256(trimmedUserSecret, kit.nodeParams.nodeId.value)) match {
-        case Some(data) => complete(worker ? HC_CMD_GET_INFO(data.commitments.remoteNodeId))
+        case Some(data) => completeCommand(HC_CMD_GET_INFO(data.commitments.remoteNodeId))
         case None => complete(s"Could not find and HC with secret: $secret")
       }
     }
@@ -63,43 +64,43 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
 
   val overridePropose: Route = postRequest("overridepropose") { implicit t =>
     formFields(nodeIdFormParam, "newLocalBalanceMsat".as[MilliSatoshi]) { case (remoteNodeId, newLocalBalance) =>
-      complete(worker ? HC_CMD_OVERRIDE_PROPOSE(remoteNodeId, newLocalBalance))
+      completeCommand(HC_CMD_OVERRIDE_PROPOSE(remoteNodeId, newLocalBalance))
     }
   }
 
   val overrideAccept: Route = postRequest("overrideaccept") { implicit t =>
     formFields(nodeIdFormParam) { remoteNodeId =>
-      complete(worker ? HC_CMD_OVERRIDE_ACCEPT(remoteNodeId))
+      completeCommand(HC_CMD_OVERRIDE_ACCEPT(remoteNodeId))
     }
   }
 
   val makePublic: Route = postRequest("makepublic") { implicit t =>
     formFields(nodeIdFormParam) { remoteNodeId =>
-      complete(worker ? HC_CMD_PUBLIC(remoteNodeId))
+      completeCommand(HC_CMD_PUBLIC(remoteNodeId))
     }
   }
 
   val makePrivate: Route = postRequest("makeprivate") { implicit t =>
     formFields(nodeIdFormParam) { remoteNodeId =>
-      complete(worker ? HC_CMD_PRIVATE(remoteNodeId))
+      completeCommand(HC_CMD_PRIVATE(remoteNodeId))
     }
   }
 
   val resize: Route = postRequest("resize") { implicit t =>
     formFields(nodeIdFormParam, "newCapacitySat".as[Satoshi]) { case (remoteNodeId, newCapacity) =>
-      complete(worker ? HC_CMD_RESIZE(remoteNodeId, newCapacity))
+      completeCommand(HC_CMD_RESIZE(remoteNodeId, newCapacity))
     }
   }
 
   val suspend: Route = postRequest("suspend") { implicit t =>
     formFields(nodeIdFormParam) { remoteNodeId =>
-      complete(worker ? HC_CMD_SUSPEND(remoteNodeId))
+      completeCommand(HC_CMD_SUSPEND(remoteNodeId))
     }
   }
 
   val hide: Route = postRequest("hide") { implicit t =>
     formFields(nodeIdFormParam) { remoteNodeId =>
-      complete(worker ? HC_CMD_HIDE(remoteNodeId))
+      completeCommand(HC_CMD_HIDE(remoteNodeId))
     }
   }
 
@@ -113,7 +114,7 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
     formFields("state".as[ByteVector](binaryDataUnmarshaller)) { state =>
       val RemoteHostedStateResult(remoteState, Some(remoteNodeId), isLocalSigOk) = getHostedStateResult(state)
       require(isLocalSigOk, "Can't proceed: local signature of provided HC state is invalid")
-      complete(worker ? HC_CMD_RESTORE(remoteNodeId, remoteState))
+      completeCommand(HC_CMD_RESTORE(remoteNodeId, remoteState))
     }
   }
 
@@ -137,6 +138,11 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
     invoke ~ externalFulfill ~ findByRemoteId ~ findBySecret ~ overridePropose ~ overrideAccept ~
       makePublic ~ makePrivate ~ resize ~ suspend ~ hide ~ verifyRemoteState ~ restoreFromRemoteState ~
       broadcastPreimages ~ phcNodes
+  }
+
+  private def completeCommand(cmd: HasRemoteNodeIdHostedCommand)(implicit timeout: Timeout) = {
+    val futureResponse = (worker ? cmd).mapTo[HCCommandResponse]
+    complete(futureResponse)
   }
 
   private def sendPreimageBroadcast(feeRatePerKw: FeeratePerKw, preimages: Set[ByteVector32] = Set.empty): Future[ByteVector32] = {
