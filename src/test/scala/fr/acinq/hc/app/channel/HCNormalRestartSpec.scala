@@ -4,7 +4,7 @@ import akka.actor.PoisonPill
 import fr.acinq.eclair._
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.payment.relay.Relayer
-import fr.acinq.eclair.wire.{ChannelUpdate, UpdateAddHtlc, UpdateFulfillHtlc}
+import fr.acinq.eclair.wire.protocol.{ChannelUpdate, UpdateAddHtlc, UpdateFulfillHtlc}
 import slick.jdbc.PostgresProfile.api._
 import fr.acinq.hc.app._
 import fr.acinq.hc.app.db.{Blocking, Channels}
@@ -390,7 +390,7 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
 
     bob ! Worker.HCPeerConnected
     alice ! Worker.HCPeerConnected
-    alice ! bob2alice.expectMsgType[fr.acinq.eclair.wire.Error]
+    alice ! bob2alice.expectMsgType[fr.acinq.eclair.wire.protocol.Error]
     alice ! bob2alice.expectMsgType[UpdateFulfillHtlc]
     bob2alice.expectNoMessage()
     alice2bob.expectNoMessage()

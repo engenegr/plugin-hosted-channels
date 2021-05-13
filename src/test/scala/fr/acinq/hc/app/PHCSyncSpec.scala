@@ -11,11 +11,11 @@ import fr.acinq.eclair.channel.Channel.OutgoingMessage
 import fr.acinq.eclair.io.{ConnectionInfo, PeerConnected, UnknownMessageReceived}
 import fr.acinq.eclair.router.Router.Data
 import fr.acinq.eclair.router.{Announcements, BaseRouterSpec, Router, SyncProgress}
-import fr.acinq.eclair.wire.UnknownMessage
+import fr.acinq.eclair.wire.internal.channel.version2.HCProtocolCodecs
+import fr.acinq.eclair.wire.protocol.UnknownMessage
 import fr.acinq.hc.app.db.HostedUpdatesDb
 import fr.acinq.hc.app.network.HostedSync.{GotAllSyncFrom, SendSyncTo, TickSendGossip}
 import fr.acinq.hc.app.network._
-import fr.acinq.hc.app.wire.Codecs
 
 
 class PHCSyncSpec extends BaseRouterSpec {
@@ -60,9 +60,9 @@ class PHCSyncSpec extends BaseRouterSpec {
     val update1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_a, b, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.minCapacity, enable = true)
     val update2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_b, a, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.minCapacity, enable = true)
 
-    syncActor ! UnknownMessageReceived(null, null, Codecs.toUnknownAnnounceMessage(announce, isGossip = false), null)
-    syncActor ! UnknownMessageReceived(null, null, Codecs.toUnknownAnnounceMessage(update1, isGossip = false), null)
-    syncActor ! UnknownMessageReceived(null, null, Codecs.toUnknownAnnounceMessage(update2, isGossip = false), null)
+    syncActor ! UnknownMessageReceived(null, null, HCProtocolCodecs.toUnknownAnnounceMessage(announce, isGossip = false), null)
+    syncActor ! UnknownMessageReceived(null, null, HCProtocolCodecs.toUnknownAnnounceMessage(update1, isGossip = false), null)
+    syncActor ! UnknownMessageReceived(null, null, HCProtocolCodecs.toUnknownAnnounceMessage(update2, isGossip = false), null)
 
     {
       // Another peer connects and asks for we->them sync
@@ -87,9 +87,9 @@ class PHCSyncSpec extends BaseRouterSpec {
       val update1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_c, a, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.minCapacity, enable = true)
       val update2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_a, c, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.minCapacity, enable = true)
 
-      syncActor ! UnknownMessageReceived(null, secondPublicNode, Codecs.toUnknownAnnounceMessage(announce, isGossip = true), null)
-      syncActor ! UnknownMessageReceived(null, secondPublicNode, Codecs.toUnknownAnnounceMessage(update1, isGossip = true), null)
-      syncActor ! UnknownMessageReceived(null, secondPublicNode, Codecs.toUnknownAnnounceMessage(update2, isGossip = true), null)
+      syncActor ! UnknownMessageReceived(null, secondPublicNode, HCProtocolCodecs.toUnknownAnnounceMessage(announce, isGossip = true), null)
+      syncActor ! UnknownMessageReceived(null, secondPublicNode, HCProtocolCodecs.toUnknownAnnounceMessage(update1, isGossip = true), null)
+      syncActor ! UnknownMessageReceived(null, secondPublicNode, HCProtocolCodecs.toUnknownAnnounceMessage(update2, isGossip = true), null)
     }
 
     {
@@ -100,9 +100,9 @@ class PHCSyncSpec extends BaseRouterSpec {
       val update1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_c, d, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.minCapacity, enable = true)
       val update2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_d, c, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.minCapacity, enable = true)
 
-      syncActor ! UnknownMessageReceived(null, secondPublicNode, Codecs.toUnknownAnnounceMessage(announce, isGossip = true), null)
-      syncActor ! UnknownMessageReceived(null, secondPublicNode, Codecs.toUnknownAnnounceMessage(update1, isGossip = true), null)
-      syncActor ! UnknownMessageReceived(null, secondPublicNode, Codecs.toUnknownAnnounceMessage(update2, isGossip = true), null)
+      syncActor ! UnknownMessageReceived(null, secondPublicNode, HCProtocolCodecs.toUnknownAnnounceMessage(announce, isGossip = true), null)
+      syncActor ! UnknownMessageReceived(null, secondPublicNode, HCProtocolCodecs.toUnknownAnnounceMessage(update1, isGossip = true), null)
+      syncActor ! UnknownMessageReceived(null, secondPublicNode, HCProtocolCodecs.toUnknownAnnounceMessage(update2, isGossip = true), null)
     }
 
     {
@@ -113,9 +113,9 @@ class PHCSyncSpec extends BaseRouterSpec {
       val update1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_a, c, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.minCapacity, enable = true)
       val update2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_c, a, shortId, CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, config.minCapacity, enable = true)
 
-      syncActor ! UnknownMessageReceived(null, secondPublicNode, Codecs.toUnknownAnnounceMessage(announce, isGossip = true), null)
-      syncActor ! UnknownMessageReceived(null, secondPublicNode, Codecs.toUnknownAnnounceMessage(update1, isGossip = true), null)
-      syncActor ! UnknownMessageReceived(null, secondPublicNode, Codecs.toUnknownAnnounceMessage(update2, isGossip = true), null)
+      syncActor ! UnknownMessageReceived(null, secondPublicNode, HCProtocolCodecs.toUnknownAnnounceMessage(announce, isGossip = true), null)
+      syncActor ! UnknownMessageReceived(null, secondPublicNode, HCProtocolCodecs.toUnknownAnnounceMessage(update1, isGossip = true), null)
+      syncActor ! UnknownMessageReceived(null, secondPublicNode, HCProtocolCodecs.toUnknownAnnounceMessage(update2, isGossip = true), null)
     }
 
     {

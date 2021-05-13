@@ -1,15 +1,15 @@
 package fr.acinq.hc.app.channel
 
-import fr.acinq.bitcoin.{ByteVector32, ByteVector64}
 import fr.acinq.eclair._
-import fr.acinq.eclair.blockchain.CurrentBlockCount
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.transactions.DirectedHtlc
-import fr.acinq.eclair.wire.{ChannelUpdate, UpdateFailHtlc, UpdateFulfillHtlc}
-import fr.acinq.hc.app.{StateOverride, HCTestUtils, StateUpdate, Worker, InvokeHostedChannel, LastCrossSignedState}
-import org.scalatest.Outcome
+import fr.acinq.eclair.blockchain.CurrentBlockCount
+import fr.acinq.bitcoin.{ByteVector32, ByteVector64}
+import fr.acinq.eclair.wire.protocol.{ChannelUpdate, UpdateFailHtlc, UpdateFulfillHtlc}
+import fr.acinq.hc.app.{HCTestUtils, InvokeHostedChannel, LastCrossSignedState, StateOverride, StateUpdate, Worker}
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 import scodec.bits.ByteVector
+import org.scalatest.Outcome
 
 class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCStateTestsHelperMethods {
 
@@ -43,7 +43,7 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal === 9999900000L.msat)
     val (_, alice2bobUpdateAdd1) = addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight)
     alice ! UpdateFulfillHtlc(alice2bobUpdateAdd1.channelId, alice2bobUpdateAdd1.id, ByteVector32.Zeroes) // Wrong preimage
-    bob ! alice2bob.expectMsgType[wire.Error]
+    bob ! alice2bob.expectMsgType[wire.protocol.Error]
     awaitCond(alice.stateName == CLOSED)
     awaitCond(bob.stateName == CLOSED)
     assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].localErrors.nonEmpty)
@@ -79,7 +79,7 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal === 9999900000L.msat)
     val (_, alice2bobUpdateAdd1) = addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight)
     alice ! UpdateFulfillHtlc(alice2bobUpdateAdd1.channelId, alice2bobUpdateAdd1.id, ByteVector32.Zeroes) // Wrong preimage
-    bob ! alice2bob.expectMsgType[wire.Error]
+    bob ! alice2bob.expectMsgType[wire.protocol.Error]
     awaitCond(alice.stateName == CLOSED)
     awaitCond(bob.stateName == CLOSED)
     alice ! Worker.HCPeerDisconnected
@@ -91,7 +91,7 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     awaitCond(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].overrideProposal.isEmpty)
     bob ! Worker.HCPeerConnected
     alice ! Worker.HCPeerConnected
-    alice ! bob2alice.expectMsgType[wire.Error]
+    alice ! bob2alice.expectMsgType[wire.protocol.Error]
     bob ! alice2bob.expectMsgType[StateOverride]
     bob2alice.expectNoMessage()
     alice2bob.expectNoMessage()
@@ -123,7 +123,7 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal === 9999900000L.msat)
     val (preimage1, alice2bobUpdateAdd1) = addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight)
     alice ! UpdateFulfillHtlc(alice2bobUpdateAdd1.channelId, alice2bobUpdateAdd1.id, ByteVector32.Zeroes) // Wrong preimage
-    bob ! alice2bob.expectMsgType[wire.Error]
+    bob ! alice2bob.expectMsgType[wire.protocol.Error]
     awaitCond(alice.stateName == CLOSED)
     awaitCond(bob.stateName == CLOSED)
     aliceRelayer.expectNoMessage()
@@ -133,10 +133,10 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     alice ! UpdateFailHtlc(alice2bobUpdateAdd1.channelId, alice2bobUpdateAdd1.id, ByteVector.fill(152)(0)) // Fail is disregarded by Alice in CLOSED state
     aliceRelayer.expectNoMessage()
     alice ! CurrentBlockCount(Long.MaxValue)
-    bob ! alice2bob.expectMsgType[wire.Error] // One htlc timed out
+    bob ! alice2bob.expectMsgType[wire.protocol.Error] // One htlc timed out
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]] // Pending outgoing HTLC is failed upstream
     alice ! UpdateFulfillHtlc(alice2bobUpdateAdd1.channelId, alice2bobUpdateAdd1.id, preimage1) // Fulfill in CLOSED state after timing out is disregarded by Alice
-    bob ! alice2bob.expectMsgType[wire.Error] // Fulfill rejected
+    bob ! alice2bob.expectMsgType[wire.protocol.Error] // Fulfill rejected
     aliceRelayer.expectNoMessage()
     assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.collect(DirectedHtlc.outgoing).isEmpty)
     alice ! HC_CMD_OVERRIDE_PROPOSE(bobKit.nodeParams.nodeId, newLocalBalance = 9999899999L.msat)
@@ -161,7 +161,7 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal === 9999900000L.msat)
     val (preimage1, alice2bobUpdateAdd1) = addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight)
     alice ! UpdateFulfillHtlc(alice2bobUpdateAdd1.channelId, alice2bobUpdateAdd1.id, ByteVector32.Zeroes) // Wrong preimage
-    bob ! alice2bob.expectMsgType[wire.Error]
+    bob ! alice2bob.expectMsgType[wire.protocol.Error]
     awaitCond(alice.stateName == CLOSED)
     awaitCond(bob.stateName == CLOSED)
     aliceRelayer.expectNoMessage()
@@ -190,7 +190,7 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     bob ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
-    alice ! wire.Error(randomBytes32, "Error in offline mode")
+    alice ! wire.protocol.Error(randomBytes32, "Error in offline mode")
     alice2bob.expectNoMessage()
     awaitCond(alice.stateName == OFFLINE)
     bob ! Worker.HCPeerConnected
@@ -201,7 +201,7 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     bob ! alice2bob.expectMsgType[LastCrossSignedState] // First an LCSS in case if Bob has lost channel data
     alice ! bob2alice.expectMsgType[LastCrossSignedState] // Bob does not know about Error yet
     alice ! bob2alice.expectMsgType[ChannelUpdate]
-    bob ! alice2bob.expectMsgType[wire.Error]
+    bob ! alice2bob.expectMsgType[wire.protocol.Error]
     awaitCond(alice.stateName == CLOSED)
     awaitCond(bob.stateName == CLOSED)
     alice ! HC_CMD_OVERRIDE_PROPOSE(bobKit.nodeParams.nodeId, newLocalBalance = 10000000000L.msat)

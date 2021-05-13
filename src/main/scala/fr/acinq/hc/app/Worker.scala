@@ -6,6 +6,7 @@ import fr.acinq.hc.app.channel._
 import scala.concurrent.duration._
 import fr.acinq.eclair.router.{Router, SyncProgress}
 import akka.actor.{Actor, ActorRef, Props, Terminated}
+import fr.acinq.eclair.wire.internal.channel.version2.HCProtocolCodecs
 import scala.concurrent.ExecutionContext.Implicits.global
 import fr.acinq.hc.app.db.Blocking.timeout
 import fr.acinq.hc.app.db.HostedChannelsDb
@@ -14,7 +15,6 @@ import fr.acinq.hc.app.network.HostedSync
 import fr.acinq.bitcoin.Crypto.PublicKey
 import com.google.common.net.HostAndPort
 import fr.acinq.bitcoin.ByteVector32
-import fr.acinq.hc.app.wire.Codecs
 import scala.collection.mutable
 import grizzled.slf4j.Logging
 import akka.pattern.ask
@@ -68,8 +68,8 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
     case peerMsg @ UnknownMessageReceived(_, _, message, _) if HC.announceTags contains message.tag => preimageCatcher ! peerMsg
 
     case UnknownMessageReceived(_, nodeId, message, _) if HC.hostedMessageTags contains message.tag =>
-      Tuple3(Codecs decodeHostedMessage message, HC.remoteNode2Connection get nodeId, inMemoryHostedChannels get nodeId) match {
-        case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, Hosted message decoding fail, messageTag=${message.tag}, peer=$nodeId")
+      Tuple3(HCProtocolCodecs decodeHostedMessage message, HC.remoteNode2Connection get nodeId, inMemoryHostedChannels get nodeId) match {
+        case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, hosted message decoding has failed, messageTag=${message.tag}, peer=$nodeId")
         case (_, None, _) => logger.info(s"PLGN PHC, no live connection found for hosted channel messageTag=${message.tag}, peer=$nodeId")
         case (Attempt.Successful(_: ReplyPublicHostedChannelsEnd), Some(wrap), _) => hostedSync ! HostedSync.GotAllSyncFrom(wrap)
         case (Attempt.Successful(_: QueryPublicHostedChannels), Some(wrap), _) => hostedSync ! HostedSync.SendSyncTo(wrap)
@@ -81,10 +81,10 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
       }
 
     case UnknownMessageReceived(_, nodeId, message, _) if HC.chanIdMessageTags contains message.tag =>
-      Tuple3(Codecs decodeHasChanIdMessage message, HC.remoteNode2Connection get nodeId, inMemoryHostedChannels get nodeId) match {
+      Tuple3(HCProtocolCodecs decodeHasChanIdMessage message, HC.remoteNode2Connection get nodeId, inMemoryHostedChannels get nodeId) match {
         case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, HasChannelId message decoding fail, messageTag=${message.tag}, peer=$nodeId")
         case (_, None, _) => logger.info(s"PLGN PHC, no live connection found for containing channel id messageTag=${message.tag}, peer=$nodeId")
-        case (Attempt.Successful(error: eclair.wire.Error), _, null) => restore(Tools.none, Tools.none, _ |> HCPeerConnected |> error)(nodeId)
+        case (Attempt.Successful(error: eclair.wire.protocol.Error), _, null) => restore(Tools.none, Tools.none, _ |> HCPeerConnected |> error)(nodeId)
         case (_, _, null) => logger.info(s"PLGN PHC, no target for HasChannelIdMessage, messageTag=${message.tag}, peer=$nodeId")
         case (Attempt.Successful(msg), _, channelRef) => channelRef ! msg
       }
@@ -124,7 +124,7 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
 
       if (!nodeIdCheck) {
         // Our nodeId has changed, this is very bad
-        logger.info("PLGN PHC, NODE CHECK FAILED")
+        logger.info("PLGN PHC, NODE ID CHECK FAILED")
         System.exit(0)
       }
 
@@ -156,7 +156,7 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
   def guardSpawn(nodeId: PublicKey, wrap: PeerConnectedWrap, invoke: InvokeHostedChannel): Unit = {
     // Spawn new HC requested by remote peer if that peer is in our override map (special handling) or if there are not too many such requests from remote IP
     if (vals.hcOverrideMap.contains(nodeId) || ipAntiSpam(wrap.remoteIp) < vals.maxNewChansPerIpPerHour) spawnChannel(nodeId) |> HCPeerConnected |> invoke
-    else wrap sendHasChannelIdMsg eclair.wire.Error(ByteVector32.Zeroes, ErrorCodes.ERR_HOSTED_CHANNEL_DENIED)
+    else wrap sendHasChannelIdMsg eclair.wire.protocol.Error(ByteVector32.Zeroes, ErrorCodes.ERR_HOSTED_CHANNEL_DENIED)
     // Record this request for anti-spam
     ipAntiSpam(wrap.remoteIp) += 1
   }

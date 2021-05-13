@@ -5,7 +5,7 @@ import fr.acinq.eclair._
 import fr.acinq.eclair.blockchain.CurrentBlockCount
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.payment.relay.Relayer
-import fr.acinq.eclair.wire.{TemporaryNodeFailure, UpdateAddHtlc, UpdateFailHtlc, UpdateFulfillHtlc}
+import fr.acinq.eclair.wire.protocol.{TemporaryNodeFailure, UpdateAddHtlc, UpdateFailHtlc, UpdateFulfillHtlc}
 import fr.acinq.hc.app.network.PreimageBroadcastCatcher
 import fr.acinq.hc.app.{AlmostTimedoutIncomingHtlc, HCTestUtils, StateUpdate, Worker}
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
@@ -48,7 +48,7 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     val (preimage1, _) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
     val (preimage2, _) = addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight)
     alice ! PreimageBroadcastCatcher.BroadcastedPreimage(Crypto.sha256(preimage1), preimage1)
-    bob ! alice2bob.expectMsgType[wire.Error]
+    bob ! alice2bob.expectMsgType[wire.protocol.Error]
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
     alice2bob.expectNoMessage()
     aliceRelayer.expectNoMessage()
@@ -61,7 +61,7 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     aliceRelayer.expectNoMessage()
     // Second payment gets resolved despite channel being in error state at this point
     alice ! PreimageBroadcastCatcher.BroadcastedPreimage(Crypto.sha256(preimage2), preimage2)
-    alice2bob.expectMsgType[wire.Error]
+    alice2bob.expectMsgType[wire.protocol.Error]
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
     alice2bob.expectNoMessage()
     aliceRelayer.expectNoMessage()
@@ -75,7 +75,7 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     reachNormal(f)
     val (preimage, alice2bobUpdateAdd) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
     alice ! HC_CMD_EXTERNAL_FULFILL(bobKit.nodeParams.nodeId, alice2bobUpdateAdd.id, preimage)
-    bob ! alice2bob.expectMsgType[wire.Error]
+    bob ! alice2bob.expectMsgType[wire.protocol.Error]
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
     alice2bob.expectNoMessage()
     aliceRelayer.expectNoMessage()
@@ -96,7 +96,7 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
     alice ! PreimageBroadcastCatcher.BroadcastedPreimage(Crypto.sha256(preimage1), preimage1)
-    alice2bob.expectMsgType[wire.Error] // Bob does not get it because OFFLINE
+    alice2bob.expectMsgType[wire.protocol.Error] // Bob does not get it because OFFLINE
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
     alice2bob.expectNoMessage()
     aliceRelayer.expectNoMessage()
@@ -109,7 +109,7 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     aliceRelayer.expectNoMessage()
     // Second payment gets resolved despite channel being in error state at this point
     alice ! PreimageBroadcastCatcher.BroadcastedPreimage(Crypto.sha256(preimage2), preimage2)
-    alice2bob.expectMsgType[wire.Error]
+    alice2bob.expectMsgType[wire.protocol.Error]
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
     alice2bob.expectNoMessage()
     aliceRelayer.expectNoMessage()
@@ -127,7 +127,7 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
     alice ! HC_CMD_EXTERNAL_FULFILL(bobKit.nodeParams.nodeId, alice2bobUpdateAdd.id, preimage)
-    alice2bob.expectMsgType[wire.Error] // Bob does not get it because OFFLINE
+    alice2bob.expectMsgType[wire.protocol.Error] // Bob does not get it because OFFLINE
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
     alice2bob.expectNoMessage()
     aliceRelayer.expectNoMessage()
@@ -349,7 +349,7 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     alice ! UpdateFailHtlc(randomBytes32, alice2bobUpdateAdd1.id, randomBytes(64)) // Bob fails one HTLC, but does not update state
     awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.size === 3) // Alice takes update into account and waits
     awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.htlcs.size === 4)
-    alice ! wire.Error(randomBytes32, "Error from Bob")
+    alice ! wire.protocol.Error(randomBytes32, "Error from Bob")
     awaitCond(alice.stateName == CLOSED)
     awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.size === 4) // Bob's update without signature has been removed
     alice ! UpdateFailHtlc(randomBytes32, alice2bobUpdateAdd1.id, randomBytes(64)) // Bob tries to fail an HTLC again
@@ -379,7 +379,7 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight + 100)
     addHtlcFromAliceToBob(300000L.msat, f, currentBlockHeight + 200)
     alice ! CurrentBlockCount(currentBlockHeight + 145)
-    alice2bob.expectMsgType[wire.Error]
+    alice2bob.expectMsgType[wire.protocol.Error]
     awaitCond(alice.stateName == CLOSED)
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]] // One HTLC timed out
     alice ! CurrentBlockCount(currentBlockHeight + 245)
@@ -390,8 +390,8 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     alice ! Worker.TickRemoveIdleChannels // Has no effect because 1 payment is pending
     alice ! CurrentBlockCount(currentBlockHeight + 345)
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]] // One HTLC timed out
-    alice2bob.expectMsgType[wire.Error]
-    alice2bob.expectMsgType[wire.Error]
+    alice2bob.expectMsgType[wire.protocol.Error]
+    alice2bob.expectMsgType[wire.protocol.Error]
     awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.isEmpty)
     awaitCond(alice.stateName == OFFLINE)
     alice ! Worker.TickRemoveIdleChannels
@@ -414,7 +414,7 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
     alice ! bobMissingUpdate
     awaitCond(alice.stateName == CLOSED)
-    bob ! alice2bob.expectMsgType[wire.Error]
+    bob ! alice2bob.expectMsgType[wire.protocol.Error]
     awaitCond(alice.stateName == CLOSED)
     alice2bob.expectNoMessage()
     bob2alice.expectNoMessage()
@@ -449,7 +449,7 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     val (_, bob2AliceUpdateAdd3) = addHtlcFromBob2Alice(10000L.msat, f)
 
     alice ! HC_CMD_SUSPEND(randomKey.publicKey)
-    bob ! alice2bob.expectMsgType[wire.Error]
+    bob ! alice2bob.expectMsgType[wire.protocol.Error]
     awaitCond(alice.stateName == CLOSED)
     awaitCond(bob.stateName == CLOSED)
 
@@ -467,7 +467,7 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     awaitCond(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.size == 1) // Bob does not accept fail in CLOSED state
 
     bob ! CurrentBlockCount(currentBlockHeight + 145)
-    alice ! bob2alice.expectMsgType[wire.Error]
+    alice ! bob2alice.expectMsgType[wire.protocol.Error]
 
     awaitCond(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.isEmpty) // Bob state is cleared too after timeout
   }

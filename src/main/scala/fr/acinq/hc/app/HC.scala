@@ -93,7 +93,7 @@ class HC extends Plugin {
     val preimageRef = kit.system actorOf Props(classOf[PreimageBroadcastCatcher], new PreimagesDb(Config.db), Config.vals)
     val syncRef = kit.system actorOf Props(classOf[HostedSync], kit, new HostedUpdatesDb(Config.db), Config.vals.phcConfig)
     val workerRef = kit.system actorOf Props(classOf[Worker], kit, syncRef, preimageRef, channelsDb, Config.vals)
-    val hcServiceRoute = new HCService(kit, channelsDb, workerRef, syncRef, Config.vals).finalRoute
+    val hcServiceRoute = new HCService(kit, channelsDb, workerRef, syncRef, Config.vals).compoundRoute
     val api = Http.apply.newServerAt(Config.vals.apiParams.bindingIp, Config.vals.apiParams.port)
     api.bindFlow(hcServiceRoute)
   }
@@ -132,7 +132,7 @@ case object HCFeature extends Feature {
 }
 
 // Depends on https://github.com/engenegr/eclair-alarmbot-plugin
-case class AlmostTimedoutIncomingHtlc(add: wire.UpdateAddHtlc, fulfill: wire.UpdateFulfillHtlc, nodeId: PublicKey, blockCount: Long) extends fr.acinq.alarmbot.CustomAlarmBotMessage {
+case class AlmostTimedoutIncomingHtlc(add: wire.protocol.UpdateAddHtlc, fulfill: wire.protocol.UpdateFulfillHtlc, nodeId: PublicKey, blockCount: Long) extends fr.acinq.alarmbot.CustomAlarmBotMessage {
   override def message: String = s"AlmostTimedoutIncomingHtlc, id=${add.id}, amount=${add.amountMsat}, hash=${add.paymentHash}, expiry=${add.cltvExpiry.toLong}/$blockCount, preimage=${fulfill.paymentPreimage}, peer=$nodeId"
   override def senderEntity: String = "HC"
 }

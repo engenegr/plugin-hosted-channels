@@ -6,17 +6,17 @@ import scala.concurrent.duration._
 import slick.jdbc.PostgresProfile.api._
 import fr.acinq.hc.app.network.HostedSync._
 
-import fr.acinq.eclair.wire.{ChannelAnnouncement, ChannelUpdate, UnknownMessage}
+import fr.acinq.eclair.wire.protocol.{ChannelAnnouncement, ChannelUpdate, UnknownMessage}
 import fr.acinq.eclair.{FSMDiagnosticActorLogging, Kit}
 import fr.acinq.hc.app.db.{Blocking, HostedUpdatesDb}
 import fr.acinq.eclair.router.{Router, SyncProgress}
 import scala.util.{Failure, Random, Success, Try}
 
+import fr.acinq.eclair.wire.internal.channel.version2.HCProtocolCodecs
 import scala.concurrent.ExecutionContext.Implicits.global
 import fr.acinq.eclair.io.UnknownMessageReceived
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.channel.Nothing
-import fr.acinq.hc.app.wire.Codecs
 import scala.collection.mutable
 import scala.concurrent.Future
 import scodec.Attempt
@@ -299,7 +299,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
     }
 
     // Order matters here: first we check if this is an update for an existing channel, then try a new one
-    def process(fromNodeId: PublicKey, msg: UnknownMessage, data: OperationalData): OperationalData = Codecs.decodeAnnounceMessage(msg) match {
+    def process(fromNodeId: PublicKey, msg: UnknownMessage, data: OperationalData): OperationalData = HCProtocolCodecs.decodeAnnounceMessage(msg) match {
       case Attempt.Successful(message: ChannelAnnouncement) if baseCheck(message, data) && data.phcNetwork.channels.contains(message.shortChannelId) =>
         // This is an update of an already existing PHC because it's contained in channels map
         processKnownAnnounce(message, data, fromNodeId)

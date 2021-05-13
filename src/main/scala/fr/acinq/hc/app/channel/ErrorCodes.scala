@@ -1,7 +1,6 @@
 package fr.acinq.hc.app.channel
 
-import fr.acinq.eclair.wire.Error
-import scodec.bits.ByteVector
+import fr.acinq.eclair.wire.protocol.Error
 
 
 object ErrorCodes {

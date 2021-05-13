@@ -10,8 +10,8 @@ import fr.acinq.eclair.channel._
 import fr.acinq.eclair.payment.OutgoingPacket
 import fr.acinq.eclair.router.Router.ChannelHop
 import fr.acinq.eclair.transactions.CommitmentSpec
-import fr.acinq.eclair.wire.Onion.FinalLegacyPayload
-import fr.acinq.eclair.wire.{ChannelUpdate, UpdateAddHtlc, UpdateFulfillHtlc}
+import fr.acinq.eclair.wire.protocol.Onion.FinalLegacyPayload
+import fr.acinq.eclair.wire.protocol.{ChannelUpdate, UpdateAddHtlc, UpdateFulfillHtlc}
 import fr.acinq.hc.app.channel.{HC_DATA_ESTABLISHED, HostedChannelVersion, HostedCommitments}
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -30,7 +30,8 @@ class HostedChannelTypesSpec extends AnyFunSuite {
   val updateAddHtlc1: UpdateAddHtlc = UpdateAddHtlc(channelId, 102, 10000.msat, Crypto.sha256(preimage1), CltvExpiry(4), TestConstants.emptyOnionPacket)
   val updateAddHtlc2: UpdateAddHtlc = UpdateAddHtlc(channelId, 103, 20000.msat, Crypto.sha256(preimage2), CltvExpiry(40), TestConstants.emptyOnionPacket)
 
-  val lcss: LastCrossSignedState = LastCrossSignedState(isHost = true, refundScriptPubKey = randomBytes(119), initHostedChannel, blockDay = 100, localBalanceMsat = 100000.msat, remoteBalanceMsat = 900000.msat,
+  val lcss: LastCrossSignedState = LastCrossSignedState(isHost = true, refundScriptPubKey = randomBytes(119), initHostedChannel, blockDay = 100,
+    localBalanceMsat = 100000.msat, remoteBalanceMsat = 900000.msat,
     localUpdates = 201, remoteUpdates = 101, incomingHtlcs = List(updateAddHtlc1, updateAddHtlc2), outgoingHtlcs = List(updateAddHtlc2, updateAddHtlc1),
     remoteSigOfLocal = ByteVector64.Zeroes, localSigOfRemote = ByteVector64.Zeroes)
 

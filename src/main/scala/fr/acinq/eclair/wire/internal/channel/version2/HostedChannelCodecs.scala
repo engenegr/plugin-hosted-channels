@@ -1,44 +1,49 @@
-package fr.acinq.hc.app.wire
+package fr.acinq.eclair.wire.internal.channel.version2
 
-import fr.acinq.hc.app.wire.Codecs._
-import fr.acinq.eclair.wire.ChannelCodecs._
-import fr.acinq.eclair.wire.LightningMessageCodecs.{channelUpdateCodec, channelAnnouncementCodec, errorCodec}
+import fr.acinq.eclair.wire.protocol.LightningMessageCodecs._
+import fr.acinq.eclair.wire.internal.channel.version2.HCProtocolCodecs._
+import fr.acinq.eclair.wire.internal.channel.version2.ChannelCodecs2.Codecs.{commitmentSpecCodec, originsMapCodec}
 import fr.acinq.hc.app.channel.{ErrorExt, HC_DATA_ESTABLISHED, HostedCommitments, HostedState}
+import fr.acinq.eclair.wire.protocol.CommonCodecs.{bool8, bytes32, lengthDelimited, publicKey}
 import scodec.codecs.{listOfN, optional, uint16, uint8, utf8, variableSizeBytes}
-import fr.acinq.eclair.wire.CommonCodecs.{bytes32, publicKey}
-import scodec.Codec
+import fr.acinq.eclair.wire.protocol.{HasChannelId, UpdateMessage}
+import scodec.{Attempt, Codec}
 
 
 object HostedChannelCodecs {
-  val hostedCommitmentsCodec: Codec[HostedCommitments] = {
+  val updateMessageWithHasChannelIdCodec: Codec[UpdateMessage with HasChannelId] = lengthDelimited {
+    lightningMessageCodec.narrow(Attempt successful _.asInstanceOf[UpdateMessage with HasChannelId], identity)
+  }
+
+  val hostedCommitmentsCodec = {
     (publicKey withContext "localNodeId") ::
       (publicKey withContext "remoteNodeId") ::
       (bytes32 withContext "channelId") ::
       (commitmentSpecCodec withContext "localSpec") ::
       (originsMapCodec withContext "originChannels") ::
       (lengthDelimited(lastCrossSignedStateCodec) withContext "lastCrossSignedState") ::
-      (listOfN(uint8, updateMessageWithHasChannelIdCodec) withContext "nextLocalUpdates") ::
-      (listOfN(uint8, updateMessageWithHasChannelIdCodec) withContext "nextRemoteUpdates") ::
+      (listOfN(uint16, updateMessageWithHasChannelIdCodec) withContext "nextLocalUpdates") ::
+      (listOfN(uint16, updateMessageWithHasChannelIdCodec) withContext "nextRemoteUpdates") ::
       (bool8 withContext "announceChannel")
   }.as[HostedCommitments]
 
-  val errorExtCodec: Codec[ErrorExt] = {
+  val errorExtCodec = {
     (lengthDelimited(errorCodec) withContext "localError") ::
       (variableSizeBytes(uint16, utf8) withContext "stamp") ::
       (variableSizeBytes(uint16, utf8) withContext "description")
   }.as[ErrorExt]
 
-  val HC_DATA_ESTABLISHED_Codec: Codec[HC_DATA_ESTABLISHED] = {
+  val HC_DATA_ESTABLISHED_Codec = {
     (hostedCommitmentsCodec withContext "commitments") ::
       (lengthDelimited(channelUpdateCodec) withContext "channelUpdate") ::
-      (listOfN(uint8, errorExtCodec) withContext "localErrors") ::
+      (listOfN(uint16, errorExtCodec) withContext "localErrors") ::
       (optional(bool8, errorExtCodec) withContext "remoteError") ::
       (optional(bool8, lengthDelimited(resizeChannelCodec)) withContext "resizeProposal") ::
       (optional(bool8, lengthDelimited(stateOverrideCodec)) withContext "overrideProposal") ::
       (optional(bool8, lengthDelimited(channelAnnouncementCodec)) withContext "channelAnnouncement")
   }.as[HC_DATA_ESTABLISHED]
 
-  val hostedStateCodec: Codec[HostedState] = {
+  val hostedStateCodec = {
     (publicKey withContext "nodeId1") ::
       (publicKey withContext "nodeId2") ::
       (lastCrossSignedStateCodec withContext "lastCrossSignedState")

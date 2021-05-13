@@ -3,13 +3,14 @@ package fr.acinq.hc.app
 import fr.acinq.eclair._
 import net.ceedubs.ficus.Ficus._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
-import fr.acinq.eclair.wire.{AnnouncementMessage, ChannelAnnouncement, ChannelUpdate, Color, HasChannelId, UnknownMessage}
+import fr.acinq.eclair.wire.protocol.{AnnouncementMessage, ChannelAnnouncement, ChannelUpdate, Color, HasChannelId, UnknownMessage}
 import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol}
 import fr.acinq.hc.app.channel.{HostedChannelVersion, HostedCommitments}
 import com.typesafe.config.{ConfigFactory, Config => TypesafeConfig}
 import java.io.{ByteArrayInputStream, File}
 import java.nio.file.{Files, Paths}
 
+import fr.acinq.eclair.wire.internal.channel.version2.HCProtocolCodecs
 import fr.acinq.eclair.channel.Channel.OutgoingMessage
 import fr.acinq.eclair.channel.ChannelVersion
 import net.ceedubs.ficus.readers.ValueReader
@@ -17,7 +18,6 @@ import fr.acinq.eclair.router.Announcements
 import fr.acinq.bitcoin.Crypto.PublicKey
 import org.postgresql.util.PSQLException
 import fr.acinq.eclair.io.PeerConnected
-import fr.acinq.hc.app.wire.Codecs
 import slick.jdbc.PostgresProfile
 import scodec.bits.ByteVector
 import java.nio.ByteOrder
@@ -76,9 +76,9 @@ trait PeerConnectedWrap {
 }
 
 case class PeerConnectedWrapNormal(info: PeerConnected) extends PeerConnectedWrap { me =>
-  def sendHasChannelIdMsg(message: HasChannelId): Unit = me sendUnknownMsg Codecs.toUnknownHasChanIdMessage(message)
-  def sendHostedChannelMsg(message: HostedChannelMessage): Unit = me sendUnknownMsg Codecs.toUnknownHostedMessage(message)
-  def sendRoutingMsg(message: AnnouncementMessage): Unit = me sendUnknownMsg Codecs.toUnknownAnnounceMessage(message, isGossip = true)
+  def sendHasChannelIdMsg(message: HasChannelId): Unit = me sendUnknownMsg HCProtocolCodecs.toUnknownHasChanIdMessage(message)
+  def sendHostedChannelMsg(message: HostedChannelMessage): Unit = me sendUnknownMsg HCProtocolCodecs.toUnknownHostedMessage(message)
+  def sendRoutingMsg(message: AnnouncementMessage): Unit = me sendUnknownMsg HCProtocolCodecs.toUnknownAnnounceMessage(message, isGossip = true)
   def sendUnknownMsg(message: UnknownMessage): Unit = info.peer ! OutgoingMessage(message, info.connectionInfo.peerConnection)
   lazy val remoteIp: Array[Byte] = info.connectionInfo.address.getAddress.getAddress
 }

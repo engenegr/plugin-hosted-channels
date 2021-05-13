@@ -4,7 +4,6 @@ import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.eclair.TestConstants.{Alice, Bob}
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.{TestKitBaseClass, wire}
-import fr.acinq.eclair.wire.ChannelUpdate
 import fr.acinq.hc.app._
 import org.scalatest.Outcome
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
@@ -37,7 +36,7 @@ class HCEstablishmentSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     bob ! HC_CMD_LOCAL_INVOKE(aliceKit.nodeParams.nodeId, refundScriptPubKey = ByteVector32.Zeroes, ByteVector32.Zeroes)
     awaitCond(bob.stateData.isInstanceOf[HC_DATA_CLIENT_WAIT_HOST_INIT])
     alice ! bob2alice.expectMsgType[InvokeHostedChannel]
-    bob ! alice2bob.expectMsgType[wire.Error]
+    bob ! alice2bob.expectMsgType[wire.protocol.Error]
     alice2bob.expectTerminated(alice)
     bob2alice.expectTerminated(bob)
   }
@@ -85,7 +84,7 @@ class HCEstablishmentSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     bob ! alice2bob.expectMsgType[InitHostedChannel]
     awaitCond(bob.stateData.isInstanceOf[HC_DATA_CLIENT_WAIT_HOST_STATE_UPDATE])
     alice ! bob2alice.expectMsgType[StateUpdate] // Alice tries to persist a channel, but fails because of duplicate
-    bob ! alice2bob.expectMsgType[wire.Error]
+    bob ! alice2bob.expectMsgType[wire.protocol.Error]
     alice2bob.expectTerminated(alice)
     bob2alice.expectTerminated(bob)
   }
@@ -134,7 +133,7 @@ class HCEstablishmentSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     awaitCond(bob.stateName == NORMAL)
     channelUpdateListener.expectMsgType[LocalChannelUpdate]
     channelUpdateListener.expectMsgType[LocalChannelUpdate]
-    bob2alice.expectMsgType[ChannelUpdate]
-    alice2bob.expectMsgType[ChannelUpdate]
+    bob2alice.expectMsgType[fr.acinq.eclair.wire.protocol.ChannelUpdate]
+    alice2bob.expectMsgType[fr.acinq.eclair.wire.protocol.ChannelUpdate]
   }
 }

@@ -6,11 +6,11 @@ import fr.acinq.eclair.blockchain._
 import scala.collection.parallel.CollectionConverters._
 import fr.acinq.hc.app.network.PreimageBroadcastCatcher._
 import fr.acinq.hc.app.{HC, QueryPreimages, ReplyPreimages, Vals}
+import fr.acinq.eclair.wire.internal.channel.version2.HCProtocolCodecs
 import scala.concurrent.ExecutionContext.Implicits.global
 import fr.acinq.eclair.io.UnknownMessageReceived
 import fr.acinq.hc.app.Tools.DuplicateHandler
 import fr.acinq.hc.app.db.PreimagesDb
-import fr.acinq.hc.app.wire.Codecs
 import scala.collection.mutable
 import scodec.bits.ByteVector
 import grizzled.slf4j.Logging
@@ -49,7 +49,7 @@ class PreimageBroadcastCatcher(preimagesDb: PreimagesDb, vals: Vals) extends Act
     case PreimageBroadcastCatcher.TickClearIpAntiSpam => ipAntiSpam.clear
 
     case msg: UnknownMessageReceived =>
-      Tuple3(Codecs decodeHostedMessage msg.message, HC.remoteNode2Connection get msg.nodeId, preimagesDb) match {
+      Tuple3(HCProtocolCodecs decodeHostedMessage msg.message, HC.remoteNode2Connection get msg.nodeId, preimagesDb) match {
         case (Attempt.Successful(query: QueryPreimages), Some(wrap), db) if ipAntiSpam(wrap.remoteIp) < vals.maxPreimageRequestsPerIpPerMinute =>
           val foundPreimages = query.hashes.take(10).flatMap(db.findByHash)
           wrap sendHostedChannelMsg ReplyPreimages(foundPreimages)

@@ -1,8 +1,8 @@
 package fr.acinq.hc.app.db
 
 import slick.jdbc.PostgresProfile.api._
-import fr.acinq.eclair.wire.LightningMessageCodecs._
-import fr.acinq.eclair.wire.{ChannelAnnouncement, ChannelUpdate}
+import fr.acinq.eclair.wire.protocol.LightningMessageCodecs._
+import fr.acinq.eclair.wire.protocol.{ChannelAnnouncement, ChannelUpdate}
 import fr.acinq.hc.app.network.{PHC, PHCNetwork}
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.ShortChannelId

@@ -1,17 +1,16 @@
-package fr.acinq.hc.app.wire
+package fr.acinq.eclair.wire.internal.channel.version2
 
+import scodec.codecs._
 import fr.acinq.hc.app._
 import fr.acinq.hc.app.HC._
-import fr.acinq.eclair.wire._
-import fr.acinq.eclair.wire.CommonCodecs._
-import fr.acinq.eclair.wire.ChannelCodecs._
-import fr.acinq.eclair.wire.LightningMessageCodecs._
-import fr.acinq.eclair.wire.ChannelCodecs.channelVersionCodec
-import scodec.codecs.{listOfN, uint16, optional, uint32, variableSizeBytes, utf8}
+import fr.acinq.eclair.wire.protocol._
+import fr.acinq.eclair.wire.protocol.CommonCodecs._
+import fr.acinq.eclair.wire.protocol.LightningMessageCodecs._
+import fr.acinq.eclair.wire.internal.channel.version2.ChannelCodecs2.Codecs.channelVersionCodec
 import scodec.{Attempt, Codec, Err}
 
 
-object Codecs {
+object HCProtocolCodecs {
   val invokeHostedChannelCodec = {
     (bytes32 withContext "chainHash") ::
       (varsizebinarydata withContext "refundScriptPubKey") ::
@@ -42,8 +41,8 @@ object Codecs {
       (millisatoshi withContext "remoteBalanceMsat") ::
       (uint32 withContext "localUpdates") ::
       (uint32 withContext "remoteUpdates") ::
-      (listOfN(uint16, lengthDelimited(LightningMessageCodecs.updateAddHtlcCodec)) withContext "incomingHtlcs") ::
-      (listOfN(uint16, lengthDelimited(LightningMessageCodecs.updateAddHtlcCodec)) withContext "outgoingHtlcs") ::
+      (listOfN(uint16, lengthDelimited(updateAddHtlcCodec)) withContext "incomingHtlcs") ::
+      (listOfN(uint16, lengthDelimited(updateAddHtlcCodec)) withContext "outgoingHtlcs") ::
       (bytes64 withContext "remoteSigOfLocal") ::
       (bytes64 withContext "localSigOfRemote")
   }.as[LastCrossSignedState]
@@ -80,9 +79,6 @@ object Codecs {
   val queryPreimagesCodec = (listOfN(uint16, bytes32) withContext "hashes").as[QueryPreimages]
 
   val replyPreimagesCodec = (listOfN(uint16, bytes32) withContext "preimages").as[ReplyPreimages]
-
-  val updateMessageWithHasChannelIdCodec: Codec[UpdateMessage with HasChannelId] =
-    lightningMessageCodec.narrow(Attempt successful _.asInstanceOf[UpdateMessage with HasChannelId], identity)
 
   // HC messages which don't have channel id
 
@@ -133,19 +129,19 @@ object Codecs {
       case HC_UPDATE_FAIL_HTLC_TAG => updateFailHtlcCodec.decode(bitVector)
       case HC_UPDATE_FULFILL_HTLC_TAG => updateFulfillHtlcCodec.decode(bitVector)
       case HC_UPDATE_FAIL_MALFORMED_HTLC_TAG => updateFailMalformedHtlcCodec.decode(bitVector)
-      case tag => Attempt failure Err(s"PLGN PHC, unsupported HasChannelId tag=$tag")
+      case tag => Attempt failure Err(s"PLGN PHC, wrong tag=$tag")
     }
 
     decodeAttempt.map(_.value)
   }
 
   def toUnknownHasChanIdMessage(message: HasChannelId): UnknownMessage = message match {
-    case msg: Error => UnknownMessage(HC_ERROR_TAG, LightningMessageCodecs.errorCodec.encode(msg).require.toByteVector)
-    case msg: UpdateAddHtlc => UnknownMessage(HC_UPDATE_ADD_HTLC_TAG, LightningMessageCodecs.updateAddHtlcCodec.encode(msg).require.toByteVector)
-    case msg: UpdateFailHtlc => UnknownMessage(HC_UPDATE_FAIL_HTLC_TAG, LightningMessageCodecs.updateFailHtlcCodec.encode(msg).require.toByteVector)
-    case msg: UpdateFulfillHtlc => UnknownMessage(HC_UPDATE_FULFILL_HTLC_TAG, LightningMessageCodecs.updateFulfillHtlcCodec.encode(msg).require.toByteVector)
-    case msg: UpdateFailMalformedHtlc => UnknownMessage(HC_UPDATE_FAIL_MALFORMED_HTLC_TAG, LightningMessageCodecs.updateFailMalformedHtlcCodec.encode(msg).require.toByteVector)
-    case msg => throw new RuntimeException(s"PLGN PHC, unsupported HasChannelId message=${msg.getClass.getName}")
+    case msg: Error => UnknownMessage(HC_ERROR_TAG, errorCodec.encode(msg).require.toByteVector)
+    case msg: UpdateAddHtlc => UnknownMessage(HC_UPDATE_ADD_HTLC_TAG, updateAddHtlcCodec.encode(msg).require.toByteVector)
+    case msg: UpdateFailHtlc => UnknownMessage(HC_UPDATE_FAIL_HTLC_TAG, updateFailHtlcCodec.encode(msg).require.toByteVector)
+    case msg: UpdateFulfillHtlc => UnknownMessage(HC_UPDATE_FULFILL_HTLC_TAG, updateFulfillHtlcCodec.encode(msg).require.toByteVector)
+    case msg: UpdateFailMalformedHtlc => UnknownMessage(HC_UPDATE_FAIL_MALFORMED_HTLC_TAG, updateFailMalformedHtlcCodec.encode(msg).require.toByteVector)
+    case msg => throw new RuntimeException(s"PLGN PHC, wrong message=${msg.getClass.getName}")
   }
 
   // Normal gossip messages which are also used in PHC gossip
@@ -154,21 +150,21 @@ object Codecs {
     val bitVector = wrap.data.toBitVector
 
     val decodeAttempt = wrap.tag match {
-      case PHC_ANNOUNCE_GOSSIP_TAG => LightningMessageCodecs.channelAnnouncementCodec.decode(bitVector)
-      case PHC_ANNOUNCE_SYNC_TAG => LightningMessageCodecs.channelAnnouncementCodec.decode(bitVector)
-      case PHC_UPDATE_GOSSIP_TAG => LightningMessageCodecs.channelUpdateCodec.decode(bitVector)
-      case PHC_UPDATE_SYNC_TAG => LightningMessageCodecs.channelUpdateCodec.decode(bitVector)
-      case tag => Attempt failure Err(s"PLGN PHC, unsupported Announcement tag=$tag")
+      case PHC_ANNOUNCE_GOSSIP_TAG => channelAnnouncementCodec.decode(bitVector)
+      case PHC_ANNOUNCE_SYNC_TAG => channelAnnouncementCodec.decode(bitVector)
+      case PHC_UPDATE_GOSSIP_TAG => channelUpdateCodec.decode(bitVector)
+      case PHC_UPDATE_SYNC_TAG => channelUpdateCodec.decode(bitVector)
+      case tag => Attempt failure Err(s"PLGN PHC, wrong tag=$tag")
     }
 
     decodeAttempt.map(_.value)
   }
 
   def toUnknownAnnounceMessage(message: AnnouncementMessage, isGossip: Boolean): UnknownMessage = message match {
-    case msg: ChannelAnnouncement if isGossip => UnknownMessage(PHC_ANNOUNCE_GOSSIP_TAG, LightningMessageCodecs.channelAnnouncementCodec.encode(msg).require.toByteVector)
-    case msg: ChannelAnnouncement => UnknownMessage(PHC_ANNOUNCE_SYNC_TAG, LightningMessageCodecs.channelAnnouncementCodec.encode(msg).require.toByteVector)
-    case msg: ChannelUpdate if isGossip => UnknownMessage(PHC_UPDATE_GOSSIP_TAG, LightningMessageCodecs.channelUpdateCodec.encode(msg).require.toByteVector)
-    case msg: ChannelUpdate => UnknownMessage(PHC_UPDATE_SYNC_TAG, LightningMessageCodecs.channelUpdateCodec.encode(msg).require.toByteVector)
-    case msg => throw new RuntimeException(s"PLGN PHC, unsupported Announcement message=${msg.getClass.getName}")
+    case msg: ChannelAnnouncement if isGossip => UnknownMessage(PHC_ANNOUNCE_GOSSIP_TAG, channelAnnouncementCodec.encode(msg).require.toByteVector)
+    case msg: ChannelAnnouncement => UnknownMessage(PHC_ANNOUNCE_SYNC_TAG, channelAnnouncementCodec.encode(msg).require.toByteVector)
+    case msg: ChannelUpdate if isGossip => UnknownMessage(PHC_UPDATE_GOSSIP_TAG, channelUpdateCodec.encode(msg).require.toByteVector)
+    case msg: ChannelUpdate => UnknownMessage(PHC_UPDATE_SYNC_TAG, channelUpdateCodec.encode(msg).require.toByteVector)
+    case msg => throw new RuntimeException(s"PLGN PHC, wrong message=${msg.getClass.getName}")
   }
 }

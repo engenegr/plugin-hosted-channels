@@ -1,8 +1,8 @@
 package fr.acinq.hc.app.channel
 
 import fr.acinq.eclair.channel.LocalChannelUpdate
-import fr.acinq.eclair.wire.UnknownMessage
 import fr.acinq.eclair.TestKitBaseClass
+import fr.acinq.eclair.wire.protocol.UnknownMessage
 import fr.acinq.hc.app._
 import org.scalatest.Outcome
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
