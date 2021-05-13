@@ -6,7 +6,7 @@ import fr.acinq.hc.app.channel._
 import akka.http.scaladsl.server._
 import fr.acinq.eclair.api.serde.FormParamExtractors._
 import fr.acinq.eclair.blockchain.fee.{FeeratePerByte, FeeratePerKw}
-import fr.acinq.hc.app.network.{HostedSync, OperationalData}
+import fr.acinq.hc.app.network.{HostedSync, OperationalData, PHC}
 import akka.actor.{ActorRef, ActorSystem}
 
 import fr.acinq.eclair.wire.internal.channel.version2.HostedChannelCodecs
@@ -27,21 +27,23 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
 
   import fr.acinq.eclair.api.serde.JsonSupport.{formats, marshaller, serialization}
 
-  val wallet: BitcoinCoreWallet = kit.wallet.asInstanceOf[BitcoinCoreWallet]
+  private val hostedStateUnmarshaller = "state".as[ByteVector](binaryDataUnmarshaller)
+
+  private val wallet = kit.wallet.asInstanceOf[BitcoinCoreWallet]
 
   override implicit val actorSystem: ActorSystem = kit.system
 
   override val password: String = vals.apiParams.password
 
   val invoke: Route = postRequest("invoke") { implicit t =>
-    formFields(nodeIdFormParam, "refundAddress", "secret".as[ByteVector](binaryDataUnmarshaller)) { case (remoteNodeId, refundAddress, secret) =>
+    formFields("refundAddress", "secret".as[ByteVector](binaryDataUnmarshaller), nodeIdFormParam) { case (refundAddress, secret, remoteNodeId) =>
       val refundPubkeyScript = Script.write(fr.acinq.eclair.addressToPublicKeyScript(refundAddress, kit.nodeParams.chainHash))
       completeCommand(HC_CMD_LOCAL_INVOKE(remoteNodeId, refundPubkeyScript, secret))
     }
   }
 
   val externalFulfill: Route = postRequest("externalfulfill") { implicit t =>
-    formFields(nodeIdFormParam, "htlcId".as[Long], "paymentPreimage".as[ByteVector32](sha256HashUnmarshaller)) { case (remoteNodeId, htlcId, paymentPreimage) =>
+    formFields("htlcId".as[Long], "paymentPreimage".as[ByteVector32], nodeIdFormParam) { case (htlcId, paymentPreimage, remoteNodeId) =>
       completeCommand(HC_CMD_EXTERNAL_FULFILL(remoteNodeId, htlcId, paymentPreimage))
     }
   }
@@ -63,7 +65,7 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
   }
 
   val overridePropose: Route = postRequest("overridepropose") { implicit t =>
-    formFields(nodeIdFormParam, "newLocalBalanceMsat".as[MilliSatoshi]) { case (remoteNodeId, newLocalBalance) =>
+    formFields("newLocalBalanceMsat".as[MilliSatoshi], nodeIdFormParam) { case (newLocalBalance, remoteNodeId) =>
       completeCommand(HC_CMD_OVERRIDE_PROPOSE(remoteNodeId, newLocalBalance))
     }
   }
@@ -87,7 +89,7 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
   }
 
   val resize: Route = postRequest("resize") { implicit t =>
-    formFields(nodeIdFormParam, "newCapacitySat".as[Satoshi]) { case (remoteNodeId, newCapacity) =>
+    formFields("newCapacitySat".as[Satoshi], nodeIdFormParam) { case (newCapacity, remoteNodeId) =>
       completeCommand(HC_CMD_RESIZE(remoteNodeId, newCapacity))
     }
   }
@@ -105,13 +107,13 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
   }
 
   val verifyRemoteState: Route = postRequest("verifyremotestate") { implicit t =>
-    formFields("state".as[ByteVector](binaryDataUnmarshaller)) { state =>
+    formFields(hostedStateUnmarshaller) { state =>
       complete(getHostedStateResult(state))
     }
   }
 
   val restoreFromRemoteState: Route = postRequest("restorefromremotestate") { implicit t =>
-    formFields("state".as[ByteVector](binaryDataUnmarshaller)) { state =>
+    formFields(hostedStateUnmarshaller) { state =>
       val RemoteHostedStateResult(remoteState, Some(remoteNodeId), isLocalSigOk) = getHostedStateResult(state)
       require(isLocalSigOk, "Can't proceed: local signature of provided HC state is invalid")
       completeCommand(HC_CMD_RESTORE(remoteNodeId, remoteState))
@@ -119,7 +121,7 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
   }
 
   val broadcastPreimages: Route = postRequest("broadcastpreimages") { implicit t =>
-    formFields("preimages".as[List[ByteVector32]](sha256HashesUnmarshaller), "feerateSatByte".as[FeeratePerByte]) { case (preimages, feerateSatByte) =>
+    formFields("preimages".as[List[ByteVector32]], "feerateSatByte".as[FeeratePerByte]) { case (preimages, feerateSatByte) =>
       require(feerateSatByte.feerate.toLong > 1, "Preimage broadcast funding feerate must be > 1 sat/byte")
       val broadcastTxId = sendPreimageBroadcast(FeeratePerKw(feerateSatByte), preimages.toSet)
       complete(broadcastTxId)
@@ -130,14 +132,19 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
     val phcNodeAnnounces = for {
       routerData <- (kit.router ? Router.GetRouterData).mapTo[Router.Data]
       hostedSyncData <- (sync ? HostedSync.GetHostedSyncData).mapTo[OperationalData]
-    } yield phcAnnounces(routerData, hostedSyncData).flatten.toSet
+    } yield hostedSyncData.phcNetwork.channels.values.toSet.flatMap { phc: PHC =>
+      val node1AnnounceOpt = routerData.nodes.get(phc.channelAnnounce.nodeId1)
+      val node2AnnounceOpt = routerData.nodes.get(phc.channelAnnounce.nodeId2)
+      node1AnnounceOpt ++ node2AnnounceOpt
+    }
+
     complete(phcNodeAnnounces)
   }
 
   val compoundRoute: Route = securedHandler {
-    invoke ~ externalFulfill ~ findByRemoteId ~ findBySecret ~ overridePropose ~ overrideAccept ~
-      makePublic ~ makePrivate ~ resize ~ suspend ~ hide ~ verifyRemoteState ~ restoreFromRemoteState ~
-      broadcastPreimages ~ phcNodes
+    invoke ~ externalFulfill ~ findByRemoteId ~ findBySecret ~ overridePropose ~
+      overrideAccept ~ makePublic ~ makePrivate ~ resize ~ suspend ~ hide ~ verifyRemoteState ~
+      restoreFromRemoteState ~ broadcastPreimages ~ phcNodes
   }
 
   private def completeCommand(cmd: HasRemoteNodeIdHostedCommand)(implicit timeout: Timeout) = {
@@ -156,16 +163,9 @@ class HCService(kit: Kit, channelsDb: HostedChannelsDb, worker: ActorRef, sync: 
     } yield signedTx.tx.txid
   }
 
-  private def phcAnnounces(routerData: Router.Data, hostedSyncData: OperationalData) =
-    hostedSyncData.phcNetwork.channels.values.map { phc =>
-      val node1AnnounceOpt = routerData.nodes.get(phc.channelAnnounce.nodeId1)
-      val node2AnnounceOpt = routerData.nodes.get(phc.channelAnnounce.nodeId2)
-      node1AnnounceOpt ++ node2AnnounceOpt
-    }
-
   private def getHostedStateResult(state: ByteVector) = {
     val remoteState = HostedChannelCodecs.hostedStateCodec.decodeValue(state.toBitVector).require
-    val remoteNodeIdOpt = Set(remoteState.nodeId1, remoteState.nodeId2).find(pubKey => kit.nodeParams.nodeId != pubKey)
+    val remoteNodeIdOpt = Set(remoteState.nodeId1, remoteState.nodeId2).find(kit.nodeParams.nodeId.!=)
     val isLocalSigOk = remoteState.lastCrossSignedState.verifyRemoteSig(kit.nodeParams.nodeId)
     RemoteHostedStateResult(remoteState, remoteNodeIdOpt, isLocalSigOk)
   }

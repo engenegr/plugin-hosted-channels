@@ -69,8 +69,7 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
 
     case UnknownMessageReceived(_, nodeId, message, _) if HC.hostedMessageTags contains message.tag =>
       Tuple3(HCProtocolCodecs decodeHostedMessage message, HC.remoteNode2Connection get nodeId, inMemoryHostedChannels get nodeId) match {
-        case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, hosted message decoding has failed, messageTag=${message.tag}, peer=$nodeId")
-        case (_, None, _) => logger.info(s"PLGN PHC, no live connection found for hosted channel messageTag=${message.tag}, peer=$nodeId")
+        case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, hosted message decoding failed, messageTag=${message.tag}, peer=$nodeId")
         case (Attempt.Successful(_: ReplyPublicHostedChannelsEnd), Some(wrap), _) => hostedSync ! HostedSync.GotAllSyncFrom(wrap)
         case (Attempt.Successful(_: QueryPublicHostedChannels), Some(wrap), _) => hostedSync ! HostedSync.SendSyncTo(wrap)
 
@@ -81,12 +80,11 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
       }
 
     case UnknownMessageReceived(_, nodeId, message, _) if HC.chanIdMessageTags contains message.tag =>
-      Tuple3(HCProtocolCodecs decodeHasChanIdMessage message, HC.remoteNode2Connection get nodeId, inMemoryHostedChannels get nodeId) match {
-        case (_: Attempt.Failure, _, _) => logger.info(s"PLGN PHC, HasChannelId message decoding fail, messageTag=${message.tag}, peer=$nodeId")
-        case (_, None, _) => logger.info(s"PLGN PHC, no live connection found for containing channel id messageTag=${message.tag}, peer=$nodeId")
-        case (Attempt.Successful(error: eclair.wire.protocol.Error), _, null) => restore(Tools.none, Tools.none, _ |> HCPeerConnected |> error)(nodeId)
-        case (_, _, null) => logger.info(s"PLGN PHC, no target for HasChannelIdMessage, messageTag=${message.tag}, peer=$nodeId")
-        case (Attempt.Successful(msg), _, channelRef) => channelRef ! msg
+      Tuple2(HCProtocolCodecs decodeHasChanIdMessage message, inMemoryHostedChannels get nodeId) match {
+        case (_: Attempt.Failure, _) => logger.info(s"PLGN PHC, HasChannelId message decoding fail, messageTag=${message.tag}, peer=$nodeId")
+        case (Attempt.Successful(error: eclair.wire.protocol.Error), null) => restore(Tools.none, Tools.none, _ |> HCPeerConnected |> error)(nodeId)
+        case (_, null) => logger.info(s"PLGN PHC, no target for HasChannelIdMessage, messageTag=${message.tag}, peer=$nodeId")
+        case (Attempt.Successful(msg), channelRef) => channelRef ! msg
       }
 
     case cmd: HC_CMD_LOCAL_INVOKE =>
@@ -108,7 +106,7 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
 
     case cmd: HasRemoteNodeIdHostedCommand =>
       Option(inMemoryHostedChannels get cmd.remoteNodeId) match {
-        // Peer may be disconnected when commands are sent, channel must be able to handle command in any state
+        // Peer may be disconnected when command arrives, channel must be able to handle command in any state
         case None => restore(sender ! notFound, sender ! isHidden, _ |> cmd)(cmd.remoteNodeId)
         case Some(ref) => ref forward cmd
       }
