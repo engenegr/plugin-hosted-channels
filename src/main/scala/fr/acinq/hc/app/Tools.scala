@@ -99,8 +99,8 @@ object Config {
 }
 
 
-case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long,
-                    cltvDeltaBlocks: Int, channelCapacityMsat: Long,
+case class HCParams(feeBaseMsat: Long,
+                    feeProportionalMillionths: Long, cltvDeltaBlocks: Int, channelCapacityMsat: Long,
                     htlcMinimumMsat: Long, maxAcceptedHtlcs: Int, isResizable: Boolean) {
 
   val feeBase: MilliSatoshi = feeBaseMsat.msat
@@ -136,14 +136,10 @@ case class PHCConfig(maxPerNode: Long, minNormalChans: Long, maxSyncSendsPerIpPe
   val minCapacity: MilliSatoshi = MilliSatoshi(50000000000L) // At least 0.5 BTC
 }
 
-case class ApiParams(password: String, bindingIp: String, port: Int)
-
-case class Vals(hcDefaultParams: HCParams, hcOverrideParams: List[HCOverrideParams],
-                maxNewChansPerIpPerHour: Int, maxPreimageRequestsPerIpPerMinute: Int,
-                branding: Branding, phcConfig: PHCConfig, apiParams: ApiParams) {
+case class Vals(hcDefaultParams: HCParams, hcOverrideParams: List[HCOverrideParams], maxNewChansPerIpPerHour: Int,
+                maxPreimageRequestsPerIpPerMinute: Int, branding: Branding, phcConfig: PHCConfig) {
 
   val hcOverrideMap: Map[PublicKey, HCOverrideParams] = hcOverrideParams.map { hcParams =>
-    val nodeKey = ByteVector.fromValidHex(hcParams.nodeId)
-    (PublicKey(nodeKey), hcParams)
+    (PublicKey.fromBin(ByteVector.fromValidHex(hcParams.nodeId), checkValid = true), hcParams)
   }.toMap
 }
