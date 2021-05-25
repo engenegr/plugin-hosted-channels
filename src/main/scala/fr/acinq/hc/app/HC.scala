@@ -2,33 +2,30 @@ package fr.acinq.hc.app
 
 import fr.acinq.eclair._
 import fr.acinq.hc.app.HC._
-
 import scala.concurrent.stm._
+import fr.acinq.hc.app.channel._
 import akka.actor.{ActorRef, ActorSystem, Props}
-import fr.acinq.hc.app.network.{HostedSync, OperationalData, PHC, PreimageBroadcastCatcher}
+import fr.acinq.eclair.blockchain.fee.{FeeratePerByte, FeeratePerKw}
 import fr.acinq.hc.app.db.{Blocking, HostedChannelsDb, HostedUpdatesDb, PreimagesDb}
+import fr.acinq.hc.app.network.{HostedSync, OperationalData, PHC, PreimageBroadcastCatcher}
+import fr.acinq.bitcoin.{ByteVector32, OP_PUSHDATA, OP_RETURN, Satoshi, Script, Transaction, TxOut}
+import fr.acinq.eclair.wire.internal.channel.version2.HostedChannelCodecs
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner.IncomingHtlc
+import fr.acinq.eclair.blockchain.bitcoind.BitcoinCoreWallet
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner
+import fr.acinq.eclair.api.directives.EclairDirectives
 import fr.acinq.eclair.transactions.DirectedHtlc
 import fr.acinq.eclair.payment.IncomingPacket
 import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.eclair.channel.Origin
-import fr.acinq.bitcoin.{ByteVector32, OP_PUSHDATA, OP_RETURN, Satoshi, Script, Transaction, TxOut}
-import akka.event.LoggingAdapter
-import akka.pattern.ask
-
-import scala.collection.mutable
 import akka.http.scaladsl.server.Route
-import akka.util.Timeout
-import fr.acinq.eclair.api.directives.EclairDirectives
-import fr.acinq.eclair.blockchain.bitcoind.BitcoinCoreWallet
-import fr.acinq.eclair.blockchain.fee.{FeeratePerByte, FeeratePerKw}
+import fr.acinq.eclair.channel.Origin
 import fr.acinq.eclair.router.Router
-import fr.acinq.eclair.wire.internal.channel.version2.HostedChannelCodecs
-import fr.acinq.hc.app.channel._
-import scodec.bits.ByteVector
-
+import akka.event.LoggingAdapter
+import scala.collection.mutable
 import scala.concurrent.Future
+import scodec.bits.ByteVector
+import akka.util.Timeout
+import akka.pattern.ask
 import scala.util.Try
 
 
@@ -133,8 +130,13 @@ class HC extends Plugin with RouteProvider {
     type PaymentHashAndHtlcId = (ByteVector32, Long)
     type PaymentLocations = Set[PaymentHashAndHtlcId]
 
-    override def getHtlcsRelayedOut(htlcsIn: Seq[IncomingHtlc], nodeParams: NodeParams, log: LoggingAdapter): Map[Origin, PaymentLocations] =
-      PostRestartHtlcCleaner.groupByOrigin(htlcsOut, htlcsIn)
+    override def getHtlcsRelayedOut(htlcsIn: Seq[IncomingHtlc], nodeParams: NodeParams, log: LoggingAdapter): Map[Origin, PaymentLocations] = {
+      println(s"htlcsIn: ${htlcsIn}")
+      println(s"htlcsOut: ${htlcsOut}")
+      //      PostRestartHtlcCleaner.groupByOrigin(htlcsOut, htlcsIn)
+      Map.empty
+    }
+
   }
 
   override def route(eclairDirectives: EclairDirectives): Route = {
