@@ -662,7 +662,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       failTimedoutOutgoing(localAdds = timedoutOutgoingAdds, data) // Catch all outgoing HTLCs, even the ones they have failed but not signed yet
       val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_TIMED_OUT_OUTGOING_HTLC) // Remove all their updates except fulfills, transition to error state
       val fakeFailsForOutgoingAdds = for (add <- timedoutOutgoingAdds) yield UpdateFailHtlc(channelId, add.id, reason = ByteVector.empty) // Fake-fail timedout outgoing HTLCs
-      val commits1 = data1.commitments.copy(nextRemoteUpdates = data1.commitments.nextRemoteUpdates ++ fakeFailsForOutgoingAdds)
+      val commits1 = data1.commitments.copy(nextRemoteUpdates = data1.commitments.nextRemoteUpdates ++ fakeFailsForOutgoingAdds) // Our timed out HTLCs are no longer seen as pending
       errorState StoringAndUsing data1.copy(commitments = commits1) SendingHasChannelId error
     } else stay
   }

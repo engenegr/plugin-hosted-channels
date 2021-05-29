@@ -130,13 +130,8 @@ class HC extends Plugin with RouteProvider {
     type PaymentHashAndHtlcId = (ByteVector32, Long)
     type PaymentLocations = Set[PaymentHashAndHtlcId]
 
-    override def getHtlcsRelayedOut(htlcsIn: Seq[IncomingHtlc], nodeParams: NodeParams, log: LoggingAdapter): Map[Origin, PaymentLocations] = {
-      println(s"htlcsIn: ${htlcsIn}")
-      println(s"htlcsOut: ${htlcsOut}")
-      //      PostRestartHtlcCleaner.groupByOrigin(htlcsOut, htlcsIn)
-      Map.empty
-    }
-
+    override def getHtlcsRelayedOut(htlcsIn: Seq[IncomingHtlc], nodeParams: NodeParams, log: LoggingAdapter): Map[Origin, PaymentLocations] =
+      PostRestartHtlcCleaner.groupByOrigin(htlcsOut, htlcsIn)
   }
 
   override def route(eclairDirectives: EclairDirectives): Route = {
