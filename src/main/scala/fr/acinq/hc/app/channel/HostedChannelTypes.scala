@@ -76,9 +76,8 @@ case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
     // so we must always look at both localSpec and nextLocalSpec to always see an entire pending HTLC set
     commitments.localSpec.htlcs ++ commitments.nextLocalSpec.htlcs
   } else {
-    // Clearing of HTLCs in localSpec is impossible when error is present
-    // OTOH fails and fulfills from remote peer are not accepted in such state either
-    // pending HTLCs can be cleared by our fake FAIL on timeout or by FULFILL from peer
+    // Clearing of HTLCs normally in localSpec is impossible when error is present
+    // but pending HTLCs can be cleared by our fake FAIL on timeout or by peer's FULFILL
     commitments.nextLocalSpec.htlcs
   }
 

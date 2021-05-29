@@ -22,6 +22,13 @@ object PreimageBroadcastCatcher {
   case class BroadcastedPreimage(hash: ByteVector32, preimage: ByteVector32)
 
   case object TickClearIpAntiSpam { val label = "TickClearIpAntiSpam" }
+
+  def extractPreimages(tx: Transaction): Seq[ByteVector32] =
+    tx.txOut.map(transactionOutput => Script parse transactionOutput.publicKeyScript).flatMap {
+      case OP_RETURN :: OP_PUSHDATA(preimage1, 32) :: OP_PUSHDATA(preimage2, 32) :: Nil => List(preimage1, preimage2)
+      case OP_RETURN :: OP_PUSHDATA(preimage1, 32) :: Nil => List(preimage1)
+      case _ => List.empty[ByteVector]
+    }.map(ByteVector32.apply)
 }
 
 class PreimageBroadcastCatcher(preimagesDb: PreimagesDb, vals: Vals) extends Actor with Logging {
@@ -67,11 +74,4 @@ class PreimageBroadcastCatcher(preimagesDb: PreimagesDb, vals: Vals) extends Act
           logger.info(s"PLGN PHC, PreimageBroadcastCatcher, could not parse a message with tag=${msg.message.tag}, peer=${msg.nodeId}")
       }
   }
-
-  def extractPreimages(tx: Transaction): Seq[ByteVector32] =
-    tx.txOut.map(transactionOutput => Script parse transactionOutput.publicKeyScript).flatMap {
-      case OP_RETURN :: OP_PUSHDATA(preimage1, 32) :: OP_PUSHDATA(preimage2, 32) :: Nil => List(preimage1, preimage2)
-      case OP_RETURN :: OP_PUSHDATA(preimage1, 32) :: Nil => List(preimage1)
-      case _ => List.empty[ByteVector]
-    }.map(ByteVector32.apply)
 }
