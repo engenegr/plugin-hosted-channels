@@ -140,16 +140,21 @@ class HC extends Plugin with RouteProvider {
     import fr.acinq.eclair.api.serde.FormParamExtractors._
     import eclairDirectives._
 
-    val zeroTxOut = TxOut(Satoshi(0L), _: ByteVector)
+    val emptyUtxo = TxOut(Satoshi(0L), _: ByteVector)
 
     val hostedStateUnmarshaller = "state".as[ByteVector](binaryDataUnmarshaller)
 
     def sendPreimageBroadcast(feeRatePerKw: FeeratePerKw, preimages: Set[ByteVector32] = Set.empty): Future[ByteVector32] = {
-      val txOuts = preimages.toList.map(_.bytes).map(OP_PUSHDATA.apply).grouped(2).map(OP_RETURN :: _).map(Script.write).map(zeroTxOut)
-      val tx = Transaction(version = 2, txIn = Nil, txOut = txOuts.toList, lockTime = 0)
+      val preimageTxOuts = preimages.toList.map(_.bytes).map(OP_PUSHDATA.apply).grouped(2).map(OP_RETURN :: _).map(Script.write).map(emptyUtxo)
       val wallet = kit.wallet.asInstanceOf[BitcoinCoreWallet]
 
       for {
+        balance <- wallet.getBalance
+        toSend = (balance.confirmed + balance.unconfirmed) / 2
+        ourAddress <- wallet.getReceiveAddress("Preimage broadcast")
+        pubKeyScript = addressToPublicKeyScript(ourAddress, kit.nodeParams.chainHash)
+        txOutWithSendBack = TxOut(toSend, Script write pubKeyScript) :: preimageTxOuts.toList
+        tx = Transaction(version = 2, txIn = Nil, txOut = txOutWithSendBack, lockTime = 0)
         fundedTx <- wallet.fundTransaction(tx, lockUtxos = false, feeRatePerKw)
         signedTx <- wallet.signTransaction(fundedTx.tx)
         true <- wallet.commit(signedTx.tx)
@@ -170,7 +175,7 @@ class HC extends Plugin with RouteProvider {
 
     val invoke: Route = postRequest("hc-invoke") { implicit t =>
       formFields("refundAddress", "secret".as[ByteVector](binaryDataUnmarshaller), nodeIdFormParam) { case (refundAddress, secret, remoteNodeId) =>
-        val refundPubkeyScript = Script.write(fr.acinq.eclair.addressToPublicKeyScript(refundAddress, kit.nodeParams.chainHash))
+        val refundPubkeyScript = Script write fr.acinq.eclair.addressToPublicKeyScript(refundAddress, kit.nodeParams.chainHash)
         completeCommand(HC_CMD_LOCAL_INVOKE(remoteNodeId, refundPubkeyScript, secret))
       }
     }
