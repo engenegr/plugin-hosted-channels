@@ -129,11 +129,11 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
         // Our nodeId has changed, this is very bad
         logger.info("PLGN PHC, NODE ID CHECK FAILED")
         System.exit(0)
+      } else {
+        clientChannelRemoteNodeIds ++= clientRemoteNodeIds
+        clientChannels.foreach(spawnPreparedChannel)
+        self ! TickReconnectHosts
       }
-
-      clientChannelRemoteNodeIds ++= clientRemoteNodeIds
-      clientChannels.foreach(spawnPreparedChannel)
-      self ! TickReconnectHosts
 
     case TickReconnectHosts =>
       // Of all remote peers which are Hosts to our HCs, select those which are not connected
