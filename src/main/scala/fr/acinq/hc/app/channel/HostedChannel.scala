@@ -513,7 +513,9 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     case (SYNCING | CLOSED) -> NORMAL =>
       nextStateData match {
         case d1: HC_DATA_ESTABLISHED if !d1.commitments.announceChannel => self ! HostedChannel.SendPrivateChannelUpdateToPeer
-        case d1: HC_DATA_ESTABLISHED if chanParams.areDifferent(d1.channelUpdate) => self ! HostedChannel.SendAnnouncements(force = false)
+        case d1: HC_DATA_ESTABLISHED if chanParams.areDifferent(d1.channelUpdate) =>
+          log.info("PLGN PHC, Chan parameters are different")
+          self ! HostedChannel.SendAnnouncements(force = false)
         case _ =>
       }
   }
