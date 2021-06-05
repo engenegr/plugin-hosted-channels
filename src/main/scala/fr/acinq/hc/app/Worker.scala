@@ -27,6 +27,8 @@ object Worker {
 
   case object HCPeerDisconnected
 
+  case object TickReconnectHosts { val label = "TickReconnectHosts" }
+
   case object TickClearIpAntiSpam { val label = "TickClearIpAntiSpam" }
 
   case object TickRemoveIdleChannels { val label = "TickRemoveIdleChannels" }
@@ -38,6 +40,7 @@ object Worker {
 
 class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, channelsDb: HostedChannelsDb, cfg: Config) extends Actor with Logging { me =>
   context.system.scheduler.scheduleWithFixedDelay(60.minutes, 60.minutes, self, Worker.TickClearIpAntiSpam)
+  context.system.scheduler.scheduleWithFixedDelay(20.seconds, 20.seconds, self, Worker.TickReconnectHosts)
   context.system.scheduler.scheduleWithFixedDelay(2.days, 2.days, self, TickRemoveIdleChannels)
 
   context.system.eventStream.subscribe(channel = classOf[UnknownMessageReceived], subscriber = self)
@@ -61,7 +64,6 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
     case systemMessage: PeerDisconnected =>
       HC.remoteNode2Connection -= systemMessage.nodeId
       Option(inMemoryHostedChannels get systemMessage.nodeId).foreach(_ ! HCPeerDisconnected)
-      if (clientChannelRemoteNodeIds contains systemMessage.nodeId) reconnect(systemMessage.nodeId)
       logger.info(s"PLGN PHC, supporting peer disconnected, peer=${systemMessage.nodeId}")
 
     case Worker.TickClearIpAntiSpam => ipAntiSpam.clear
@@ -121,7 +123,6 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
       val clientChannels: Seq[HC_DATA_ESTABLISHED] = channelsDb.listClientChannels
       val clientRemoteNodeIds: Seq[PublicKey] = clientChannels.map(_.commitments.remoteNodeId)
       val nodeIdCheck = clientChannels.forall(_.commitments.localNodeId == kit.nodeParams.nodeId)
-      logger.info(s"PLGN PHC, hosts ${clientRemoteNodeIds mkString ", "}")
 
       if (!nodeIdCheck) {
         // Our nodeId has changed, this is very bad
@@ -131,20 +132,26 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
 
       clientChannelRemoteNodeIds ++= clientRemoteNodeIds
       clientChannels.foreach(spawnPreparedChannel)
-      reconnect(clientRemoteNodeIds:_*)
-  }
+      self ! TickReconnectHosts
 
-  def reconnect(remoteHostNodeIds: PublicKey*): Unit = {
-    val routerData = (kit.router ? Router.GetRouterData).mapTo[Router.Data]
+    case TickReconnectHosts =>
+      clientChannelRemoteNodeIds.filterNot(HC.remoteNode2Connection.contains) match {
+        case currentlyUnconnectedHcHosts if currentlyUnconnectedHcHosts.nonEmpty =>
+          logger.info(s"PLGN PHC, unconnected hosts=$currentlyUnconnectedHcHosts")
+          val routerData = (kit.router ? Router.GetRouterData).mapTo[Router.Data]
 
-    for {
-      data <- routerData
-      nodeId <- remoteHostNodeIds
-      nodeAnnouncement <- data.nodes.get(nodeId)
-      sockAddress <- nodeAnnouncement.addresses.headOption.map(_.socketAddress)
-      hostAndPort = HostAndPort.fromParts(sockAddress.getHostString, sockAddress.getPort)
-      _ = logger.info(s"PLGN PHC, tryting to reconnect to ${nodeAnnouncement.nodeId}/$hostAndPort")
-    } kit.switchboard ! Peer.Connect(address_opt = Some(hostAndPort), nodeId = nodeId)
+          for {
+            data <- routerData
+            nodeId <- currentlyUnconnectedHcHosts
+            nodeAnnouncement <- data.nodes.get(nodeId)
+            sockAddress <- nodeAnnouncement.addresses.headOption.map(_.socketAddress)
+            hostAndPort = HostAndPort.fromParts(sockAddress.getHostString, sockAddress.getPort)
+            _ = logger.info(s"PLGN PHC, trying to reconnect to ${nodeAnnouncement.nodeId}/$hostAndPort")
+          } kit.switchboard ! Peer.Connect(address_opt = Some(hostAndPort), nodeId = nodeId)
+
+        case _ =>
+          // Do nothing
+      }
   }
 
   def spawnChannel(nodeId: PublicKey): ActorRef = {
