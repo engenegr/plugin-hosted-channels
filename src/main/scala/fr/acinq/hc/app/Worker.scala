@@ -120,6 +120,7 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
     case TickRemoveIdleChannels => inMemoryHostedChannels.values.forEach(_ ! TickRemoveIdleChannels)
 
     case SyncProgress(1D) if clientChannelRemoteNodeIds.isEmpty =>
+      // We need a fully loaded graph to find Host IP addresses and ports
       val clientChannels: Seq[HC_DATA_ESTABLISHED] = channelsDb.listClientChannels
       val clientRemoteNodeIds: Seq[PublicKey] = clientChannels.map(_.commitments.remoteNodeId)
       val nodeIdCheck = clientChannels.forall(_.commitments.localNodeId == kit.nodeParams.nodeId)
