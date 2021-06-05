@@ -6,10 +6,8 @@ import fr.acinq.eclair.channel._
 import scala.concurrent.duration._
 import com.softwaremill.quicklens._
 import fr.acinq.eclair.wire.protocol._
-
 import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc, IncomingHtlc, OutgoingHtlc}
 import fr.acinq.hc.app.network.{HostedSync, OperationalData, PHC, PreimageBroadcastCatcher}
-import fr.acinq.eclair.db.PendingRelayDb.{ackCommand, getPendingFailsAndFulfills}
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, SatoshiLong}
 import fr.acinq.hc.app.Tools.{DuplicateHandler, DuplicateShortId}
 import fr.acinq.hc.app.db.Blocking.{span, timeout}
@@ -23,6 +21,7 @@ import fr.acinq.eclair.FSMDiagnosticActorLogging
 import fr.acinq.eclair.channel.Origin.LocalCold
 import fr.acinq.eclair.payment.relay.Relayer
 import fr.acinq.eclair.router.Announcements
+import fr.acinq.eclair.db.PendingCommandsDb
 import fr.acinq.hc.app.db.HostedChannelsDb
 import fr.acinq.bitcoin.Crypto.PublicKey
 import scodec.bits.ByteVector
@@ -481,7 +480,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
       (state, nextState, nextStateData) match {
         case (OFFLINE | SYNCING, NORMAL | CLOSED, d1: HC_DATA_ESTABLISHED) if d1.pendingHtlcs.nonEmpty =>
-          val dbPending = getPendingFailsAndFulfills(kit.nodeParams.db.pendingRelay, channelId)(log)
+          val dbPending = PendingCommandsDb.getSettlementCommands(kit.nodeParams.db.pendingCommands, channelId)(log)
           for (failOrFulfillCommand <- dbPending) self ! failOrFulfillCommand
           if (dbPending.nonEmpty) self ! CMD_SIGN(None)
         case _ =>
@@ -531,19 +530,19 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     }
 
     def AckingSuccess(command: HtlcSettlementCommand): HostedFsmState = {
-      replyToCommand(self, reply = RES_SUCCESS(command, channelId), command)
-      ackCommand(kit.nodeParams.db.pendingRelay, channelId, command)
+      PendingCommandsDb.ackSettlementCommand(kit.nodeParams.db.pendingCommands, channelId, command)
+      replyToCommand(self, RES_SUCCESS(command, channelId), command)
       state
     }
 
     def AckingFail(cause: Throwable, command: HtlcSettlementCommand): HostedFsmState = {
-      replyToCommand(self, reply = RES_FAILURE(command, cause), command)
-      ackCommand(kit.nodeParams.db.pendingRelay, channelId, command)
+      PendingCommandsDb.ackSettlementCommand(kit.nodeParams.db.pendingCommands, channelId, command)
+      replyToCommand(self, RES_FAILURE(command, cause), command)
       state
     }
 
     def AckingAddSuccess(command: CMD_ADD_HTLC): HostedFsmState = {
-      replyToCommand(self, reply = RES_SUCCESS(command, channelId), command)
+      replyToCommand(self, RES_SUCCESS(command, channelId), command)
       state
     }
 
@@ -577,6 +576,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
         case add: UpdateAddHtlc =>
           kit.relayer ! Relayer.RelayForward(add)
       }
+
       state
     }
   }

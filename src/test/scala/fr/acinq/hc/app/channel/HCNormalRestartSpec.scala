@@ -345,7 +345,7 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     f.alice2bob.expectTerminated(f.alice)
 
     val f2 = init()
-    f2.bobKit.nodeParams.db.pendingRelay.addPendingRelay(channelId, CMD_FULFILL_HTLC(alice2bobUpdateAdd3.id, preimage3))
+    f2.bobKit.nodeParams.db.pendingCommands.addSettlementCommand(channelId, CMD_FULFILL_HTLC(alice2bobUpdateAdd3.id, preimage3))
     f2.bob ! bobData
     f2.alice ! aliceData
     f2.bob ! Worker.HCPeerConnected
@@ -432,7 +432,7 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     f2.bob2alice.expectMsgType[UpdateFulfillHtlc] // Alice does not receive this
 
     val f3 = init()
-    f3.aliceKit.nodeParams.db.pendingRelay.addPendingRelay(channelId, CMD_FULFILL_HTLC(alice2bobUpdateAdd2.id, preimage2)) // Alice gets Bob's payment fulfilled, HC is not there
+    f3.aliceKit.nodeParams.db.pendingCommands.addSettlementCommand(channelId, CMD_FULFILL_HTLC(alice2bobUpdateAdd2.id, preimage2)) // Alice gets Bob's payment fulfilled, HC is not there
     f3.alice ! HC_CMD_RESTORE(bobData.nodeId1, bobData)
 
     f3.alice ! Worker.HCPeerDisconnected
