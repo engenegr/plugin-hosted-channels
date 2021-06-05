@@ -121,7 +121,6 @@ class HC extends Plugin with RouteProvider {
 
     override def getIncomingHtlcs(nodeParams: NodeParams, log: LoggingAdapter): Seq[IncomingHtlc] = {
       val allHotHtlcs: Seq[DirectedHtlc] = channelsDb.listHotChannels.flatMap(_.commitments.localSpec.htlcs)
-      for (directedHtlc <- allHotHtlcs) log.info(s"${directedHtlc.add.amountMsat}/${directedHtlc.direction}: ${directedHtlc.add}")
       val decryptEither: UpdateAddHtlc => Either[FailureMessage, IncomingPacket] = IncomingPacket.decrypt(_: UpdateAddHtlc, nodeParams.privateKey)(log)
       val resolvePacket: PartialFunction[Either[FailureMessage, IncomingPacket], IncomingHtlc] = PostRestartHtlcCleaner.decryptedIncomingHtlcs(nodeParams.db.payments)
       allHotHtlcs.collect(DirectedHtlc.incoming).map(decryptEither).collect(resolvePacket)
