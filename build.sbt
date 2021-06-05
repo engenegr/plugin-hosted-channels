@@ -40,7 +40,6 @@ assemblyExcludedJars in assembly := {
   cp filter { f =>
     f.data.getName.contains("scalatest") ||
       f.data.getName.contains("akka-testkit") ||
-      f.data.getName.contains("quicklens") ||
       f.data.getName.contains("eclair")
   }
 }
