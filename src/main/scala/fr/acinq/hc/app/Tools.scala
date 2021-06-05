@@ -119,9 +119,15 @@ case class HCParams(feeBaseMsat: Long,
     InitHostedChannel(UInt64(channelCapacityMsat), htlcMinimum, maxAcceptedHtlcs,
       channelCapacityMsat.msat, initialClientBalanceMsat = 0L.msat, channelVersion)
 
-  def areDifferent(cu: ChannelUpdate): Boolean =
+  def areDifferent(cu: ChannelUpdate): Boolean = {
+    println(s"-- PLGN PHC cu.cltvExpiryDelta=${cu.cltvExpiryDelta.toInt}, cltvDeltaBlocks=$cltvDeltaBlocks")
+    println(s"-- PLGN PHC cu.htlcMaximumMsat=${cu.htlcMaximumMsat}, initMsg.channelCapacityMsat=${initMsg.channelCapacityMsat}")
+    println(s"-- PLGN PHC cu.feeBaseMsat=${cu.feeBaseMsat}, feeBase=${feeBase}")
+    println(s"-- PLGN PHC cu.feeProportionalMillionths=${cu.feeProportionalMillionths}, feeProportionalMillionths=${feeProportionalMillionths}")
+
     cu.cltvExpiryDelta.toInt != cltvDeltaBlocks || !cu.htlcMaximumMsat.contains(initMsg.channelCapacityMsat) ||
       cu.feeBaseMsat != feeBase || cu.feeProportionalMillionths != feeProportionalMillionths
+  }
 }
 
 case class HCOverrideParams(nodeId: String, params: HCParams)
