@@ -456,7 +456,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     case Event(cmd: CMD_GETINFO, _) =>
       // We get this for example when user issues "channels" API command, must reply with something
-      replyToCommand(self, RES_GETINFO(remoteNodeId, channelId, stateName, data = null), cmd)
+      replyToCommand(RES_GETINFO(remoteNodeId, channelId, stateName, data = null), cmd)
       stay
 
     case Event(cmd: HC_CMD_RESIZE, data: HC_DATA_ESTABLISHED) =>
@@ -536,18 +536,18 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     def AckingSuccess(command: HtlcSettlementCommand): HostedFsmState = {
       PendingCommandsDb.ackSettlementCommand(kit.nodeParams.db.pendingCommands, channelId, command)
-      replyToCommand(self, RES_SUCCESS(command, channelId), command)
+      replyToCommand(RES_SUCCESS(command, channelId), command)
       state
     }
 
     def AckingFail(cause: Throwable, command: HtlcSettlementCommand): HostedFsmState = {
       PendingCommandsDb.ackSettlementCommand(kit.nodeParams.db.pendingCommands, channelId, command)
-      replyToCommand(self, RES_FAILURE(command, cause), command)
+      replyToCommand(RES_FAILURE(command, cause), command)
       state
     }
 
     def AckingAddSuccess(command: CMD_ADD_HTLC): HostedFsmState = {
-      replyToCommand(self, RES_SUCCESS(command, channelId), command)
+      replyToCommand(RES_SUCCESS(command, channelId), command)
       state
     }
 
@@ -616,7 +616,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
   def ackAddFail(cmd: CMD_ADD_HTLC, cause: ChannelException, channelUpdate: ChannelUpdate): HostedFsmState = {
     log.warning(s"PLGN PHC, ${cause.getMessage} while processing cmd=${cmd.getClass.getSimpleName} in state=$stateName")
-    replyToCommand(self, RES_ADD_FAILED(channelUpdate = Some(channelUpdate), t = cause, c = cmd), cmd)
+    replyToCommand(RES_ADD_FAILED(channelUpdate = Some(channelUpdate), t = cause, c = cmd), cmd)
     stay
   }
 
@@ -726,7 +726,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     }
   }
 
-  private def replyToCommand(sender: ActorRef, reply: CommandResponse[Command], cmd: Command): Unit = cmd match {
+  private def replyToCommand(reply: CommandResponse[Command], cmd: Command): Unit = cmd match {
     case cmd1: HasReplyToCommand => if (cmd1.replyTo == ActorRef.noSender) sender ! reply else cmd1.replyTo ! reply
     case cmd1: HasOptionalReplyToCommand => cmd1.replyTo_opt.foreach(_ ! reply)
   }
