@@ -135,22 +135,21 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
       self ! TickReconnectHosts
 
     case TickReconnectHosts =>
-      clientChannelRemoteNodeIds.filterNot(HC.remoteNode2Connection.contains) match {
-        case currentlyUnconnectedHcHosts if currentlyUnconnectedHcHosts.nonEmpty =>
-          logger.info(s"PLGN PHC, unconnected hosts=$currentlyUnconnectedHcHosts")
-          val routerData = (kit.router ? Router.GetRouterData).mapTo[Router.Data]
+      // Of all remote peers which are Hosts to our HCs, select those which are not connected
+      val unconnectedHosts = clientChannelRemoteNodeIds.filterNot(HC.remoteNode2Connection.contains)
 
-          for {
-            data <- routerData
-            nodeId <- currentlyUnconnectedHcHosts
-            nodeAnnouncement <- data.nodes.get(nodeId)
-            sockAddress <- nodeAnnouncement.addresses.headOption.map(_.socketAddress)
-            hostAndPort = HostAndPort.fromParts(sockAddress.getHostString, sockAddress.getPort)
-            _ = logger.info(s"PLGN PHC, trying to reconnect to ${nodeAnnouncement.nodeId}/$hostAndPort")
-          } kit.switchboard ! Peer.Connect(address_opt = Some(hostAndPort), nodeId = nodeId)
+      if (unconnectedHosts.nonEmpty) {
+        val routerData = (kit.router ? Router.GetRouterData).mapTo[Router.Data]
+        logger.info(s"PLGN PHC, unconnected hosts=$unconnectedHosts")
 
-        case _ =>
-          // Do nothing
+        for {
+          data <- routerData
+          nodeId <- unconnectedHosts
+          nodeAnnouncement <- data.nodes.get(nodeId)
+          sockAddress <- nodeAnnouncement.addresses.headOption.map(_.socketAddress)
+          hostAndPort = HostAndPort.fromParts(sockAddress.getHostString, sockAddress.getPort)
+          _ = logger.info(s"PLGN PHC, trying to reconnect to ${nodeAnnouncement.nodeId}/$hostAndPort")
+        } kit.switchboard ! Peer.Connect(address_opt = Some(hostAndPort), nodeId = nodeId)
       }
   }
 
