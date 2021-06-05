@@ -6,6 +6,7 @@ import scala.concurrent.stm._
 import fr.acinq.hc.app.channel._
 import akka.actor.{ActorRef, ActorSystem, Props}
 import fr.acinq.eclair.blockchain.fee.{FeeratePerByte, FeeratePerKw}
+import fr.acinq.eclair.wire.protocol.{FailureMessage, UpdateAddHtlc}
 import fr.acinq.hc.app.db.{Blocking, HostedChannelsDb, HostedUpdatesDb, PreimagesDb}
 import fr.acinq.hc.app.network.{HostedSync, OperationalData, PHC, PreimageBroadcastCatcher}
 import fr.acinq.bitcoin.{ByteVector32, OP_PUSHDATA, OP_RETURN, Satoshi, Script, Transaction, TxOut}
@@ -116,10 +117,13 @@ class HC extends Plugin with RouteProvider {
 
     override def feature: Feature = HCFeature
 
-    override def getIncomingHtlcs(nodeParams: NodeParams, log: LoggingAdapter): Seq[IncomingHtlc] =
-      channelsDb.listHotChannels.flatMap(_.commitments.localSpec.htlcs).collect(DirectedHtlc.incoming)
-        .map(incomingUpdateAdd => IncomingPacket.decrypt(incomingUpdateAdd, nodeParams.privateKey)(log))
-        .collect(packet => PostRestartHtlcCleaner.decryptedIncomingHtlcs(nodeParams.db.payments)(packet))
+    override def getIncomingHtlcs(nodeParams: NodeParams, log: LoggingAdapter): Seq[IncomingHtlc] = {
+      val allHotHtlcs: Seq[DirectedHtlc] = channelsDb.listHotChannels.flatMap(_.commitments.localSpec.htlcs)
+      for (directedHtlc <- allHotHtlcs) log.info(s"${directedHtlc.add.amountMsat}/${directedHtlc.direction}: ${directedHtlc.add}")
+      val decryptEither: UpdateAddHtlc => Either[FailureMessage, IncomingPacket] = IncomingPacket.decrypt(_: UpdateAddHtlc, nodeParams.privateKey)(log)
+      val resolvePacket: PartialFunction[Either[FailureMessage, IncomingPacket], IncomingHtlc] = PostRestartHtlcCleaner.decryptedIncomingHtlcs(nodeParams.db.payments)
+      allHotHtlcs.collect(DirectedHtlc.incoming).map(decryptEither).collect(resolvePacket)
+    }
 
     private def htlcsOut = for {
       data <- channelsDb.listHotChannels
