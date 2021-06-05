@@ -469,6 +469,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
           context.system.eventStream publish ChannelIdAssigned(self, remoteNodeId, temporaryChannelId = ByteVector32.Zeroes, channelId)
           context.system.eventStream publish ShortChannelIdAssigned(self, channelId, shortChannelId, previousShortChannelId = None)
           context.system.eventStream publish makeLocalUpdateEvent(d1.channelUpdate, d1.commitments)
+          if (!d1.commitments.announceChannel) connection sendRoutingMsg d1.channelUpdate
         case (_, NORMAL, OFFLINE | CLOSED, _) =>
           context.system.eventStream publish LocalChannelDown(self, channelId, shortChannelId, remoteNodeId)
         case _ =>
@@ -491,20 +492,10 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
       (HC.remoteNode2Connection.get(remoteNodeId), state, nextState, stateData, nextStateData) match {
         case (Some(connection), SYNCING, NORMAL | CLOSED, _: HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE, d1: HC_DATA_ESTABLISHED) =>
-          val sendBrandingMessage = cfg.vals.branding.enabled && d1.commitments.lastCrossSignedState.isHost
-          if (sendBrandingMessage) connection sendHostedChannelMsg cfg.brandingMessage
+          if (cfg.vals.branding.enabled && d1.commitments.lastCrossSignedState.isHost) connection sendHostedChannelMsg cfg.brandingMessage
         case (Some(connection), OFFLINE | SYNCING, CLOSED, _, d1: HC_DATA_ESTABLISHED) =>
           // We may get fulfills for peer payments while offline when channel is in error state
           d1.commitments.pendingOutgoingFulfills.foreach(connection.sendHasChannelIdMsg)
-        case _ =>
-      }
-  }
-
-  onTransition {
-    case (SYNCING | CLOSED) -> NORMAL =>
-      nextStateData match {
-        case d1: HC_DATA_ESTABLISHED if !d1.commitments.announceChannel =>
-          HC.remoteNode2Connection.get(remoteNodeId).foreach(_ sendRoutingMsg d1.channelUpdate)
         case _ =>
       }
   }
