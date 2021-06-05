@@ -454,6 +454,11 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     case Event(_: HC_CMD_GET_INFO, data: HC_DATA_ESTABLISHED) => stay replying CMDResInfo(stateName, data, data.commitments.nextLocalSpec)
 
+    case Event(cmd: CMD_GETINFO, _: HC_DATA_ESTABLISHED) =>
+      // We get this for example when user issues "channels" API command, must reply with something
+      replyToCommand(self, RES_GETINFO(remoteNodeId, channelId, stateName, data = null), cmd)
+      stay
+
     case Event(cmd: HC_CMD_RESIZE, data: HC_DATA_ESTABLISHED) =>
       val msg = ResizeChannel(cmd.newCapacity).sign(kit.nodeParams.privateKey)
       if (data.errorExt.nonEmpty) stay replying CMDResFailure("Resizing declined: channel is in error state")
