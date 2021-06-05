@@ -56,11 +56,13 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
       if systemMessage.connectionInfo.remoteInit.features.hasPluginFeature(HCFeature.plugin) =>
       HC.remoteNode2Connection += systemMessage.nodeId -> PeerConnectedWrapNormal(info = systemMessage)
       Option(inMemoryHostedChannels get systemMessage.nodeId).foreach(_ |> HCPeerDisconnected |> HCPeerConnected)
+      logger.info(s"PLGN PHC, supporting peer connected, peer=${systemMessage.nodeId}")
 
     case systemMessage: PeerDisconnected =>
       HC.remoteNode2Connection -= systemMessage.nodeId
       Option(inMemoryHostedChannels get systemMessage.nodeId).foreach(_ ! HCPeerDisconnected)
       if (clientChannelRemoteNodeIds contains systemMessage.nodeId) reconnect(systemMessage.nodeId)
+      logger.info(s"PLGN PHC, supporting peer disconnected, peer=${systemMessage.nodeId}")
 
     case Worker.TickClearIpAntiSpam => ipAntiSpam.clear
 
@@ -115,11 +117,11 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
 
     case TickRemoveIdleChannels => inMemoryHostedChannels.values.forEach(_ ! TickRemoveIdleChannels)
 
-    case SyncProgress(1D) =>
-      val clientChannels = channelsDb.listClientChannels
-      val nodeIdCheck = clientChannels.forall(_.commitments.localNodeId == kit.nodeParams.nodeId)
+    case SyncProgress(1D) if clientChannelRemoteNodeIds.isEmpty =>
+      val clientChannels: Seq[HC_DATA_ESTABLISHED] = channelsDb.listClientChannels
       val clientRemoteNodeIds: Seq[PublicKey] = clientChannels.map(_.commitments.remoteNodeId)
-      logger.info(s"PLGN PHC, reconnecting ${clientRemoteNodeIds mkString ", "} hosts")
+      val nodeIdCheck = clientChannels.forall(_.commitments.localNodeId == kit.nodeParams.nodeId)
+      logger.info(s"PLGN PHC, hosts ${clientRemoteNodeIds mkString ", "}")
 
       if (!nodeIdCheck) {
         // Our nodeId has changed, this is very bad
