@@ -65,7 +65,7 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
     case Worker.TickClearIpAntiSpam => ipAntiSpam.clear
 
     case peerMsg @ UnknownMessageReceived(_, _, message, _) if HC.preimageQueryTags contains message.tag => preimageCatcher ! peerMsg
-    case peerMsg @ UnknownMessageReceived(_, _, message, _) if HC.announceTags contains message.tag => preimageCatcher ! peerMsg
+    case peerMsg @ UnknownMessageReceived(_, _, message, _) if HC.announceTags contains message.tag => hostedSync ! peerMsg
 
     case UnknownMessageReceived(_, nodeId, message, _) if HC.hostedMessageTags contains message.tag =>
       Tuple3(HCProtocolCodecs decodeHostedMessage message, HC.remoteNode2Connection get nodeId, inMemoryHostedChannels get nodeId) match {
