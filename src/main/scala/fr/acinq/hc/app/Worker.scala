@@ -118,7 +118,8 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
     case SyncProgress(1D) =>
       val clientChannels = channelsDb.listClientChannels
       val nodeIdCheck = clientChannels.forall(_.commitments.localNodeId == kit.nodeParams.nodeId)
-      val clientRemoteNodeIds = clientChannels.map(_.commitments.remoteNodeId)
+      val clientRemoteNodeIds: Seq[PublicKey] = clientChannels.map(_.commitments.remoteNodeId)
+      logger.info(s"PLGN PHC, reconnecting ${clientRemoteNodeIds mkString ", "} hosts")
 
       if (!nodeIdCheck) {
         // Our nodeId has changed, this is very bad
@@ -133,7 +134,6 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
 
   def reconnect(remoteHostNodeIds: PublicKey*): Unit = {
     val routerData = (kit.router ? Router.GetRouterData).mapTo[Router.Data]
-    logger.info(s"PLGN PHC, reconnecting ${remoteHostNodeIds mkString ", "} hosts")
 
     for {
       data <- routerData
