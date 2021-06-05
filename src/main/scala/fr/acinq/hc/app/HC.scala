@@ -94,18 +94,20 @@ class HC extends Plugin with RouteProvider {
   var channelsDb: HostedChannelsDb = _
   var workerRef: ActorRef = _
   var syncRef: ActorRef = _
+  var config: Config = _
   var kit: Kit = _
 
   override def onSetup(setup: Setup): Unit = {
-    Try(Blocking createTablesIfNotExist Config.db)
-    channelsDb = new HostedChannelsDb(Config.db)
+    config = new Config(datadir = setup.datadir)
+    Try(Blocking createTablesIfNotExist config.db)
+    channelsDb = new HostedChannelsDb(config.db)
   }
 
   override def onKit(eclairKit: Kit): Unit = {
     implicit val coreActorSystem: ActorSystem = eclairKit.system
-    val preimageRef = eclairKit.system actorOf Props(classOf[PreimageBroadcastCatcher], new PreimagesDb(Config.db), Config.vals)
-    syncRef = eclairKit.system actorOf Props(classOf[HostedSync], eclairKit, new HostedUpdatesDb(Config.db), Config.vals.phcConfig)
-    workerRef = eclairKit.system actorOf Props(classOf[Worker], eclairKit, syncRef, preimageRef, channelsDb, Config.vals)
+    val preimageRef = eclairKit.system actorOf Props(classOf[PreimageBroadcastCatcher], new PreimagesDb(config.db), config.vals)
+    syncRef = eclairKit.system actorOf Props(classOf[HostedSync], eclairKit, new HostedUpdatesDb(config.db), config.vals.phcConfig)
+    workerRef = eclairKit.system actorOf Props(classOf[Worker], eclairKit, syncRef, preimageRef, channelsDb, config.vals)
     kit = eclairKit
   }
 

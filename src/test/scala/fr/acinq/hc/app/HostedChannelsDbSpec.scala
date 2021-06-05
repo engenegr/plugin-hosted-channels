@@ -18,8 +18,8 @@ import fr.acinq.eclair.ShortChannelId
 class HostedChannelsDbSpec extends AnyFunSuite {
   test("Insert, then update on second time") {
     import HostedWireSpec._
-    HCTestUtils.resetEntireDatabase(Config.db)
-    val cdb = new HostedChannelsDb(Config.db)
+    HCTestUtils.resetEntireDatabase(HCTestUtils.config.db)
+    val cdb = new HostedChannelsDb(HCTestUtils.config.db)
 
     cdb.updateOrAddNewChannel(data) // Insert
     cdb.updateOrAddNewChannel(data) // Update
@@ -42,8 +42,8 @@ class HostedChannelsDbSpec extends AnyFunSuite {
 
   test("Update secret") {
     import HostedWireSpec._
-    HCTestUtils.resetEntireDatabase(Config.db)
-    val cdb = new HostedChannelsDb(Config.db)
+    HCTestUtils.resetEntireDatabase(HCTestUtils.config.db)
+    val cdb = new HostedChannelsDb(HCTestUtils.config.db)
     val secret = ByteVector32.Zeroes.bytes
 
     val hdc1 = hdc.copy(nextLocalUpdates = Nil, nextRemoteUpdates = Nil, originChannels = Map.empty)
@@ -57,8 +57,8 @@ class HostedChannelsDbSpec extends AnyFunSuite {
 
   test("list hot channels (with HTLCs in-flight)") {
     import HostedWireSpec._
-    HCTestUtils.resetEntireDatabase(Config.db)
-    val cdb = new HostedChannelsDb(Config.db)
+    HCTestUtils.resetEntireDatabase(HCTestUtils.config.db)
+    val cdb = new HostedChannelsDb(HCTestUtils.config.db)
 
     val data1 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(1L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
     val data2 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(2L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
@@ -75,8 +75,8 @@ class HostedChannelsDbSpec extends AnyFunSuite {
 
   test("list client channels") {
     import HostedWireSpec._
-    HCTestUtils.resetEntireDatabase(Config.db)
-    val cdb = new HostedChannelsDb(Config.db)
+    HCTestUtils.resetEntireDatabase(HCTestUtils.config.db)
+    val cdb = new HostedChannelsDb(HCTestUtils.config.db)
 
     val data1 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(1L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
     val data2 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(2L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
@@ -100,8 +100,8 @@ class HostedChannelsDbSpec extends AnyFunSuite {
 
   test("Processing 1000 hot channels") {
     import HostedWireSpec._
-    HCTestUtils.resetEntireDatabase(Config.db)
-    val cdb = new HostedChannelsDb(Config.db)
+    HCTestUtils.resetEntireDatabase(HCTestUtils.config.db)
+    val cdb = new HostedChannelsDb(HCTestUtils.config.db)
 
     val keys = for (_ <- 0 to 1000) yield randomKey.publicKey
 

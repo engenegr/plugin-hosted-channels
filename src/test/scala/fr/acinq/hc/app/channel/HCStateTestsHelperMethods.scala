@@ -53,8 +53,8 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
     val (aliceKit, aliceRelayer) = HCTestUtils.testKit(TestConstants.Alice.nodeParams)
     val (bobKit, bobRelayer) = HCTestUtils.testKit(TestConstants.Bob.nodeParams)
 
-    val aliceDB: PostgresProfile.backend.Database = PostgresProfile.backend.Database.forConfig("config.aliceRelationalDb", Config.config)
-    val bobDB: PostgresProfile.backend.Database = PostgresProfile.backend.Database.forConfig("config.bobRelationalDb", Config.config)
+    val aliceDB: PostgresProfile.backend.Database = PostgresProfile.backend.Database.forConfig("config.aliceRelationalDb", HCTestUtils.config.config)
+    val bobDB: PostgresProfile.backend.Database = PostgresProfile.backend.Database.forConfig("config.bobRelationalDb", HCTestUtils.config.config)
 
     val alice2bob = TestProbe()
     val bob2alice = TestProbe()
@@ -70,8 +70,8 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
     val bobPeerConnected = PeerConnected(alice2bob.ref, bobKit.nodeParams.nodeId, ConnectionInfo(new InetSocketAddress("127.0.0.3", 9001), TestProbe().ref, localInit = null, remoteInit = null))
     HC.remoteNode2Connection addOne aliceKit.nodeParams.nodeId -> PeerConnectedWrapTest(alicePeerConnected)
     HC.remoteNode2Connection addOne bobKit.nodeParams.nodeId -> PeerConnectedWrapTest(bobPeerConnected)
-    val alice: TestFSMRef[State, HostedData, HostedChannel] = TestFSMRef(new HostedChannel(aliceKit, bobKit.nodeParams.nodeId, new HostedChannelsDb(aliceDB), aliceSync.ref, Config.vals))
-    val bob: TestFSMRef[State, HostedData, HostedChannel] = TestFSMRef(new HostedChannel(bobKit, aliceKit.nodeParams.nodeId, new HostedChannelsDb(bobDB), bobSync.ref, Config.vals))
+    val alice: TestFSMRef[State, HostedData, HostedChannel] = TestFSMRef(new HostedChannel(aliceKit, bobKit.nodeParams.nodeId, new HostedChannelsDb(aliceDB), aliceSync.ref, HCTestUtils.config))
+    val bob: TestFSMRef[State, HostedData, HostedChannel] = TestFSMRef(new HostedChannel(bobKit, aliceKit.nodeParams.nodeId, new HostedChannelsDb(bobDB), bobSync.ref, HCTestUtils.config))
 
     alice2bob.watch(alice)
     bob2alice.watch(bob)

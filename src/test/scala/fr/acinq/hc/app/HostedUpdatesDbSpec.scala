@@ -27,47 +27,47 @@ class HostedUpdatesDbSpec extends AnyFunSuite {
   }
 
   test("Add announce and related updates") {
-    HCTestUtils.resetEntireDatabase(Config.db)
+    HCTestUtils.resetEntireDatabase(HCTestUtils.config.db)
 
     val channel = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, ShortChannelId(42), a.publicKey, b.publicKey, a.publicKey, b.publicKey, sig, sig, sig, sig)
     val channel_update_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, a, b.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
     val channel_update_2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, b, a.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
 
     val insertQuery = Updates.insert(channel.shortChannelId.toLong, channelAnnouncementCodec.encode(channel).require.toHex)
-    Blocking.txWrite(insertQuery, Config.db) // Insert
-    Blocking.txWrite(insertQuery, Config.db) // Update on conflict
+    Blocking.txWrite(insertQuery, HCTestUtils.config.db) // Insert
+    Blocking.txWrite(insertQuery, HCTestUtils.config.db) // Update on conflict
 
-    assert(channelAnnouncementCodec.decode(BitVector.fromValidHex(Blocking.txRead(Updates.model.result, Config.db).head._3)).require.value === channel)
+    assert(channelAnnouncementCodec.decode(BitVector.fromValidHex(Blocking.txRead(Updates.model.result, HCTestUtils.config.db).head._3)).require.value === channel)
 
     val channel1 = channel.copy(chainHash = Block.LivenetGenesisBlock.hash)
     val updateQuery = Updates.insert(channel.shortChannelId.toLong, channelAnnouncementCodec.encode(channel1).require.toHex)
-    Blocking.txWrite(updateQuery, Config.db) // Update on conflict, also announce data has changed
-    Blocking.txWrite(updateQuery, Config.db) // Update on conflict
+    Blocking.txWrite(updateQuery, HCTestUtils.config.db) // Update on conflict, also announce data has changed
+    Blocking.txWrite(updateQuery, HCTestUtils.config.db) // Update on conflict
 
-    val res1 = Blocking.txRead(Updates.model.result, Config.db).head
+    val res1 = Blocking.txRead(Updates.model.result, HCTestUtils.config.db).head
     assert(channelAnnouncementCodec.decode(BitVector.fromValidHex(res1._3)).require.value === channel1)
     assert(res1._4.isEmpty)
 
-    Blocking.txWrite(Updates.update1st(channel_update_1.shortChannelId.toLong, channelUpdateCodec.encode(channel_update_1).require.toHex, channel_update_1.timestamp), Config.db)
-    Blocking.txWrite(Updates.update2nd(channel_update_2.shortChannelId.toLong, channelUpdateCodec.encode(channel_update_2).require.toHex, channel_update_1.timestamp), Config.db)
+    Blocking.txWrite(Updates.update1st(channel_update_1.shortChannelId.toLong, channelUpdateCodec.encode(channel_update_1).require.toHex, channel_update_1.timestamp), HCTestUtils.config.db)
+    Blocking.txWrite(Updates.update2nd(channel_update_2.shortChannelId.toLong, channelUpdateCodec.encode(channel_update_2).require.toHex, channel_update_1.timestamp), HCTestUtils.config.db)
 
-    val res2 = Blocking.txRead(Updates.model.result, Config.db).head
+    val res2 = Blocking.txRead(Updates.model.result, HCTestUtils.config.db).head
     assert(channelUpdateCodec.decode(BitVector.fromValidHex(res2._4.get)).require.value === channel_update_1)
     assert(channelUpdateCodec.decode(BitVector.fromValidHex(res2._5.get)).require.value === channel_update_2)
 
-    Blocking.txWrite(Updates.findAnnounceDeletableCompiled.delete, Config.db)
-    assert(Blocking.txRead(Updates.model.result, Config.db).nonEmpty)
+    Blocking.txWrite(Updates.findAnnounceDeletableCompiled.delete, HCTestUtils.config.db)
+    assert(Blocking.txRead(Updates.model.result, HCTestUtils.config.db).nonEmpty)
 
-    Blocking.txWrite(Updates.findUpdate1stOldUpdatableCompiled(System.currentTimeMillis / 1000 + PHC.staleThreshold + 1).update(None), Config.db)
-    assert(Blocking.txRead(Updates.model.result, Config.db).nonEmpty)
-    Blocking.txWrite(Updates.findUpdate2ndOldUpdatableCompiled(System.currentTimeMillis / 1000 + PHC.staleThreshold + 1).update(None), Config.db)
-    Blocking.txWrite(Updates.findAnnounceDeletableCompiled.delete, Config.db)
-    assert(Blocking.txRead(Updates.model.result, Config.db).isEmpty)
+    Blocking.txWrite(Updates.findUpdate1stOldUpdatableCompiled(System.currentTimeMillis / 1000 + PHC.staleThreshold + 1).update(None), HCTestUtils.config.db)
+    assert(Blocking.txRead(Updates.model.result, HCTestUtils.config.db).nonEmpty)
+    Blocking.txWrite(Updates.findUpdate2ndOldUpdatableCompiled(System.currentTimeMillis / 1000 + PHC.staleThreshold + 1).update(None), HCTestUtils.config.db)
+    Blocking.txWrite(Updates.findAnnounceDeletableCompiled.delete, HCTestUtils.config.db)
+    assert(Blocking.txRead(Updates.model.result, HCTestUtils.config.db).isEmpty)
   }
 
   test("Use HostedUpdatesDb") {
-    HCTestUtils.resetEntireDatabase(Config.db)
-    val udb = new HostedUpdatesDb(Config.db)
+    HCTestUtils.resetEntireDatabase(HCTestUtils.config.db)
+    val udb = new HostedUpdatesDb(HCTestUtils.config.db)
 
     val channel_1 = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, ShortChannelId(42), a.publicKey, b.publicKey, a.publicKey, b.publicKey, sig, sig, sig, sig)
     val channel_2 = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, ShortChannelId(43), c.publicKey, d.publicKey, c.publicKey, d.publicKey, sig, sig, sig, sig)
@@ -78,19 +78,19 @@ class HostedUpdatesDbSpec extends AnyFunSuite {
     val channel_update_2_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, c, d.publicKey, ShortChannelId(43), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
     assert(udb.getState.channels.isEmpty)
 
-    Blocking.txWrite(udb.addAnnounce(channel_1), Config.db)
-    Blocking.txWrite(DBIO.seq(udb.addUpdate(channel_update_2_1), udb.addUpdate(channel_update_1_1)), Config.db)
+    Blocking.txWrite(udb.addAnnounce(channel_1), HCTestUtils.config.db)
+    Blocking.txWrite(DBIO.seq(udb.addUpdate(channel_update_2_1), udb.addUpdate(channel_update_1_1)), HCTestUtils.config.db)
     val map1 = udb.getState.channels(channel_1.shortChannelId)
     assert(map1.channelUpdate1.size === 1)
     assert(map1.channelUpdate1.get === channel_update_1_1)
     assert(map1.channelUpdate2.isEmpty)
 
-    Blocking.txWrite(DBIO.seq(udb.addUpdate(channel_update_1_2), udb.addUpdate(channel_update_1_1)), Config.db)
+    Blocking.txWrite(DBIO.seq(udb.addUpdate(channel_update_1_2), udb.addUpdate(channel_update_1_1)), HCTestUtils.config.db)
     val map2 = udb.getState.channels(channel_1.shortChannelId)
     assert(map2.channelUpdate1.get === channel_update_1_1)
     assert(map2.channelUpdate2.get === channel_update_1_2)
 
-    Blocking.txWrite(DBIO.seq(udb.addAnnounce(channel_2), udb.addAnnounce(channel_2), udb.addUpdate(channel_update_2_1), udb.addUpdate(channel_update_2_1)), Config.db)
+    Blocking.txWrite(DBIO.seq(udb.addAnnounce(channel_2), udb.addAnnounce(channel_2), udb.addUpdate(channel_update_2_1), udb.addUpdate(channel_update_2_1)), HCTestUtils.config.db)
     val map3 = udb.getState.channels
     assert(map3(channel_1.shortChannelId).channelUpdate1.get === channel_update_1_1)
     assert(map3(channel_1.shortChannelId).channelUpdate2.get === channel_update_1_2)
@@ -129,8 +129,8 @@ class HostedUpdatesDbSpec extends AnyFunSuite {
   }
 
   test("Inserting preimages") {
-    HCTestUtils.resetEntireDatabase(Config.db)
-    val pdb = new PreimagesDb(Config.db)
+    HCTestUtils.resetEntireDatabase(HCTestUtils.config.db)
+    val pdb = new PreimagesDb(HCTestUtils.config.db)
     val preimage = randomBytes32
 
     val dh = new DuplicateHandler[ByteVector32] {

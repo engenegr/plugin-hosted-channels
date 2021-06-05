@@ -1,16 +1,22 @@
 package fr.acinq.hc.app
 
+import java.io.File
+
 import akka.actor.ActorSystem
 import akka.testkit.TestProbe
 import fr.acinq.eclair.blockchain.TestWallet
 import fr.acinq.eclair.{Kit, NodeParams}
 import slick.jdbc.PostgresProfile
+
 import scala.concurrent.duration._
 import slick.jdbc.PostgresProfile.api._
+
 import scala.concurrent.Await
 
 
 object HCTestUtils {
+  val config = new Config(new File(System getProperty "user.dir"))
+
   def resetEntireDatabase(db: PostgresProfile.backend.Database): Unit = {
     val setup = DBIO.seq(
       fr.acinq.hc.app.db.Channels.model.schema.dropIfExists,

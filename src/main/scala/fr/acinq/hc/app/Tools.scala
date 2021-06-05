@@ -84,18 +84,24 @@ case class PeerConnectedWrapNormal(info: PeerConnected) extends PeerConnectedWra
 }
 
 
-object Config {
+class Config(datadir: File) {
   implicit val colorReader: ValueReader[Color] = ValueReader.relative { source =>
     Color(source.getInt("r").toByte, source.getInt("g").toByte, source.getInt("b").toByte)
   }
 
-  val resourcesDir: String = s"${System getProperty "user.dir"}/plugin-resources/hosted-channels"
+  val resourcesDir: File = new File(datadir, "/plugin-resources/hosted-channels/")
 
   val config: TypesafeConfig = ConfigFactory parseFile new File(resourcesDir, "hc.conf")
 
   val db: PostgresProfile.backend.Database = PostgresProfile.backend.Database.forConfig("config.relationalDb", config)
 
   val vals: Vals = config.as[Vals]("config.vals")
+
+  lazy val brandingMessage: HostedChannelBranding =
+    HostedChannelBranding(vals.branding.color, pngIcon = Try {
+      val pngIconFile = new File(resourcesDir, vals.branding.logo)
+      ByteVector view Files.readAllBytes(Paths get pngIconFile.getAbsolutePath)
+    }.toOption, vals.branding.contactInfo)
 }
 
 
@@ -120,19 +126,10 @@ case class HCParams(feeBaseMsat: Long,
 
 case class HCOverrideParams(nodeId: String, params: HCParams)
 
-case class Branding(logo: String, color: Color, contactInfo: String, enabled: Boolean) {
-  lazy val brandingMessage: HostedChannelBranding = HostedChannelBranding(color, logoBytes.toOption, contactInfo)
-
-  var logoBytes: Try[ByteVector] = Try {
-    val path = s"${Config.resourcesDir}/$logo"
-    val pngBytes = Files.readAllBytes(Paths get path)
-    ByteVector(pngBytes)
-  }
-}
+case class Branding(logo: String, color: Color, contactInfo: String, enabled: Boolean)
 
 case class PHCConfig(maxPerNode: Long, minNormalChans: Long, maxSyncSendsPerIpPerMinute: Int) {
   val maxCapacity: MilliSatoshi = MilliSatoshi(1000000000000000L) // No more than 10 000 BTC
-
   val minCapacity: MilliSatoshi = MilliSatoshi(50000000000L) // At least 0.5 BTC
 }
 

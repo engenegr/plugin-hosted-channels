@@ -12,8 +12,8 @@ import org.scalatest.funsuite.AnyFunSuite
 
 class PreimageBroadcastCatcherSpec extends AnyFunSuite {
   test("Extract preimages from txs, broadcast them and record to db") {
-    HCTestUtils.resetEntireDatabase(Config.db)
-    val pdb = new PreimagesDb(Config.db)
+    HCTestUtils.resetEntireDatabase(HCTestUtils.config.db)
+    val pdb = new PreimagesDb(HCTestUtils.config.db)
 
     val preimages = Set(randomBytes32, randomBytes32, randomBytes32)
 
@@ -21,7 +21,7 @@ class PreimageBroadcastCatcherSpec extends AnyFunSuite {
     val listener = TestProbe()(system)
     system.eventStream.subscribe(listener.ref, classOf[PreimageBroadcastCatcher.BroadcastedPreimage])
 
-    val catcher = system.actorOf(Props(new PreimageBroadcastCatcher(pdb, Config.vals)))
+    val catcher = system.actorOf(Props(new PreimageBroadcastCatcher(pdb, HCTestUtils.config.vals)))
     val txOuts = preimages.toList.map(_.bytes).map(OP_PUSHDATA.apply).grouped(2).map(OP_RETURN :: _).map(Script.write).map(TxOut(Satoshi(0L), _))
     catcher ! NewTransaction(Transaction(version = 2, txIn = Nil, txOut = txOuts.toList, lockTime = 0))
 

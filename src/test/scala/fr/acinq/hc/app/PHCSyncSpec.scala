@@ -28,11 +28,11 @@ class PHCSyncSpec extends BaseRouterSpec {
   }
 
   test("Hosted sync and gossip") { fixture =>
-    HCTestUtils.resetEntireDatabase(Config.db)
+    HCTestUtils.resetEntireDatabase(HCTestUtils.config.db)
     val probe = TestProbe()
-    val config = Config.vals.phcConfig.copy(minNormalChans = 1, maxPerNode = 1)
+    val config = HCTestUtils.config.vals.phcConfig.copy(minNormalChans = 1, maxPerNode = 1)
     val (kit, _) = HCTestUtils.testKit(TestConstants.Alice.nodeParams)(system)
-    val syncActor = TestFSMRef(new HostedSync(kit.copy(router = fixture.router), new HostedUpdatesDb(Config.db), config))
+    val syncActor = TestFSMRef(new HostedSync(kit.copy(router = fixture.router), new HostedUpdatesDb(HCTestUtils.config.db), config))
     awaitCond(syncActor.stateName == WAIT_FOR_ROUTER_DATA)
     // Router has finished synchronization
     syncActor ! SyncProgress(1D)
