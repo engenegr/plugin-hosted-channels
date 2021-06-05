@@ -100,8 +100,8 @@ class HCResizeSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     bob ! alice2bob.expectMsgType[LastCrossSignedState]
     alice ! bob2alice.expectMsgType[LastCrossSignedState]
     alice ! bob2alice.expectMsgType[ResizeChannel]
-    alice ! bob2alice.expectMsgType[StateUpdate]
     alice ! bob2alice.expectMsgType[ChannelUpdate]
+    alice ! bob2alice.expectMsgType[StateUpdate]
     bob ! alice2bob.expectMsgType[LastCrossSignedState]
     bob ! alice2bob.expectMsgType[ChannelUpdate]
     bob ! alice2bob.expectMsgType[StateUpdate]
@@ -173,12 +173,12 @@ class HCResizeSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     alice ! cmd_add
     alice ! CMD_SIGN(None)
 
-    alice ! bob2alice.expectMsgType[StateUpdate]
     alice ! bob2alice.expectMsgType[ChannelUpdate]
+    alice ! bob2alice.expectMsgType[StateUpdate]
     bob ! alice2bob.expectMsgType[ResizeChannel]
 
-    bob ! alice2bob.expectMsgType[StateUpdate]
     bob ! alice2bob.expectMsgType[ChannelUpdate]
+    bob ! alice2bob.expectMsgType[StateUpdate]
     alice ! bob2alice.expectMsgType[StateUpdate]
     val aliceAdd = alice2bob.expectMsgType[UpdateAddHtlc]
     bob ! aliceAdd
@@ -218,11 +218,11 @@ class HCResizeSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     alice ! bob2alice.expectMsgType[LastCrossSignedState]
     alice ! bob2alice.expectMsgType[ResizeChannel]
     bob ! alice2bob.expectMsgType[LastCrossSignedState]
-    alice ! bob2alice.expectMsgType[StateUpdate]
     alice ! bob2alice.expectMsgType[ChannelUpdate]
+    alice ! bob2alice.expectMsgType[StateUpdate]
     bob ! alice2bob.expectMsgType[ResizeChannel]
-    bob ! alice2bob.expectMsgType[StateUpdate]
     bob ! alice2bob.expectMsgType[ChannelUpdate]
+    bob ! alice2bob.expectMsgType[StateUpdate]
     bob ! CMD_FULFILL_HTLC(alice2bobUpdateAdd0.id, preimage0)
     bob ! CMD_SIGN(None)
     alice ! bob2alice.expectMsgType[StateUpdate]

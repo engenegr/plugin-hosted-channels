@@ -31,8 +31,6 @@ import java.util.UUID
 
 
 object HostedChannel {
-  case object SendPrivateChannelUpdateToPeer
-
   case class SendAnnouncements(force: Boolean)
 }
 
@@ -266,16 +264,6 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     case Event(cmd: HC_CMD_PRIVATE, data: HC_DATA_ESTABLISHED) =>
       val data1 = data.modify(_.commitments.announceChannel).setTo(false).copy(channelAnnouncement = None)
       stay StoringAndUsing data1 replying CMDResSuccess(cmd)
-
-    case Event(HostedChannel.SendPrivateChannelUpdateToPeer, data: HC_DATA_ESTABLISHED) if !data.commitments.announceChannel && chanParams.areDifferent(data.channelUpdate) =>
-      val update1 = makeChannelUpdate(localLCSS = data.commitments.lastCrossSignedState, enable = true)
-      HC.remoteNode2Connection.get(remoteNodeId).foreach(_ sendRoutingMsg update1)
-      stay StoringAndUsing data.copy(channelUpdate = update1)
-
-    case Event(HostedChannel.SendPrivateChannelUpdateToPeer, data: HC_DATA_ESTABLISHED) if !data.commitments.announceChannel =>
-      HC.remoteNode2Connection.get(remoteNodeId).foreach(_ sendRoutingMsg data.channelUpdate)
-      // Routing params have not changed, just send an existing update and do nothing
-      stay
 
     // Payments
 
@@ -512,10 +500,8 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
   onTransition {
     case (SYNCING | CLOSED) -> NORMAL =>
       nextStateData match {
-        case d1: HC_DATA_ESTABLISHED if !d1.commitments.announceChannel => self ! HostedChannel.SendPrivateChannelUpdateToPeer
-        case d1: HC_DATA_ESTABLISHED if chanParams.areDifferent(d1.channelUpdate) =>
-          log.info("PLGN PHC, Chan parameters are different")
-          self ! HostedChannel.SendAnnouncements(force = false)
+        case d1: HC_DATA_ESTABLISHED if !d1.commitments.announceChannel =>
+          HC.remoteNode2Connection.get(remoteNodeId).foreach(_ sendRoutingMsg d1.channelUpdate)
         case _ =>
       }
   }

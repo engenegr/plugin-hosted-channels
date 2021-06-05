@@ -2,8 +2,8 @@ package fr.acinq.hc.app
 
 import fr.acinq.eclair._
 import net.ceedubs.ficus.Ficus._
+import fr.acinq.eclair.wire.protocol._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
-import fr.acinq.eclair.wire.protocol.{AnnouncementMessage, ChannelAnnouncement, ChannelUpdate, Color, HasChannelId, UnknownMessage}
 import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol}
 import fr.acinq.hc.app.channel.{HostedChannelVersion, HostedCommitments}
 import com.typesafe.config.{ConfigFactory, Config => TypesafeConfig}
@@ -105,29 +105,11 @@ class Config(datadir: File) {
 }
 
 
-case class HCParams(feeBaseMsat: Long,
-                    feeProportionalMillionths: Long, cltvDeltaBlocks: Int, channelCapacityMsat: Long,
-                    htlcMinimumMsat: Long, maxAcceptedHtlcs: Int, isResizable: Boolean) {
-
-  val feeBase: MilliSatoshi = feeBaseMsat.msat
-
-  val htlcMinimum: MilliSatoshi = htlcMinimumMsat.msat
-
-  val channelVersion: ChannelVersion = if (isResizable) HostedChannelVersion.RESIZABLE else ChannelVersion.STANDARD
-
-  val initMsg: InitHostedChannel =
-    InitHostedChannel(UInt64(channelCapacityMsat), htlcMinimum, maxAcceptedHtlcs,
-      channelCapacityMsat.msat, initialClientBalanceMsat = 0L.msat, channelVersion)
-
-  def areDifferent(cu: ChannelUpdate): Boolean = {
-    println(s"-- PLGN PHC cu.cltvExpiryDelta=${cu.cltvExpiryDelta.toInt}, cltvDeltaBlocks=$cltvDeltaBlocks")
-    println(s"-- PLGN PHC cu.htlcMaximumMsat=${cu.htlcMaximumMsat}, initMsg.channelCapacityMsat=${initMsg.channelCapacityMsat}")
-    println(s"-- PLGN PHC cu.feeBaseMsat=${cu.feeBaseMsat}, feeBase=${feeBase}")
-    println(s"-- PLGN PHC cu.feeProportionalMillionths=${cu.feeProportionalMillionths}, feeProportionalMillionths=${feeProportionalMillionths}")
-
-    cu.cltvExpiryDelta.toInt != cltvDeltaBlocks || !cu.htlcMaximumMsat.contains(initMsg.channelCapacityMsat) ||
-      cu.feeBaseMsat != feeBase || cu.feeProportionalMillionths != feeProportionalMillionths
-  }
+case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDeltaBlocks: Int, channelCapacityMsat: Long, htlcMinimumMsat: Long, maxAcceptedHtlcs: Int, isResizable: Boolean) {
+  val initMsg: InitHostedChannel = InitHostedChannel(UInt64(channelCapacityMsat), htlcMinimum, maxAcceptedHtlcs, channelCapacityMsat.msat, initialClientBalanceMsat = 0L.msat, channelVersion)
+  lazy val channelVersion: ChannelVersion = if (isResizable) HostedChannelVersion.RESIZABLE else ChannelVersion.STANDARD
+  lazy val htlcMinimum: MilliSatoshi = htlcMinimumMsat.msat
+  lazy val feeBase: MilliSatoshi = feeBaseMsat.msat
 }
 
 case class HCOverrideParams(nodeId: String, params: HCParams)
