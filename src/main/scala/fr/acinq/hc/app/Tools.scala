@@ -120,7 +120,7 @@ case class HCParams(feeBaseMsat: Long,
       channelCapacityMsat.msat, initialClientBalanceMsat = 0L.msat, channelVersion)
 
   def areDifferent(cu: ChannelUpdate): Boolean =
-    cu.cltvExpiryDelta.toInt != cltvDeltaBlocks || !cu.htlcMaximumMsat.contains(htlcMinimum) ||
+    cu.cltvExpiryDelta.toInt != cltvDeltaBlocks || !cu.htlcMaximumMsat.contains(initMsg.channelCapacityMsat) ||
       cu.feeBaseMsat != feeBase || cu.feeProportionalMillionths != feeProportionalMillionths
 }
 
