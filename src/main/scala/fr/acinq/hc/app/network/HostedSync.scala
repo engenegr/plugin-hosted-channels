@@ -228,7 +228,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
   private def broadcastGossip(data: OperationalData): Unit = Future {
     val currentPublicPeers: Seq[PeerConnectedWrap] = randomPublicPeers(data)
     val allUpdates = data.phcGossip.updates1.values ++ data.phcGossip.updates2.values
-    log.info(s"PLGN PHC, TickSendGossip, sending to peers num=${currentPublicPeers.size}")
+    log.info(s"PLGN PHC, TickSendGossip, sending to num peers=${currentPublicPeers.size}")
 
     for {
       (_, wrap) <- data.phcGossip.announces
@@ -243,7 +243,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
     } publicPeerConnectedWrap sendRoutingMsg wrap.update
   } onComplete {
     case Failure(err) => log.info(s"PLGN PHC, TickSendGossip, fail, error=${err.getMessage}")
-    case _ => log.info(s"PLGN PHC, TickSendGossip, success, ${data.phcGossip.asString}")
+    case _ => log.info(s"PLGN PHC, TickSendGossip, success, seen gossip: ${data.phcGossip.asString}")
   }
 
   private def broadcastSync(data: OperationalData, wrap: PeerConnectedWrap): Unit = Future {
