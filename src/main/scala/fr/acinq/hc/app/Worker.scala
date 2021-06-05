@@ -36,7 +36,7 @@ object Worker {
   val isHidden: CMDResFailure = CMDResFailure("HC with remote node is hidden")
 }
 
-class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, channelsDb: HostedChannelsDb, vals: Vals) extends Actor with Logging { me =>
+class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, channelsDb: HostedChannelsDb, cfg: Config) extends Actor with Logging { me =>
   context.system.scheduler.scheduleWithFixedDelay(60.minutes, 60.minutes, self, Worker.TickClearIpAntiSpam)
   context.system.scheduler.scheduleWithFixedDelay(2.days, 2.days, self, TickRemoveIdleChannels)
 
@@ -145,7 +145,7 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
   }
 
   def spawnChannel(nodeId: PublicKey): ActorRef = {
-    val spawnedChannelProps = Props(classOf[HostedChannel], kit, nodeId, channelsDb, hostedSync, vals)
+    val spawnedChannelProps = Props(classOf[HostedChannel], kit, nodeId, channelsDb, hostedSync, cfg)
     val channelRef = context watch context.actorOf(spawnedChannelProps)
     inMemoryHostedChannels.put(nodeId, channelRef)
     channelRef
@@ -153,7 +153,7 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
 
   def guardSpawn(nodeId: PublicKey, wrap: PeerConnectedWrap, invoke: InvokeHostedChannel): Unit = {
     // Spawn new HC requested by remote peer if that peer is in our override map (special handling) or if there are not too many such requests from remote IP
-    if (vals.hcOverrideMap.contains(nodeId) || ipAntiSpam(wrap.remoteIp) < vals.maxNewChansPerIpPerHour) spawnChannel(nodeId) |> HCPeerConnected |> invoke
+    if (cfg.vals.hcOverrideMap.contains(nodeId) || ipAntiSpam(wrap.remoteIp) < cfg.vals.maxNewChansPerIpPerHour) spawnChannel(nodeId) |> HCPeerConnected |> invoke
     else wrap sendHasChannelIdMsg eclair.wire.protocol.Error(ByteVector32.Zeroes, ErrorCodes.ERR_HOSTED_CHANNEL_DENIED)
     // Record this request for anti-spam
     ipAntiSpam(wrap.remoteIp) += 1
