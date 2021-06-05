@@ -454,7 +454,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     case Event(_: HC_CMD_GET_INFO, data: HC_DATA_ESTABLISHED) => stay replying CMDResInfo(stateName, data, data.commitments.nextLocalSpec)
 
-    case Event(cmd: CMD_GETINFO, _: HC_DATA_ESTABLISHED) =>
+    case Event(cmd: CMD_GETINFO, _) =>
       // We get this for example when user issues "channels" API command, must reply with something
       replyToCommand(self, RES_GETINFO(remoteNodeId, channelId, stateName, data = null), cmd)
       stay
