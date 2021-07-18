@@ -61,8 +61,7 @@ object Tools {
   def hostedShortChanId(pubkey1: ByteVector, pubkey2: ByteVector): ShortChannelId = {
     val stream = new ByteArrayInputStream(hostedNodesCombined(pubkey1, pubkey2).toArray)
     def getChunk: Long = Protocol.uint64(stream, ByteOrder.BIG_ENDIAN)
-    val id = List.fill(8)(getChunk).foldLeft(Long.MaxValue)(_ % _)
-    ShortChannelId(id)
+    ShortChannelId(List.fill(8)(getChunk).sum)
   }
 }
 

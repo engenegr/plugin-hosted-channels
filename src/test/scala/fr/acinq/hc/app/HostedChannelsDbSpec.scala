@@ -2,17 +2,20 @@ package fr.acinq.hc.app
 
 import fr.acinq.eclair._
 import com.softwaremill.quicklens._
+import fr.acinq.bitcoin.Crypto.PublicKey
+
 import scala.collection.parallel.CollectionConverters._
 import fr.acinq.hc.app.Tools.{DuplicateHandler, DuplicateShortId}
 import fr.acinq.bitcoin.{ByteVector32, Satoshi}
-import scala.util.{Failure, Random}
 
+import scala.util.{Failure, Random}
 import fr.acinq.hc.app.channel.HC_DATA_ESTABLISHED
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.transactions.CommitmentSpec
 import fr.acinq.hc.app.db.HostedChannelsDb
 import org.scalatest.funsuite.AnyFunSuite
 import fr.acinq.eclair.ShortChannelId
+import scodec.bits.ByteVector
 
 
 class HostedChannelsDbSpec extends AnyFunSuite {
@@ -30,7 +33,8 @@ class HostedChannelsDbSpec extends AnyFunSuite {
     cdb.updateOrAddNewChannel(data1) // Update
     assert(cdb.getChannelByRemoteNodeId(hdc.remoteNodeId).head._1.commitments.announceChannel) // channelId is the same, but announce updated
 
-    val data2 = data1.copy(commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32)) // Different remote NodeId, but shortId is the same (which is theoretically possible)
+    val data2 = data1.copy(commitments = hdc.copy(remoteNodeId = randomKey.publicKey,
+      channelId = randomBytes32)) // Different remote NodeId, but shortId is the same (which is theoretically possible)
 
     val insertOrFail = new DuplicateHandler[HC_DATA_ESTABLISHED] {
       def insert(data: HC_DATA_ESTABLISHED): Boolean = cdb.addNewChannel(data)
@@ -60,10 +64,14 @@ class HostedChannelsDbSpec extends AnyFunSuite {
     HCTestUtils.resetEntireDatabase(HCTestUtils.config.db)
     val cdb = new HostedChannelsDb(HCTestUtils.config.db)
 
-    val data1 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(1L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
-    val data2 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(2L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
-    val data3 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(3L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32,
-      nextLocalUpdates = Nil, nextRemoteUpdates = Nil, localSpec = CommitmentSpec(htlcs = Set.empty, feeratePerKw = FeeratePerKw(Satoshi(0L)), toLocal = MilliSatoshi(Random.nextInt(Int.MaxValue)),
+    val data1 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(1L)),
+      commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
+    val data2 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(2L)),
+      commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
+    val data3 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(3L)),
+      commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32,
+      nextLocalUpdates = Nil, nextRemoteUpdates = Nil, localSpec = CommitmentSpec(htlcs = Set.empty, feeratePerKw = FeeratePerKw(Satoshi(0L)),
+          toLocal = MilliSatoshi(Random.nextInt(Int.MaxValue)),
         toRemote = MilliSatoshi(Random.nextInt(Int.MaxValue)))))
 
     cdb.updateOrAddNewChannel(data1)
@@ -78,9 +86,12 @@ class HostedChannelsDbSpec extends AnyFunSuite {
     HCTestUtils.resetEntireDatabase(HCTestUtils.config.db)
     val cdb = new HostedChannelsDb(HCTestUtils.config.db)
 
-    val data1 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(1L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
-    val data2 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(2L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
-    val data3 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(3L)), commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
+    val data1 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(1L)),
+      commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
+    val data2 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(2L)),
+      commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
+    val data3 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(3L)),
+      commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
 
     cdb.addNewChannel(data1)
     cdb.addNewChannel(data2)
@@ -107,13 +118,15 @@ class HostedChannelsDbSpec extends AnyFunSuite {
 
     {
       // Adding
-      val hdcs = for (n <- 0 to 1000) yield data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(n)), commitments = hdc.copy(remoteNodeId = keys(n), channelId = randomBytes32))
+      val hdcs = for (n <- 0 to 1000) yield data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(n)),
+        commitments = hdc.copy(remoteNodeId = keys(n), channelId = randomBytes32))
       hdcs.par.foreach(cdb.updateOrAddNewChannel)
     }
 
     {
       // Updating
-      val hdcs = for (n <- 0 to 1000) yield data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(n)), commitments = hdc.copy(remoteNodeId = keys(n), channelId = randomBytes32))
+      val hdcs = for (n <- 0 to 1000) yield data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(n)),
+        commitments = hdc.copy(remoteNodeId = keys(n), channelId = randomBytes32))
       hdcs.par.foreach(cdb.updateOrAddNewChannel)
     }
 
@@ -122,5 +135,12 @@ class HostedChannelsDbSpec extends AnyFunSuite {
       assert(cdb.listHotChannels.size === 1001)
       assert(System.currentTimeMillis() - a < 1000L) // less than 1 ms per object
     }
+  }
+
+  test("HC short channel ids are random") {
+    val hostNodeId = randomBytes32
+    val iterations = 1000000
+    val sids = List.fill(iterations)(Tools.hostedShortChanId(randomBytes32, hostNodeId))
+    assert(sids.size == sids.toSet.size)
   }
 }
