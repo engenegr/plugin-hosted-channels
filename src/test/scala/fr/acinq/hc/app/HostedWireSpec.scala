@@ -7,10 +7,11 @@ import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto, Satoshi}
 import fr.acinq.eclair.transactions.{CommitmentSpec, IncomingHtlc, OutgoingHtlc}
 import fr.acinq.eclair.wire.protocol.{ChannelUpdate, Error, UpdateAddHtlc, UpdateFailHtlc}
 import fr.acinq.eclair.wire.internal.channel.version2.{HCProtocolCodecs, HostedChannelCodecs}
-import fr.acinq.hc.app.channel.{ErrorExt, HC_DATA_ESTABLISHED, HostedChannelVersion, HostedCommitments, HostedState}
+import fr.acinq.hc.app.channel.{ErrorCodes, ErrorExt, HC_DATA_ESTABLISHED, HostedChannelVersion, HostedCommitments, HostedState}
 import fr.acinq.eclair.channel.{Channel, Origin}
 import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits.ByteVector
+
 import scala.util.Random
 import java.util.UUID
 
@@ -147,5 +148,19 @@ class HostedWireSpec extends AnyFunSuite {
     assert(HCProtocolCodecs.decodeHasChanIdMessage(HCProtocolCodecs.toUnknownHasChanIdMessage(update_fail_htlc)).require === update_fail_htlc)
     assert(HCProtocolCodecs.decodeHasChanIdMessage(HCProtocolCodecs.toUnknownHasChanIdMessage(update_add_htlc)).require === update_add_htlc)
     assert(HCProtocolCodecs.decodeHostedMessage(HCProtocolCodecs.toUnknownHostedMessage(announcement_signature)).require === announcement_signature)
+  }
+
+  test("Encode and decode an Error")  {
+    val error1 = Error(randomBytes32, ErrorCodes.ERR_HOSTED_WRONG_REMOTE_SIG)
+    val error2 = Error(randomBytes32, ErrorCodes.ERR_HOSTED_CHANNEL_DENIED + "message")
+
+    assert(HCProtocolCodecs.toUnknownHasChanIdMessage(error1).tag === HC.HC_ERROR_TAG)
+    assert(HCProtocolCodecs.toUnknownHasChanIdMessage(error2).tag === HC.HC_ERROR_TAG)
+
+    assert(HCProtocolCodecs.decodeHasChanIdMessage(HCProtocolCodecs.toUnknownHasChanIdMessage(error1)).require === error1)
+    assert(HCProtocolCodecs.decodeHasChanIdMessage(HCProtocolCodecs.toUnknownHasChanIdMessage(error2)).require === error2)
+
+    assert(ErrorExt.extractDescription(error1) == "hosted-code=ERR_HOSTED_WRONG_REMOTE_SIG")
+    assert(ErrorExt.extractDescription(error2) == "hosted-code=ERR_HOSTED_CHANNEL_DENIED, extra=message")
   }
 }
