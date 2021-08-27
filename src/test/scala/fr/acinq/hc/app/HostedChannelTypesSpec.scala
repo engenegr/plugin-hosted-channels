@@ -40,11 +40,6 @@ class HostedChannelTypesSpec extends AnyFunSuite {
 
   val channelUpdate: ChannelUpdate = ChannelUpdate(randomBytes64, Block.RegtestGenesisBlock.hash, ShortChannelId(1), 2, 42, 0, CltvExpiryDelta(3), 4.msat, 5.msat, 6, None)
 
-  test("HC version") {
-    assert(!ChannelFeatures(HCFeature).hasFeature(ResizeableHCFeature))
-    assert(ChannelFeatures(HCFeature, ResizeableHCFeature).hasFeature(ResizeableHCFeature))
-  }
-
   test("LCSS has the same sigHash for different order of in-flight HTLCs") {
     val lcssDifferentHtlcOrder = lcss.copy(incomingHtlcs = List(updateAddHtlc2, updateAddHtlc1), outgoingHtlcs = List(updateAddHtlc1, updateAddHtlc2))
     assert(lcss.hostedSigHash == lcssDifferentHtlcOrder.hostedSigHash)

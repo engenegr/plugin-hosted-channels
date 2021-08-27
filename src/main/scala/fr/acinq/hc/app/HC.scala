@@ -2,7 +2,6 @@ package fr.acinq.hc.app
 
 import fr.acinq.eclair._
 import fr.acinq.hc.app.HC._
-
 import scala.concurrent.stm._
 import fr.acinq.hc.app.channel._
 import akka.actor.{ActorRef, ActorSystem, Props}
@@ -11,6 +10,7 @@ import fr.acinq.eclair.wire.protocol.{FailureMessage, UpdateAddHtlc}
 import fr.acinq.hc.app.db.{Blocking, HostedChannelsDb, HostedUpdatesDb, PreimagesDb}
 import fr.acinq.hc.app.network.{HostedSync, OperationalData, PHC, PreimageBroadcastCatcher}
 import fr.acinq.bitcoin.{ByteVector32, OP_PUSHDATA, OP_RETURN, Satoshi, Script, Transaction, TxOut}
+import fr.acinq.eclair.wire.internal.channel.version3.HostedChannelCodecs
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner.IncomingHtlc
 import fr.acinq.eclair.blockchain.bitcoind.BitcoinCoreWallet
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner
@@ -22,14 +22,11 @@ import akka.http.scaladsl.server.Route
 import fr.acinq.eclair.channel.Origin
 import fr.acinq.eclair.router.Router
 import akka.event.LoggingAdapter
-
 import scala.collection.mutable
 import scala.concurrent.Future
 import scodec.bits.ByteVector
 import akka.util.Timeout
 import akka.pattern.ask
-import fr.acinq.eclair.wire.internal.channel.version3.HostedChannelCodecs
-
 import scala.util.Try
 
 

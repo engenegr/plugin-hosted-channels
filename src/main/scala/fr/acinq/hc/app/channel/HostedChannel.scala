@@ -6,7 +6,6 @@ import fr.acinq.eclair.channel._
 import scala.concurrent.duration._
 import com.softwaremill.quicklens._
 import fr.acinq.eclair.wire.protocol._
-
 import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc, IncomingHtlc, OutgoingHtlc}
 import fr.acinq.hc.app.network.{HostedSync, OperationalData, PHC, PreimageBroadcastCatcher}
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, SatoshiLong}
