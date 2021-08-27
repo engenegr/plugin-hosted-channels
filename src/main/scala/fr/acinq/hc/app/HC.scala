@@ -282,7 +282,7 @@ class HC extends Plugin with RouteProvider {
 case object HCFeature extends Feature {
   val plugin: UnknownFeature = UnknownFeature(optional)
   val rfcName = "hosted_channels"
-  lazy val mandatory = 32772
+  lazy val mandatory = 32972
 }
 
 case object ResizeableHCFeature extends Feature {
