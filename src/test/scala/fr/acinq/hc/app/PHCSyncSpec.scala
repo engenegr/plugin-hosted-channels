@@ -11,7 +11,7 @@ import fr.acinq.eclair.channel.Channel.OutgoingMessage
 import fr.acinq.eclair.io.{ConnectionInfo, PeerConnected, UnknownMessageReceived}
 import fr.acinq.eclair.router.Router.Data
 import fr.acinq.eclair.router.{Announcements, BaseRouterSpec, Router, SyncProgress}
-import fr.acinq.eclair.wire.internal.channel.version2.HCProtocolCodecs
+import fr.acinq.eclair.wire.internal.channel.version3.HCProtocolCodecs
 import fr.acinq.eclair.wire.protocol.UnknownMessage
 import fr.acinq.hc.app.db.HostedUpdatesDb
 import fr.acinq.hc.app.network.HostedSync.{GotAllSyncFrom, SendSyncTo, TickSendGossip}

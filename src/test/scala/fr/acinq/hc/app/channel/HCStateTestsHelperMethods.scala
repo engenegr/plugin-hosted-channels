@@ -14,7 +14,7 @@ import fr.acinq.eclair.payment.OutgoingPacket
 import fr.acinq.eclair.payment.OutgoingPacket.Upstream
 import fr.acinq.eclair.payment.relay.Relayer
 import fr.acinq.eclair.router.Router.ChannelHop
-import fr.acinq.eclair.wire.protocol.Onion.FinalLegacyPayload
+import fr.acinq.eclair.wire.protocol.Onion.createSinglePartPayload
 import fr.acinq.eclair.wire.protocol.{AnnouncementMessage, ChannelUpdate, HasChannelId, UnknownMessage, UpdateAddHtlc, UpdateFulfillHtlc}
 import fr.acinq.eclair.{CltvExpiryDelta, Kit, MilliSatoshi, TestConstants, randomBytes32}
 import fr.acinq.hc.app.db.HostedChannelsDb
@@ -24,8 +24,8 @@ import slick.jdbc.PostgresProfile
 
 trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with ParallelTestExecution {
 
-  case class SetupFixture(alice: TestFSMRef[State, HostedData, HostedChannel],
-                          bob: TestFSMRef[State, HostedData, HostedChannel],
+  case class SetupFixture(alice: TestFSMRef[ChannelState, HostedData, HostedChannel],
+                          bob: TestFSMRef[ChannelState, HostedData, HostedChannel],
                           alice2bob: TestProbe,
                           bob2alice: TestProbe,
                           aliceSync: TestProbe,
@@ -70,8 +70,8 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
     val bobPeerConnected = PeerConnected(alice2bob.ref, bobKit.nodeParams.nodeId, ConnectionInfo(new InetSocketAddress("127.0.0.3", 9001), TestProbe().ref, localInit = null, remoteInit = null))
     HC.remoteNode2Connection addOne aliceKit.nodeParams.nodeId -> PeerConnectedWrapTest(alicePeerConnected)
     HC.remoteNode2Connection addOne bobKit.nodeParams.nodeId -> PeerConnectedWrapTest(bobPeerConnected)
-    val alice: TestFSMRef[State, HostedData, HostedChannel] = TestFSMRef(new HostedChannel(aliceKit, bobKit.nodeParams.nodeId, new HostedChannelsDb(aliceDB), aliceSync.ref, HCTestUtils.config))
-    val bob: TestFSMRef[State, HostedData, HostedChannel] = TestFSMRef(new HostedChannel(bobKit, aliceKit.nodeParams.nodeId, new HostedChannelsDb(bobDB), bobSync.ref, HCTestUtils.config))
+    val alice: TestFSMRef[ChannelState, HostedData, HostedChannel] = TestFSMRef(new HostedChannel(aliceKit, bobKit.nodeParams.nodeId, new HostedChannelsDb(aliceDB), aliceSync.ref, HCTestUtils.config))
+    val bob: TestFSMRef[ChannelState, HostedData, HostedChannel] = TestFSMRef(new HostedChannel(bobKit, aliceKit.nodeParams.nodeId, new HostedChannelsDb(bobDB), bobSync.ref, HCTestUtils.config))
 
     alice2bob.watch(alice)
     bob2alice.watch(bob)
@@ -133,7 +133,7 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
     val paymentHash: ByteVector32 = Crypto.sha256(paymentPreimage)
     val expiry = CltvExpiryDelta(144).toCltvExpiry(currentBlockHeight)
     val cmd = OutgoingPacket.buildCommand(replyTo.ref, upstream, paymentHash, ChannelHop(null, destination, null) :: Nil,
-      FinalLegacyPayload(amount, expiry))._1.copy(commit = false)
+      createSinglePartPayload(amount, expiry, randomBytes32))._1.copy(commit = false)
     (paymentPreimage, cmd, replyTo)
   }
 

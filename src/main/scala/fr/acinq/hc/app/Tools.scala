@@ -5,14 +5,14 @@ import net.ceedubs.ficus.Ficus._
 import fr.acinq.eclair.wire.protocol._
 import net.ceedubs.ficus.readers.ArbitraryTypeReader._
 import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol}
-import fr.acinq.hc.app.channel.{HostedChannelVersion, HostedCommitments}
 import com.typesafe.config.{ConfigFactory, Config => TypesafeConfig}
 import java.io.{ByteArrayInputStream, File}
 import java.nio.file.{Files, Paths}
 
-import fr.acinq.eclair.wire.internal.channel.version2.HCProtocolCodecs
+import fr.acinq.eclair.wire.internal.channel.version3.HCProtocolCodecs
 import fr.acinq.eclair.channel.Channel.OutgoingMessage
-import fr.acinq.eclair.channel.ChannelVersion
+import fr.acinq.hc.app.channel.HostedCommitments
+import fr.acinq.eclair.channel.ChannelFeatures
 import net.ceedubs.ficus.readers.ValueReader
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.bitcoin.Crypto.PublicKey
@@ -105,9 +105,12 @@ class Config(datadir: File) {
 
 
 case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDeltaBlocks: Int, channelCapacityMsat: Long, htlcMinimumMsat: Long, maxAcceptedHtlcs: Int, isResizable: Boolean) {
-  val initMsg: InitHostedChannel = InitHostedChannel(UInt64(channelCapacityMsat), htlcMinimum, maxAcceptedHtlcs, channelCapacityMsat.msat, initialClientBalanceMsat = 0L.msat, channelVersion)
-  lazy val channelVersion: ChannelVersion = if (isResizable) HostedChannelVersion.RESIZABLE else ChannelVersion.STANDARD
+  val initMsg: InitHostedChannel = InitHostedChannel(UInt64(channelCapacityMsat), htlcMinimum, maxAcceptedHtlcs, channelCapacityMsat.msat, initialClientBalanceMsat = 0L.msat, channelFeatures)
+
+  lazy val channelFeatures: List[Int] = if (isResizable) List(HCFeature.mandatory, ResizeableHCFeature.mandatory) else List(HCFeature.mandatory)
+
   lazy val htlcMinimum: MilliSatoshi = htlcMinimumMsat.msat
+
   lazy val feeBase: MilliSatoshi = feeBaseMsat.msat
 }
 
@@ -117,10 +120,12 @@ case class Branding(logo: String, color: Color, contactInfo: String, enabled: Bo
 
 case class PHCConfig(maxPerNode: Long, minNormalChans: Long, maxSyncSendsPerIpPerMinute: Int) {
   val maxCapacity: MilliSatoshi = MilliSatoshi(1000000000000000L) // No more than 10 000 BTC
-  val minCapacity: MilliSatoshi = MilliSatoshi(50000000000L) // At least 0.5 BTC
+
+  val minCapacity: MilliSatoshi = MilliSatoshi(5000000000L) // At least 0.05 BTC
 }
 
-case class Vals(hcDefaultParams: HCParams, hcOverrideParams: List[HCOverrideParams], maxNewChansPerIpPerHour: Int,
+case class Vals(hcDefaultParams: HCParams,
+                hcOverrideParams: List[HCOverrideParams], maxNewChansPerIpPerHour: Int,
                 maxPreimageRequestsPerIpPerMinute: Int, branding: Branding, phcConfig: PHCConfig) {
 
   val hcOverrideMap: Map[PublicKey, HCOverrideParams] = hcOverrideParams.map { hcParams =>

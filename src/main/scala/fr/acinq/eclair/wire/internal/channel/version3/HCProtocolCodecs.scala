@@ -1,4 +1,4 @@
-package fr.acinq.eclair.wire.internal.channel.version2
+package fr.acinq.eclair.wire.internal.channel.version3
 
 import scodec.codecs._
 import fr.acinq.hc.app._
@@ -6,7 +6,6 @@ import fr.acinq.hc.app.HC._
 import fr.acinq.eclair.wire.protocol._
 import fr.acinq.eclair.wire.protocol.CommonCodecs._
 import fr.acinq.eclair.wire.protocol.LightningMessageCodecs._
-import fr.acinq.eclair.wire.internal.channel.version2.ChannelCodecs2.Codecs.channelVersionCodec
 import scodec.{Attempt, Err}
 
 
@@ -23,7 +22,7 @@ object HCProtocolCodecs {
       (uint16 withContext "maxAcceptedHtlcs") ::
       (millisatoshi withContext "channelCapacityMsat") ::
       (millisatoshi withContext "initialClientBalanceMsat") ::
-      (channelVersionCodec withContext "version")
+      (listOfN(uint16, uint16) withContext "features")
   }.as[InitHostedChannel]
 
   val hostedChannelBrandingCodec = {

@@ -347,19 +347,19 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     addHtlcFromAliceToBob(300000L.msat, f, currentBlockHeight + 100)
     addHtlcFromAliceToBob(400000L.msat, f, currentBlockHeight + 100)
     alice ! UpdateFailHtlc(randomBytes32, alice2bobUpdateAdd1.id, randomBytes(64)) // Bob fails one HTLC, but does not update state
-    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.size === 3) // Alice takes update into account and waits
-    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.htlcs.size === 4)
+    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.size == 3) // Alice takes update into account and waits
+    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.htlcs.size == 4)
     alice ! wire.protocol.Error(randomBytes32, "Error from Bob")
     awaitCond(alice.stateName == CLOSED)
-    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.size === 4) // Bob's update without signature has been removed
+    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.size == 4) // Bob's update without signature has been removed
     alice ! UpdateFailHtlc(randomBytes32, alice2bobUpdateAdd1.id, randomBytes(64)) // Bob tries to fail an HTLC again
-    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.size === 4) // Alice disregards failing in CLOSED state
+    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.size == 4) // Alice disregards failing in CLOSED state
     alice ! UpdateFulfillHtlc(randomBytes32, alice2bobUpdateAdd1.id, preimage1)
-    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.size === 3)
+    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.size == 3)
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]] // Fulfill is accepted
     alice ! CurrentBlockCount(currentBlockHeight + 145)
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]] // One HTLC timed out
-    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.size === 2)
+    awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.size == 2)
     alice ! CurrentBlockCount(currentBlockHeight + 245)
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]] // Two more HTLCS timed out
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]

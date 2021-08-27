@@ -6,12 +6,11 @@ import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto, Satoshi}
 import fr.acinq.eclair.transactions.{CommitmentSpec, IncomingHtlc, OutgoingHtlc}
 import fr.acinq.eclair.wire.protocol.{ChannelUpdate, Error, UpdateAddHtlc, UpdateFailHtlc}
-import fr.acinq.eclair.wire.internal.channel.version2.{HCProtocolCodecs, HostedChannelCodecs}
-import fr.acinq.hc.app.channel.{ErrorCodes, ErrorExt, HC_DATA_ESTABLISHED, HostedChannelVersion, HostedCommitments, HostedState}
+import fr.acinq.eclair.wire.internal.channel.version3.{HCProtocolCodecs, HostedChannelCodecs}
+import fr.acinq.hc.app.channel.{ErrorCodes, ErrorExt, HC_DATA_ESTABLISHED, HostedCommitments, HostedState}
 import fr.acinq.eclair.channel.{Channel, Origin}
 import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits.ByteVector
-
 import scala.util.Random
 import java.util.UUID
 
@@ -39,7 +38,7 @@ object HostedWireSpec {
 
   val invoke_hosted_channel: InvokeHostedChannel = InvokeHostedChannel(Block.LivenetGenesisBlock.hash, ByteVector.fromValidHex("00" * 32), secret = ByteVector.fromValidHex("00" * 32))
 
-  val init_hosted_channel: InitHostedChannel = InitHostedChannel(UInt64(6), 10.msat, 20, 500000000L.msat, 1000000.msat, HostedChannelVersion.RESIZABLE)
+  val init_hosted_channel: InitHostedChannel = InitHostedChannel(UInt64(6), 10.msat, 20, 500000000L.msat, 1000000.msat, List(HCFeature.mandatory, ResizeableHCFeature.mandatory))
 
   val state_update: StateUpdate = StateUpdate(blockDay = 20020L, localUpdates = 1202L, remoteUpdates = 10L, ByteVector64.Zeroes)
 
@@ -79,14 +78,14 @@ class HostedWireSpec extends AnyFunSuite {
   test("Correctly derive HC id and short id") {
     val pubkey1 = randomKey.publicKey.value
     val pubkey2 = randomKey.publicKey.value
-    assert(Tools.hostedChanId(pubkey1, pubkey2) === Tools.hostedChanId(pubkey2, pubkey1))
-    assert(Tools.hostedShortChanId(pubkey1, pubkey2) === Tools.hostedShortChanId(pubkey2, pubkey1))
+    assert(Tools.hostedChanId(pubkey1, pubkey2) == Tools.hostedChanId(pubkey2, pubkey1))
+    assert(Tools.hostedShortChanId(pubkey1, pubkey2) == Tools.hostedShortChanId(pubkey2, pubkey1))
   }
 
   test("Encode and decode data") {
     val binary = HostedChannelCodecs.HC_DATA_ESTABLISHED_Codec.encode(data).require
     val check = HostedChannelCodecs.HC_DATA_ESTABLISHED_Codec.decodeValue(binary).require
-    assert(data === check)
+    assert(data == check)
     val a: Crypto.PrivateKey = randomKey
     val b: Crypto.PrivateKey = randomKey
     val channel = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, ShortChannelId(42), a.publicKey, b.publicKey, randomKey.publicKey,
@@ -94,15 +93,15 @@ class HostedWireSpec extends AnyFunSuite {
     val data1 = data.copy(channelAnnouncement = Some(channel))
     val binary1 = HostedChannelCodecs.HC_DATA_ESTABLISHED_Codec.encode(data1).require
     val check1 = HostedChannelCodecs.HC_DATA_ESTABLISHED_Codec.decodeValue(binary1).require
-    assert(data1 === check1)
+    assert(data1 == check1)
   }
 
   test("Encode and decode commitments") {
     {
       val binary = HostedChannelCodecs.hostedCommitmentsCodec.encode(hdc).require
       val check = HostedChannelCodecs.hostedCommitmentsCodec.decodeValue(binary).require
-      assert(hdc.localSpec === check.localSpec)
-      assert(hdc === check)
+      assert(hdc.localSpec == check.localSpec)
+      assert(hdc == check)
     }
 
     val state = HostedState(randomKey.publicKey, randomKey.publicKey, last_cross_signed_state_1)
@@ -110,14 +109,15 @@ class HostedWireSpec extends AnyFunSuite {
     {
       val binary = HostedChannelCodecs.hostedStateCodec.encode(state).require
       val check = HostedChannelCodecs.hostedStateCodec.decodeValue(binary).require
-      assert(state === check)
+      assert(state == check)
     }
   }
 
   test("Encode and decode messages") {
     import HostedWireSpec._
-    assert(HCProtocolCodecs.toUnknownHostedMessage(last_cross_signed_state_1).tag === HC.HC_LAST_CROSS_SIGNED_STATE_TAG)
-    assert(HCProtocolCodecs.decodeHostedMessage(HCProtocolCodecs.toUnknownHostedMessage(last_cross_signed_state_1)).require === last_cross_signed_state_1)
+    val unknown = HCProtocolCodecs.toUnknownHostedMessage(last_cross_signed_state_1)
+    assert(unknown.tag == HC.HC_LAST_CROSS_SIGNED_STATE_TAG)
+    assert(HCProtocolCodecs.decodeHostedMessage(unknown).require == last_cross_signed_state_1)
   }
 
   test("Encode and decode routing messages") {
@@ -128,10 +128,10 @@ class HostedWireSpec extends AnyFunSuite {
     val channel_update_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, a, b.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
     val channel_update_2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, b, a.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
 
-    assert(HCProtocolCodecs.toUnknownAnnounceMessage(channel, isGossip = true).tag === HC.PHC_ANNOUNCE_GOSSIP_TAG)
-    assert(HCProtocolCodecs.toUnknownAnnounceMessage(channel_update_1, isGossip = false).tag === HC.PHC_UPDATE_SYNC_TAG)
-    assert(HCProtocolCodecs.decodeAnnounceMessage(HCProtocolCodecs.toUnknownAnnounceMessage(channel, isGossip = true)).require === channel)
-    assert(HCProtocolCodecs.decodeAnnounceMessage(HCProtocolCodecs.toUnknownAnnounceMessage(channel_update_2, isGossip = false)).require === channel_update_2)
+    assert(HCProtocolCodecs.toUnknownAnnounceMessage(channel, isGossip = true).tag == HC.PHC_ANNOUNCE_GOSSIP_TAG)
+    assert(HCProtocolCodecs.toUnknownAnnounceMessage(channel_update_1, isGossip = false).tag == HC.PHC_UPDATE_SYNC_TAG)
+    assert(HCProtocolCodecs.decodeAnnounceMessage(HCProtocolCodecs.toUnknownAnnounceMessage(channel, isGossip = true)).require == channel)
+    assert(HCProtocolCodecs.decodeAnnounceMessage(HCProtocolCodecs.toUnknownAnnounceMessage(channel_update_2, isGossip = false)).require == channel_update_2)
   }
 
   test("Encode and decode standard messages with channel id") {
@@ -141,24 +141,24 @@ class HostedWireSpec extends AnyFunSuite {
     val update_add_htlc = UpdateAddHtlc(randomBytes32, 2, 3.msat, bin32(0), CltvExpiry(4), TestConstants.emptyOnionPacket)
     val announcement_signature = AnnouncementSignature(randomBytes64, wantsReply = false)
 
-    assert(HCProtocolCodecs.toUnknownHasChanIdMessage(update_fail_htlc).tag === HC.HC_UPDATE_FAIL_HTLC_TAG)
-    assert(HCProtocolCodecs.toUnknownHasChanIdMessage(update_add_htlc).tag === HC.HC_UPDATE_ADD_HTLC_TAG)
-    assert(HCProtocolCodecs.toUnknownHostedMessage(announcement_signature).tag === HC.HC_ANNOUNCEMENT_SIGNATURE_TAG)
+    assert(HCProtocolCodecs.toUnknownHasChanIdMessage(update_fail_htlc).tag == HC.HC_UPDATE_FAIL_HTLC_TAG)
+    assert(HCProtocolCodecs.toUnknownHasChanIdMessage(update_add_htlc).tag == HC.HC_UPDATE_ADD_HTLC_TAG)
+    assert(HCProtocolCodecs.toUnknownHostedMessage(announcement_signature).tag == HC.HC_ANNOUNCEMENT_SIGNATURE_TAG)
 
-    assert(HCProtocolCodecs.decodeHasChanIdMessage(HCProtocolCodecs.toUnknownHasChanIdMessage(update_fail_htlc)).require === update_fail_htlc)
-    assert(HCProtocolCodecs.decodeHasChanIdMessage(HCProtocolCodecs.toUnknownHasChanIdMessage(update_add_htlc)).require === update_add_htlc)
-    assert(HCProtocolCodecs.decodeHostedMessage(HCProtocolCodecs.toUnknownHostedMessage(announcement_signature)).require === announcement_signature)
+    assert(HCProtocolCodecs.decodeHasChanIdMessage(HCProtocolCodecs.toUnknownHasChanIdMessage(update_fail_htlc)).require == update_fail_htlc)
+    assert(HCProtocolCodecs.decodeHasChanIdMessage(HCProtocolCodecs.toUnknownHasChanIdMessage(update_add_htlc)).require == update_add_htlc)
+    assert(HCProtocolCodecs.decodeHostedMessage(HCProtocolCodecs.toUnknownHostedMessage(announcement_signature)).require == announcement_signature)
   }
 
   test("Encode and decode an Error")  {
     val error1 = Error(randomBytes32, ErrorCodes.ERR_HOSTED_WRONG_REMOTE_SIG)
     val error2 = Error(randomBytes32, ErrorCodes.ERR_HOSTED_CHANNEL_DENIED + "message")
 
-    assert(HCProtocolCodecs.toUnknownHasChanIdMessage(error1).tag === HC.HC_ERROR_TAG)
-    assert(HCProtocolCodecs.toUnknownHasChanIdMessage(error2).tag === HC.HC_ERROR_TAG)
+    assert(HCProtocolCodecs.toUnknownHasChanIdMessage(error1).tag == HC.HC_ERROR_TAG)
+    assert(HCProtocolCodecs.toUnknownHasChanIdMessage(error2).tag == HC.HC_ERROR_TAG)
 
-    assert(HCProtocolCodecs.decodeHasChanIdMessage(HCProtocolCodecs.toUnknownHasChanIdMessage(error1)).require === error1)
-    assert(HCProtocolCodecs.decodeHasChanIdMessage(HCProtocolCodecs.toUnknownHasChanIdMessage(error2)).require === error2)
+    assert(HCProtocolCodecs.decodeHasChanIdMessage(HCProtocolCodecs.toUnknownHasChanIdMessage(error1)).require == error1)
+    assert(HCProtocolCodecs.decodeHasChanIdMessage(HCProtocolCodecs.toUnknownHasChanIdMessage(error2)).require == error2)
 
     assert(ErrorExt.extractDescription(error1) == "hosted-code=ERR_HOSTED_WRONG_REMOTE_SIG")
     assert(ErrorExt.extractDescription(error2) == "hosted-code=ERR_HOSTED_CHANNEL_DENIED, extra=message")

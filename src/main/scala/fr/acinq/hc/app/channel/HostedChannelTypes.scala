@@ -8,7 +8,6 @@ import fr.acinq.eclair.wire.protocol._
 import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
 import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc}
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, Satoshi}
-import fr.acinq.eclair.channel.ChannelVersion
 import fr.acinq.eclair.payment.OutgoingPacket
 import fr.acinq.bitcoin.SatoshiLong
 import scodec.bits.ByteVector
@@ -50,7 +49,7 @@ case class CMDResFailure(reason: String) extends HCCommandResponse
 
 case class CMDResSuccess(cmd: HasRemoteNodeIdHostedCommand) extends HCCommandResponse
 
-case class CMDResInfo(state: State, data: HC_DATA_ESTABLISHED, nextLocalSpec: CommitmentSpec) extends HCCommandResponse
+case class CMDResInfo(state: ChannelState, data: HC_DATA_ESTABLISHED, nextLocalSpec: CommitmentSpec) extends HCCommandResponse
 
 // Data
 
@@ -81,7 +80,7 @@ case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
     commitments.nextLocalSpec.htlcs
   }
 
-  def isResizeSupported: Boolean = commitments.lastCrossSignedState.initHostedChannel.version.isSet(HostedChannelVersion.USE_RESIZE)
+  def isResizeSupported: Boolean = commitments.lastCrossSignedState.initHostedChannel.features.contains(ResizeableHCFeature.mandatory)
 
   def timedOutOutgoingHtlcs(blockHeight: Long): Set[UpdateAddHtlc] = pendingHtlcs.collect(DirectedHtlc.outgoing).filter(blockHeight > _.cltvExpiry.toLong)
 
@@ -95,12 +94,6 @@ case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
       .modify(_.commitments.localSpec.toRemote).usingIf(!commitments.lastCrossSignedState.isHost)(_ + resize.newCapacity - commitments.capacity)
       .modify(_.commitments.localSpec.toLocal).usingIf(commitments.lastCrossSignedState.isHost)(_ + resize.newCapacity - commitments.capacity)
       .modify(_.resizeProposal).setTo(None)
-}
-
-object HostedChannelVersion {
-  val USE_RESIZE = 1
-
-  val RESIZABLE: ChannelVersion = ChannelVersion.STANDARD | ChannelVersion.fromBit(USE_RESIZE)
 }
 
 case class HostedCommitments(localNodeId: PublicKey, remoteNodeId: PublicKey, channelId: ByteVector32,

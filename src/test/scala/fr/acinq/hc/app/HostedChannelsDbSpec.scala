@@ -2,8 +2,6 @@ package fr.acinq.hc.app
 
 import fr.acinq.eclair._
 import com.softwaremill.quicklens._
-import fr.acinq.bitcoin.Crypto.PublicKey
-
 import scala.collection.parallel.CollectionConverters._
 import fr.acinq.hc.app.Tools.{DuplicateHandler, DuplicateShortId}
 import fr.acinq.bitcoin.{ByteVector32, Satoshi}
@@ -15,7 +13,6 @@ import fr.acinq.eclair.transactions.CommitmentSpec
 import fr.acinq.hc.app.db.HostedChannelsDb
 import org.scalatest.funsuite.AnyFunSuite
 import fr.acinq.eclair.ShortChannelId
-import scodec.bits.ByteVector
 
 
 class HostedChannelsDbSpec extends AnyFunSuite {
@@ -41,7 +38,7 @@ class HostedChannelsDbSpec extends AnyFunSuite {
     }
 
     assert(cdb.getChannelByRemoteNodeId(data2.commitments.remoteNodeId).isEmpty) // Such a channel could not be found
-    assert(Failure(DuplicateShortId) === insertOrFail.execute(data2)) // New channel could not be created because of existing shortId
+    assert(Failure(DuplicateShortId) == insertOrFail.execute(data2)) // New channel could not be created because of existing shortId
   }
 
   test("Update secret") {
@@ -56,7 +53,7 @@ class HostedChannelsDbSpec extends AnyFunSuite {
     cdb.updateOrAddNewChannel(data1)
     assert(cdb.getChannelBySecret(secret).isEmpty)
     assert(cdb.updateSecretById(data1.commitments.remoteNodeId, secret))
-    assert(cdb.getChannelBySecret(secret).get === data1)
+    assert(cdb.getChannelBySecret(secret).get == data1)
   }
 
   test("list hot channels (with HTLCs in-flight)") {
@@ -78,7 +75,7 @@ class HostedChannelsDbSpec extends AnyFunSuite {
     cdb.updateOrAddNewChannel(data2)
     cdb.updateOrAddNewChannel(data3)
 
-    assert(cdb.listHotChannels.toSet === Set(data1, data2))
+    assert(cdb.listHotChannels.toSet == Set(data1, data2))
   }
 
   test("list client channels") {
@@ -106,7 +103,7 @@ class HostedChannelsDbSpec extends AnyFunSuite {
     cdb.updateOrAddNewChannel(data5)
     cdb.updateOrAddNewChannel(data3)
 
-    assert(cdb.listClientChannels.toSet === Set(data4, data5))
+    assert(cdb.listClientChannels.toSet == Set(data4, data5))
   }
 
   test("Processing 1000 hot channels") {
@@ -132,7 +129,7 @@ class HostedChannelsDbSpec extends AnyFunSuite {
 
     {
       val a = System.currentTimeMillis()
-      assert(cdb.listHotChannels.size === 1001)
+      assert(cdb.listHotChannels.size == 1001)
       assert(System.currentTimeMillis() - a < 1000L) // less than 1 ms per object
     }
   }

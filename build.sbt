@@ -7,7 +7,9 @@ scalaVersion := "2.13.3"
 
 libraryDependencies += "org.scalatest" % "scalatest_2.13" % "3.1.1"
 
-libraryDependencies += "com.typesafe.akka" % "akka-testkit_2.13" % "2.6.10"
+libraryDependencies += "com.typesafe.akka" % "akka-testkit_2.13" % "2.6.15"
+
+libraryDependencies += "com.typesafe.akka" % "akka-actor-testkit-typed_2.13" % "2.6.15"
 
 libraryDependencies += "com.softwaremill.quicklens" % "quicklens_2.13" % "1.6.1"
 

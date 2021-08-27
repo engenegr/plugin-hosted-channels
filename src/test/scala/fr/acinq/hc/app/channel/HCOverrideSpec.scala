@@ -37,10 +37,10 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     reachNormal(f)
     val (preimage, alice2bobUpdateAdd) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
     fulfillAliceHtlcByBob(alice2bobUpdateAdd.id, preimage, f)
-    assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal === 100000L.msat)
-    assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal === 100000L.msat)
-    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal === 9999900000L.msat)
-    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal === 9999900000L.msat)
+    assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 100000L.msat)
+    assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal == 100000L.msat)
+    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 9999900000L.msat)
+    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal == 9999900000L.msat)
     val (_, alice2bobUpdateAdd1) = addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight)
     alice ! UpdateFulfillHtlc(alice2bobUpdateAdd1.channelId, alice2bobUpdateAdd1.id, ByteVector32.Zeroes) // Wrong preimage
     bob ! alice2bob.expectMsgType[wire.protocol.Error]
@@ -61,9 +61,9 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     awaitCond(bob.stateName == NORMAL)
     val bobCommits = bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments
     val aliceCommits = alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments
-    assert(bobCommits.localSpec.toLocal === 100001L.msat)
-    assert(aliceCommits.nextLocalSpec.toLocal === 9999899999L.msat)
-    assert(bobCommits.lastCrossSignedState === aliceCommits.lastCrossSignedState.reverse)
+    assert(bobCommits.localSpec.toLocal == 100001L.msat)
+    assert(aliceCommits.nextLocalSpec.toLocal == 9999899999L.msat)
+    assert(bobCommits.lastCrossSignedState == aliceCommits.lastCrossSignedState.reverse)
   }
 
   test("Override started while client is offline, finished later") { f =>
@@ -73,10 +73,10 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     reachNormal(f)
     val (preimage, alice2bobUpdateAdd) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
     fulfillAliceHtlcByBob(alice2bobUpdateAdd.id, preimage, f)
-    assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal === 100000L.msat)
-    assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal === 100000L.msat)
-    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal === 9999900000L.msat)
-    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal === 9999900000L.msat)
+    assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 100000L.msat)
+    assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal == 100000L.msat)
+    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 9999900000L.msat)
+    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal == 9999900000L.msat)
     val (_, alice2bobUpdateAdd1) = addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight)
     alice ! UpdateFulfillHtlc(alice2bobUpdateAdd1.channelId, alice2bobUpdateAdd1.id, ByteVector32.Zeroes) // Wrong preimage
     bob ! alice2bob.expectMsgType[wire.protocol.Error]
@@ -99,15 +99,15 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     awaitCond(bob.stateName == CLOSED)
     bob ! HC_CMD_OVERRIDE_ACCEPT(aliceKit.nodeParams.nodeId)
     alice ! bob2alice.expectMsgType[StateUpdate]
-    assert(aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]].htlc.paymentHash === alice2bobUpdateAdd1.paymentHash)
+    assert(aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]].htlc.paymentHash == alice2bobUpdateAdd1.paymentHash)
     aliceRelayer.expectNoMessage()
     awaitCond(alice.stateName == NORMAL)
     awaitCond(bob.stateName == NORMAL)
     val bobCommits = bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments
     val aliceCommits = alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments
-    assert(bobCommits.localSpec.toLocal === 100001L.msat)
-    assert(aliceCommits.nextLocalSpec.toLocal === 9999899999L.msat)
-    assert(bobCommits.lastCrossSignedState === aliceCommits.lastCrossSignedState.reverse)
+    assert(bobCommits.localSpec.toLocal == 100001L.msat)
+    assert(aliceCommits.nextLocalSpec.toLocal == 9999899999L.msat)
+    assert(bobCommits.lastCrossSignedState == aliceCommits.lastCrossSignedState.reverse)
   }
 
   test("Override with pending htlc timed out") { f =>
@@ -117,10 +117,10 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     reachNormal(f)
     val (preimage, alice2bobUpdateAdd) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
     fulfillAliceHtlcByBob(alice2bobUpdateAdd.id, preimage, f)
-    assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal === 100000L.msat)
-    assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal === 100000L.msat)
-    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal === 9999900000L.msat)
-    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal === 9999900000L.msat)
+    assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 100000L.msat)
+    assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal == 100000L.msat)
+    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 9999900000L.msat)
+    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal == 9999900000L.msat)
     val (preimage1, alice2bobUpdateAdd1) = addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight)
     alice ! UpdateFulfillHtlc(alice2bobUpdateAdd1.channelId, alice2bobUpdateAdd1.id, ByteVector32.Zeroes) // Wrong preimage
     bob ! alice2bob.expectMsgType[wire.protocol.Error]
@@ -129,7 +129,7 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     aliceRelayer.expectNoMessage()
     alice2bob.expectNoMessage()
     bob2alice.expectNoMessage()
-    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.collect(DirectedHtlc.outgoing).size === 1)
+    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.collect(DirectedHtlc.outgoing).size == 1)
     alice ! UpdateFailHtlc(alice2bobUpdateAdd1.channelId, alice2bobUpdateAdd1.id, ByteVector.fill(152)(0)) // Fail is disregarded by Alice in CLOSED state
     aliceRelayer.expectNoMessage()
     alice ! CurrentBlockCount(Long.MaxValue)
@@ -155,10 +155,10 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     reachNormal(f)
     val (preimage, alice2bobUpdateAdd) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
     fulfillAliceHtlcByBob(alice2bobUpdateAdd.id, preimage, f)
-    assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal === 100000L.msat)
-    assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal === 100000L.msat)
-    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal === 9999900000L.msat)
-    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal === 9999900000L.msat)
+    assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 100000L.msat)
+    assert(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal == 100000L.msat)
+    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.localSpec.toLocal == 9999900000L.msat)
+    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.toLocal == 9999900000L.msat)
     val (preimage1, alice2bobUpdateAdd1) = addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight)
     alice ! UpdateFulfillHtlc(alice2bobUpdateAdd1.channelId, alice2bobUpdateAdd1.id, ByteVector32.Zeroes) // Wrong preimage
     bob ! alice2bob.expectMsgType[wire.protocol.Error]
@@ -167,7 +167,7 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     aliceRelayer.expectNoMessage()
     alice2bob.expectNoMessage()
     bob2alice.expectNoMessage()
-    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.collect(DirectedHtlc.outgoing).size === 1)
+    assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.collect(DirectedHtlc.outgoing).size == 1)
     alice ! UpdateFulfillHtlc(alice2bobUpdateAdd1.channelId, alice2bobUpdateAdd1.id, preimage1) // Fulfill in CLOSED state is accepted by Alice
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]] // Alice fulfills right away
     assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.collect(DirectedHtlc.outgoing).isEmpty)

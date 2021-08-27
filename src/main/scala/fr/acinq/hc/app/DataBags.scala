@@ -4,7 +4,6 @@ import fr.acinq.eclair._
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, LexicographicalOrdering, Protocol, Satoshi}
 import fr.acinq.eclair.wire.protocol.{Color, LightningMessageCodecs, UpdateAddHtlc}
 import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
-import fr.acinq.eclair.channel.ChannelVersion
 import scodec.bits.ByteVector
 import java.nio.ByteOrder
 
@@ -22,7 +21,7 @@ case class InitHostedChannel(maxHtlcValueInFlightMsat: UInt64,
                              maxAcceptedHtlcs: Int,
                              channelCapacityMsat: MilliSatoshi,
                              initialClientBalanceMsat: MilliSatoshi,
-                             version: ChannelVersion) extends HostedChannelMessage
+                             features: List[Int] = Nil) extends HostedChannelMessage
 
 case class HostedChannelBranding(rgbColor: Color,
                                  pngIcon: Option[ByteVector],

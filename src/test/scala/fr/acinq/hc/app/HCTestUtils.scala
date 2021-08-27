@@ -5,6 +5,7 @@ import java.io.File
 import akka.actor.ActorSystem
 import akka.testkit.TestProbe
 import fr.acinq.eclair.blockchain.TestWallet
+import akka.actor.typed.scaladsl.adapter.{ClassicActorRefOps, actorRefAdapter}
 import fr.acinq.eclair.{Kit, NodeParams}
 import slick.jdbc.PostgresProfile
 
@@ -36,19 +37,13 @@ object HCTestUtils {
     val router = TestProbe()
     val switchboard = TestProbe()
     val testPaymentInitiator = TestProbe()
+    val channelsListener = TestProbe()
     val server = TestProbe()
-    val kit = Kit(
-      nodeParams,
-      system,
-      null,
-      paymentHandler.ref,
-      register.ref,
-      relayer.ref,
-      router.ref,
-      switchboard.ref,
-      testPaymentInitiator.ref,
-      server.ref,
-      new TestWallet())
+    val balance = TestProbe()
+
+    val kit = Kit(nodeParams, system, null, paymentHandler.ref, register.ref,
+      relayer.ref, router.ref, switchboard.ref, testPaymentInitiator.ref, server.ref,
+      channelsListener.ref.toTyped, balance.ref, new TestWallet)
     (kit, relayer)
   }
 }

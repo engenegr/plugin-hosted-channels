@@ -2,21 +2,22 @@ package fr.acinq.hc.app.network
 
 import fr.acinq.hc.app._
 import fr.acinq.hc.app.HC._
+
 import scala.concurrent.duration._
 import slick.jdbc.PostgresProfile.api._
 import fr.acinq.hc.app.network.HostedSync._
-
 import fr.acinq.eclair.wire.protocol.{ChannelAnnouncement, ChannelUpdate, UnknownMessage}
 import fr.acinq.eclair.{FSMDiagnosticActorLogging, Kit}
 import fr.acinq.hc.app.db.{Blocking, HostedUpdatesDb}
 import fr.acinq.eclair.router.{Router, SyncProgress}
-import scala.util.{Failure, Random, Success, Try}
 
-import fr.acinq.eclair.wire.internal.channel.version2.HCProtocolCodecs
+import scala.util.{Failure, Random, Success, Try}
 import scala.concurrent.ExecutionContext.Implicits.global
 import fr.acinq.eclair.io.UnknownMessageReceived
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.channel.Nothing
+import fr.acinq.eclair.wire.internal.channel.version3.HCProtocolCodecs
+
 import scala.collection.mutable
 import scala.concurrent.Future
 import scodec.Attempt
