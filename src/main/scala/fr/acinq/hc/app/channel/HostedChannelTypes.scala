@@ -11,7 +11,10 @@ import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, Satoshi}
 import fr.acinq.eclair.payment.OutgoingPacket
 import fr.acinq.bitcoin.SatoshiLong
 import scodec.bits.ByteVector
+import akka.actor.ActorRef
 
+
+case class HostedChannelRestored(channel: ActorRef, channelId: ByteVector32, peer: ActorRef, remoteNodeId: PublicKey) extends AbstractChannelRestored
 
 case class RemoteHostedStateResult(state: HostedState, remoteNodeId: Option[PublicKey], isLocalSigValid: Boolean)
 

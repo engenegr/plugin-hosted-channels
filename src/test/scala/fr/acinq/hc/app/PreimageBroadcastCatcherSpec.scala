@@ -21,7 +21,7 @@ class PreimageBroadcastCatcherSpec extends AnyFunSuite {
     val listener = TestProbe()(system)
     system.eventStream.subscribe(listener.ref, classOf[PreimageBroadcastCatcher.BroadcastedPreimage])
 
-    val catcher = system.actorOf(Props(new PreimageBroadcastCatcher(pdb, HCTestUtils.config.vals)))
+    val catcher = system.actorOf(Props(new PreimageBroadcastCatcher(pdb, null, HCTestUtils.config.vals)))
     val txOuts = preimages.toList.map(_.bytes).map(OP_PUSHDATA.apply).grouped(2).map(OP_RETURN :: _).map(Script.write).map(TxOut(Satoshi(0L), _))
     catcher ! NewTransaction(Transaction(version = 2, txIn = Nil, txOut = txOuts.toList, lockTime = 0))
 

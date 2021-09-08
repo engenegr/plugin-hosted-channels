@@ -5,14 +5,13 @@ import fr.acinq.hc.app.HC._
 import scala.concurrent.stm._
 import fr.acinq.hc.app.channel._
 import akka.actor.{ActorRef, ActorSystem, Props}
+import fr.acinq.bitcoin.{ByteVector32, Satoshi, Script}
 import fr.acinq.eclair.blockchain.fee.{FeeratePerByte, FeeratePerKw}
 import fr.acinq.eclair.wire.protocol.{FailureMessage, UpdateAddHtlc}
 import fr.acinq.hc.app.db.{Blocking, HostedChannelsDb, HostedUpdatesDb, PreimagesDb}
 import fr.acinq.hc.app.network.{HostedSync, OperationalData, PHC, PreimageBroadcastCatcher}
-import fr.acinq.bitcoin.{ByteVector32, OP_PUSHDATA, OP_RETURN, Satoshi, Script, Transaction, TxOut}
 import fr.acinq.eclair.wire.internal.channel.version3.HostedChannelCodecs
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner.IncomingHtlc
-import fr.acinq.eclair.blockchain.bitcoind.BitcoinCoreWallet
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner
 import fr.acinq.eclair.api.directives.EclairDirectives
 import fr.acinq.eclair.transactions.DirectedHtlc
@@ -23,7 +22,6 @@ import fr.acinq.eclair.channel.Origin
 import fr.acinq.eclair.router.Router
 import akka.event.LoggingAdapter
 import scala.collection.mutable
-import scala.concurrent.Future
 import scodec.bits.ByteVector
 import akka.util.Timeout
 import akka.pattern.ask
@@ -92,6 +90,7 @@ object HC {
 
 class HC extends Plugin with RouteProvider {
   var channelsDb: HostedChannelsDb = _
+  var preimageRef: ActorRef = _
   var workerRef: ActorRef = _
   var syncRef: ActorRef = _
   var config: Config = _
@@ -105,7 +104,7 @@ class HC extends Plugin with RouteProvider {
 
   override def onKit(eclairKit: Kit): Unit = {
     implicit val coreActorSystem: ActorSystem = eclairKit.system
-    val preimageRef = eclairKit.system actorOf Props(classOf[PreimageBroadcastCatcher], new PreimagesDb(config.db), config.vals)
+    preimageRef = eclairKit.system actorOf Props(classOf[PreimageBroadcastCatcher], new PreimagesDb(config.db), eclairKit, config.vals)
     syncRef = eclairKit.system actorOf Props(classOf[HostedSync], eclairKit, new HostedUpdatesDb(config.db), config.vals.phcConfig)
     workerRef = eclairKit.system actorOf Props(classOf[Worker], eclairKit, syncRef, preimageRef, channelsDb, config)
     kit = eclairKit
@@ -145,26 +144,7 @@ class HC extends Plugin with RouteProvider {
     import fr.acinq.eclair.api.serde.FormParamExtractors._
     import eclairDirectives._
 
-    val emptyUtxo = TxOut(Satoshi(0L), _: ByteVector)
-
     val hostedStateUnmarshaller = "state".as[ByteVector](binaryDataUnmarshaller)
-
-    def sendPreimageBroadcast(feeRatePerKw: FeeratePerKw, preimages: Set[ByteVector32] = Set.empty): Future[ByteVector32] = {
-      val preimageTxOuts = preimages.toList.map(_.bytes).map(OP_PUSHDATA.apply).grouped(2).map(OP_RETURN :: _).map(Script.write).map(emptyUtxo)
-      val wallet = kit.wallet.asInstanceOf[BitcoinCoreWallet]
-
-      for {
-        balance <- wallet.getBalance
-        toSend = (balance.confirmed + balance.unconfirmed) / 2
-        ourAddress <- wallet.getReceiveAddress("Preimage broadcast")
-        pubKeyScript = addressToPublicKeyScript(ourAddress, kit.nodeParams.chainHash)
-        txOutWithSendBack = TxOut(toSend, Script write pubKeyScript) :: preimageTxOuts.toList
-        tx = Transaction(version = 2, txIn = Nil, txOut = txOutWithSendBack, lockTime = 0)
-        fundedTx <- wallet.fundTransaction(tx, lockUtxos = false, feeRatePerKw)
-        signedTx <- wallet.signTransaction(fundedTx.tx)
-        true <- wallet.commit(signedTx.tx)
-      } yield signedTx.tx.txid
-    }
 
     def getHostedStateResult(state: ByteVector) = {
       val remoteState = HostedChannelCodecs.hostedStateCodec.decodeValue(state.toBitVector).require
@@ -180,7 +160,7 @@ class HC extends Plugin with RouteProvider {
 
     val invoke: Route = postRequest("hc-invoke") { implicit t =>
       formFields("refundAddress", "secret".as[ByteVector](binaryDataUnmarshaller), nodeIdFormParam) { case (refundAddress, secret, remoteNodeId) =>
-        val refundPubkeyScript = Script write fr.acinq.eclair.addressToPublicKeyScript(refundAddress, kit.nodeParams.chainHash)
+        val refundPubkeyScript = Script.write(fr.acinq.eclair.addressToPublicKeyScript(refundAddress, kit.nodeParams.chainHash))
         completeCommand(HC_CMD_LOCAL_INVOKE(remoteNodeId, refundPubkeyScript, secret))
       }
     }
@@ -255,9 +235,10 @@ class HC extends Plugin with RouteProvider {
 
     val broadcastPreimages: Route = postRequest("hc-broadcastpreimages") { implicit t =>
       formFields("preimages".as[List[ByteVector32]], "feerateSatByte".as[FeeratePerByte]) { case (preimages, feerateSatByte) =>
-        require(feerateSatByte.feerate.toLong > 1, "Preimage broadcast funding feerate must be > 1 sat/byte")
-        val broadcastTxId = sendPreimageBroadcast(FeeratePerKw(feerateSatByte), preimages.toSet)
-        complete(broadcastTxId)
+        require(feerateSatByte.feerate.toLong > 1, "Preimage broadcast funding feerate must be higher than 1 sat/byte")
+        val cmd = PreimageBroadcastCatcher.SendPreimageBroadcast(FeeratePerKw(feerateSatByte), preimages.toSet)
+        val broadcastTxIdResult = (preimageRef ? cmd).mapTo[ByteVector32]
+        complete(broadcastTxIdResult)
       }
     }
 

@@ -3,25 +3,31 @@ package fr.acinq.hc.app.network
 import fr.acinq.bitcoin._
 import scala.concurrent.duration._
 import fr.acinq.eclair.blockchain._
-import scala.collection.parallel.CollectionConverters._
 import fr.acinq.hc.app.network.PreimageBroadcastCatcher._
 import fr.acinq.hc.app.{HC, QueryPreimages, ReplyPreimages, Vals}
 import fr.acinq.eclair.wire.internal.channel.version3.HCProtocolCodecs
+import fr.acinq.eclair.blockchain.bitcoind.BitcoinCoreWallet
 import scala.concurrent.ExecutionContext.Implicits.global
+import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.io.UnknownMessageReceived
 import fr.acinq.hc.app.Tools.DuplicateHandler
 import fr.acinq.hc.app.db.PreimagesDb
 import scala.collection.mutable
 import scodec.bits.ByteVector
 import grizzled.slf4j.Logging
+import fr.acinq.eclair.Kit
 import akka.actor.Actor
 import scodec.Attempt
 
 
 object PreimageBroadcastCatcher {
+  case class SendPreimageBroadcast(feeRatePerKw: FeeratePerKw, preimages: Set[ByteVector32] = Set.empty)
+
   case class BroadcastedPreimage(hash: ByteVector32, preimage: ByteVector32)
 
-  case object TickClearIpAntiSpam { val label = "TickClearIpAntiSpam" }
+  case object TickClearIpAntiSpam {
+    val label = "TickClearIpAntiSpam"
+  }
 
   def extractPreimages(tx: Transaction): Seq[ByteVector32] =
     tx.txOut.map(transactionOutput => Script parse transactionOutput.publicKeyScript).flatMap {
@@ -31,13 +37,14 @@ object PreimageBroadcastCatcher {
     }.map(ByteVector32.apply)
 }
 
-class PreimageBroadcastCatcher(preimagesDb: PreimagesDb, vals: Vals) extends Actor with Logging {
+class PreimageBroadcastCatcher(preimagesDb: PreimagesDb, kit: Kit, vals: Vals) extends Actor with Logging {
   context.system.scheduler.scheduleWithFixedDelay(1.minute, 1.minute, self, PreimageBroadcastCatcher.TickClearIpAntiSpam)
 
   context.system.eventStream.subscribe(channel = classOf[NewTransaction], subscriber = self)
   context.system.eventStream.subscribe(channel = classOf[NewBlock], subscriber = self)
 
-  val ipAntiSpam: mutable.Map[Array[Byte], Int] = mutable.Map.empty withDefaultValue 0
+  val ipAntiSpam: mutable.Map[Array[Byte], Int] = mutable.Map.empty.withDefaultValue(0)
+  val emptyUtxo: ByteVector => TxOut = TxOut(Satoshi(0L), _: ByteVector)
 
   private val dh =
     new DuplicateHandler[ByteVector32] {
@@ -51,9 +58,25 @@ class PreimageBroadcastCatcher(preimagesDb: PreimagesDb, vals: Vals) extends Act
   override def receive: Receive = {
     case NewTransaction(tx) => extractPreimages(tx).foreach(dh.execute)
 
-    case NewBlock(block) => block.tx.par.flatMap(extractPreimages).foreach(dh.execute)
+    case NewBlock(block) => //block.tx.par.flatMap(extractPreimages).foreach(dh.execute)
 
     case PreimageBroadcastCatcher.TickClearIpAntiSpam => ipAntiSpam.clear
+
+    case PreimageBroadcastCatcher.SendPreimageBroadcast(feeRatePerKw, preimages) =>
+      val preimageTxOuts = preimages.toList.map(_.bytes).map(OP_PUSHDATA.apply).grouped(2).map(OP_RETURN :: _).map(Script.write).map(emptyUtxo)
+      val wallet = kit.wallet.asInstanceOf[BitcoinCoreWallet]
+
+      for {
+        balance <- wallet.getBalance
+        toSend = (balance.confirmed + balance.unconfirmed) / 2
+        ourAddress <- wallet.getReceiveAddress("Preimage broadcast")
+        pubKeyScript = fr.acinq.eclair.addressToPublicKeyScript(ourAddress, kit.nodeParams.chainHash)
+        txOutWithSendBack = TxOut(toSend, Script write pubKeyScript) :: preimageTxOuts.toList
+        tx = Transaction(version = 2, txIn = Nil, txOut = txOutWithSendBack, lockTime = 0)
+        fundedTx <- wallet.fundTransaction(tx, lockUtxos = false, feeRatePerKw)
+        signedTx <- wallet.signTransaction(fundedTx.tx)
+        true <- wallet.commit(signedTx.tx)
+      } sender ! signedTx.tx.txid
 
     case msg: UnknownMessageReceived =>
       Tuple3(HCProtocolCodecs decodeHostedMessage msg.message, HC.remoteNode2Connection get msg.nodeId, preimagesDb) match {
