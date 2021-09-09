@@ -3,6 +3,7 @@ package fr.acinq.hc.app.network
 import fr.acinq.bitcoin._
 import scala.concurrent.duration._
 import fr.acinq.eclair.blockchain._
+import scala.collection.parallel.CollectionConverters._
 import fr.acinq.hc.app.network.PreimageBroadcastCatcher._
 import fr.acinq.hc.app.{HC, QueryPreimages, ReplyPreimages, Vals}
 import fr.acinq.eclair.wire.internal.channel.version3.HCProtocolCodecs
@@ -12,6 +13,7 @@ import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.io.UnknownMessageReceived
 import fr.acinq.hc.app.Tools.DuplicateHandler
 import fr.acinq.hc.app.db.PreimagesDb
+import org.json4s.JsonAST.JString
 import scala.collection.mutable
 import scodec.bits.ByteVector
 import grizzled.slf4j.Logging
@@ -43,6 +45,7 @@ class PreimageBroadcastCatcher(preimagesDb: PreimagesDb, kit: Kit, vals: Vals) e
   context.system.eventStream.subscribe(channel = classOf[NewTransaction], subscriber = self)
   context.system.eventStream.subscribe(channel = classOf[NewBlock], subscriber = self)
 
+  lazy val wallet: BitcoinCoreWallet = kit.wallet.asInstanceOf[BitcoinCoreWallet]
   val ipAntiSpam: mutable.Map[Array[Byte], Int] = mutable.Map.empty.withDefaultValue(0)
   val emptyUtxo: ByteVector => TxOut = TxOut(Satoshi(0L), _: ByteVector)
 
@@ -58,13 +61,17 @@ class PreimageBroadcastCatcher(preimagesDb: PreimagesDb, kit: Kit, vals: Vals) e
   override def receive: Receive = {
     case NewTransaction(tx) => extractPreimages(tx).foreach(dh.execute)
 
-    case NewBlock(block) => //block.tx.par.flatMap(extractPreimages).foreach(dh.execute)
+    case NewBlock(blockHash) =>
+      wallet.bitcoinClient.rpcClient.invoke("getblock", blockHash, 0).foreach {
+        case JString(rawBlock) => Block.read(rawBlock).tx.par.flatMap(extractPreimages).foreach(dh.execute)
+        case otherwise => logger.error(s"PLGN PHC, PreimageBroadcastCatcher 'getblock' has returned $otherwise")
+      }
 
     case PreimageBroadcastCatcher.TickClearIpAntiSpam => ipAntiSpam.clear
 
     case PreimageBroadcastCatcher.SendPreimageBroadcast(feeRatePerKw, preimages) =>
+      // Each single output may contain up to 2 preimages prefixed by OP_RETURN, a single tx itself may contain many such outputs
       val preimageTxOuts = preimages.toList.map(_.bytes).map(OP_PUSHDATA.apply).grouped(2).map(OP_RETURN :: _).map(Script.write).map(emptyUtxo)
-      val wallet = kit.wallet.asInstanceOf[BitcoinCoreWallet]
 
       for {
         balance <- wallet.getBalance
