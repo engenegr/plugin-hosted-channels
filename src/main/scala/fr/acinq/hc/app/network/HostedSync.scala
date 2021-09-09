@@ -177,6 +177,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
     // LISTENING TO GOSSIP
 
     case Event(msg: UnknownMessageReceived, data: OperationalData) if gossipProcessor.tagsOfInterest.contains(msg.message.tag) =>
+      // TODO: currently ChannelUpdate from remote peer is forwarded here and disregarded if it belongs to an unannounced HC
       // This is a remote announce or update which we have received from remote peer
       stay using gossipProcessor.process(msg.nodeId, msg.message, data)
 
@@ -291,6 +292,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
         false
 
       case None =>
+        log.info(s"PLGN PHC, gossip update fail: not a PHC update, msg=$update")
         false
 
       case _ =>
@@ -298,25 +300,26 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
     }
 
     // Order matters here: first we check if this is an update for an existing channel, then try a new one
-    def process(fromNodeId: PublicKey, msg: UnknownMessage, data: OperationalData): OperationalData = HCProtocolCodecs.decodeAnnounceMessage(msg) match {
-      case Attempt.Successful(message: ChannelAnnouncement) if baseCheck(message, data) && data.phcNetwork.channels.contains(message.shortChannelId) =>
-        // This is an update of an already existing PHC because it's contained in channels map
-        processKnownAnnounce(message, data, fromNodeId)
+    def process(fromNodeId: PublicKey, msg: UnknownMessage, data: OperationalData): OperationalData =
+      HCProtocolCodecs.decodeAnnounceMessage(msg) match {
+        case Attempt.Successful(message: ChannelAnnouncement) if baseCheck(message, data) && data.phcNetwork.channels.contains(message.shortChannelId) =>
+          // This is an update of an already existing PHC because it's contained in channels map
+          processKnownAnnounce(message, data, fromNodeId)
 
-      case Attempt.Successful(message: ChannelAnnouncement) if baseCheck(message, data) && data.phcNetwork.tooManyPHCs(message.nodeId1, message.nodeId2, phcConfig).isEmpty =>
-        // This is a new PHC so we must check if any of related nodes already has too many PHCs before proceeding
-        processNewAnnounce(message, data, fromNodeId)
+        case Attempt.Successful(message: ChannelAnnouncement) if baseCheck(message, data) && data.phcNetwork.tooManyPHCs(message.nodeId1, message.nodeId2, phcConfig).isEmpty =>
+          // This is a new PHC so we must check if any of related nodes already has too many PHCs before proceeding
+          processNewAnnounce(message, data, fromNodeId)
 
-      case Attempt.Successful(msg: ChannelUpdate) if isUpdateAcceptable(msg, data) =>
-        processUpdate(msg, data, fromNodeId)
+        case Attempt.Successful(msg: ChannelUpdate) if isUpdateAcceptable(msg, data) =>
+          processUpdate(msg, data, fromNodeId)
 
-      case Attempt.Successful(something) =>
-        log.info(s"PLGN PHC, HostedSync, unacceptable message=$something, peer=$fromNodeId")
-        data
+        case Attempt.Successful(something) =>
+          log.info(s"PLGN PHC, HostedSync, unacceptable message=$something, peer=$fromNodeId")
+          data
 
-      case _: Attempt.Failure =>
-        log.info(s"PLGN PHC, HostedSync, parsing fail, peer=$fromNodeId")
-        data
-    }
+        case _: Attempt.Failure =>
+          log.info(s"PLGN PHC, HostedSync, parsing fail, peer=$fromNodeId")
+          data
+      }
   }
 }
