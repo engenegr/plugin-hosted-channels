@@ -415,7 +415,7 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     awaitCond(f.bob.stateName == OFFLINE)
 
     val channelId = f.bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.channelId
-    Blocking.txWrite(Channels.findIsVisibleUpdatableByRemoteNodeIdCompiled(f.bobKit.nodeParams.nodeId.value.toArray).delete, f.aliceDB) // Alice loses channel data
+    Blocking.txWrite(Channels.findByRemoteNodeIdUpdatableCompiled(f.bobKit.nodeParams.nodeId.value.toArray).delete, f.aliceDB) // Alice loses channel data
 
     val f2 = init()
     f.bob ! Worker.HCPeerConnected

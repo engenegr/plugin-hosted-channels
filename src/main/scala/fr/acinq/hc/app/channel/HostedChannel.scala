@@ -262,6 +262,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       stay StoringAndUsing data1 replying CMDResSuccess(cmd) Receiving HostedChannel.SendAnnouncements(force = false)
 
     case Event(cmd: HC_CMD_PRIVATE, data: HC_DATA_ESTABLISHED) =>
+      // This does not immediately affect PHC graph and other HC nodes will keep this channel for `PHC.staleThreshold` days
       val data1 = data.modify(_.commitments.announceChannel).setTo(false).copy(channelAnnouncement = None)
       stay StoringAndUsing data1 replying CMDResSuccess(cmd)
 
@@ -419,14 +420,6 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       }
 
     // Misc
-
-    case Event(_: HC_CMD_HIDE, data: HC_DATA_ESTABLISHED) if data.pendingHtlcs.nonEmpty =>
-      // Only cold channel can be hidden, otherwise we'd have dangling HTLCs present
-      stay replying CMDResFailure("Hiding declined: in-flight HTLCs are present")
-
-    case Event(cmd: HC_CMD_HIDE, _: HC_DATA_ESTABLISHED) =>
-      channelsDb.hideHostedChannel(remoteNodeId = remoteNodeId)
-      stop(FSM.Normal) replying CMDResSuccess(cmd)
 
     case Event(cmd: HC_CMD_SUSPEND, data: HC_DATA_ESTABLISHED) =>
       val (data1, error) = withLocalError(data, ErrorCodes.ERR_HOSTED_MANUAL_SUSPEND)

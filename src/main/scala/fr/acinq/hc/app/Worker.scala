@@ -34,8 +34,6 @@ object Worker {
   case object TickRemoveIdleChannels { val label = "TickRemoveIdleChannels" }
 
   val notFound: CMDResFailure = CMDResFailure("HC with remote node is not found")
-
-  val isHidden: CMDResFailure = CMDResFailure("HC with remote node is hidden")
 }
 
 class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, channelsDb: HostedChannelsDb, cfg: Config) extends Actor with Logging { me =>
@@ -78,7 +76,7 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
         case (Attempt.Successful(_: QueryPublicHostedChannels), Some(wrap), _) => hostedSync ! HostedSync.SendSyncTo(wrap)
 
         // Special handling for InvokeHostedChannel: if chan exists neither in memory nor in db, then this is a new chan request and anti-spam rules apply
-        case (Attempt.Successful(invoke: InvokeHostedChannel), Some(wrap), null) => restore(guardSpawn(nodeId, wrap, invoke), Tools.none, _ |> HCPeerConnected |> invoke)(nodeId)
+        case (Attempt.Successful(invoke: InvokeHostedChannel), Some(wrap), null) => restore(guardSpawn(nodeId, wrap, invoke), _ |> HCPeerConnected |> invoke)(nodeId)
         case (Attempt.Successful(_: HostedChannelMessage), _, null) => logger.info(s"PLGN PHC, no target for HostedMessage, messageTag=${message.tag}, peer=$nodeId")
         case (Attempt.Successful(hosted: HostedChannelMessage), _, channelRef) => channelRef ! hosted
       }
@@ -86,7 +84,7 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
     case UnknownMessageReceived(_, nodeId, message, _) if HC.chanIdMessageTags contains message.tag =>
       Tuple2(HCProtocolCodecs decodeHasChanIdMessage message, inMemoryHostedChannels get nodeId) match {
         case (_: Attempt.Failure, _) => logger.info(s"PLGN PHC, HasChannelId message decoding fail, messageTag=${message.tag}, peer=$nodeId")
-        case (Attempt.Successful(error: eclair.wire.protocol.Error), null) => restore(Tools.none, Tools.none, _ |> HCPeerConnected |> error)(nodeId)
+        case (Attempt.Successful(error: eclair.wire.protocol.Error), null) => restore(Tools.none, _ |> HCPeerConnected |> error)(nodeId)
         case (_, null) => logger.info(s"PLGN PHC, no target for HasChannelIdMessage, messageTag=${message.tag}, peer=$nodeId")
         case (Attempt.Successful(msg), channelRef) => channelRef ! msg
       }
@@ -110,9 +108,8 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
 
     case cmd: HasRemoteNodeIdHostedCommand =>
       Option(inMemoryHostedChannels get cmd.remoteNodeId) match {
-        // Peer may be disconnected when command arrives, channel must be able to handle command in any state
-        case None => restore(sender ! notFound, sender ! isHidden, _ |> cmd)(cmd.remoteNodeId)
-        case Some(ref) => ref forward cmd
+        case None => restore(sender ! notFound, _ |> cmd)(cmd.remoteNodeId)
+        case Some(channelRef) => channelRef forward cmd
       }
 
     case Terminated(channelRef) => inMemoryHostedChannels.inverse.remove(channelRef)
@@ -175,11 +172,11 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
     channel
   }
 
-  def restore(onNotFound: => Unit, onHidden: => Unit, onFound: ActorRef => Unit)(nodeId: PublicKey): Unit =
-    channelsDb.getChannelByRemoteNodeId(nodeId) collect {
-      case (data, true) => onFound(me spawnPreparedChannel data)
-      case (_, false) => onHidden
-    } getOrElse onNotFound
+  def restore(onNotFound: => Unit, onFound: ActorRef => Unit)(nodeId: PublicKey): Unit =
+    channelsDb.getChannelByRemoteNodeId(nodeId).map(spawnPreparedChannel) match {
+      case Some(channelRef) => onFound(channelRef)
+      case None => onNotFound
+    }
 
   implicit class MultiSender(channel: ActorRef) {
     def |>(message: Any): MultiSender = {

@@ -23,12 +23,12 @@ class HostedChannelsDbSpec extends AnyFunSuite {
 
     cdb.updateOrAddNewChannel(data) // Insert
     cdb.updateOrAddNewChannel(data) // Update
-    assert(!cdb.getChannelByRemoteNodeId(hdc.remoteNodeId).head._1.commitments.announceChannel)
+    assert(!cdb.getChannelByRemoteNodeId(hdc.remoteNodeId).head.commitments.announceChannel)
 
     val data1 = data.copy(commitments = hdc.copy(announceChannel = true)) // Channel becomes public
 
     cdb.updateOrAddNewChannel(data1) // Update
-    assert(cdb.getChannelByRemoteNodeId(hdc.remoteNodeId).head._1.commitments.announceChannel) // channelId is the same, but announce updated
+    assert(cdb.getChannelByRemoteNodeId(hdc.remoteNodeId).head.commitments.announceChannel) // channelId is the same, but announce updated
 
     val data2 = data1.copy(commitments = hdc.copy(remoteNodeId = randomKey.publicKey,
       channelId = randomBytes32)) // Different remote NodeId, but shortId is the same (which is theoretically possible)

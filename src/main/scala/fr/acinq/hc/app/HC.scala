@@ -213,12 +213,6 @@ class HC extends Plugin with RouteProvider {
       }
     }
 
-    val hide: Route = postRequest("hc-hide") { implicit t =>
-      formFields(nodeIdFormParam) { remoteNodeId =>
-        completeCommand(HC_CMD_HIDE(remoteNodeId))
-      }
-    }
-
     val verifyRemoteState: Route = postRequest("hc-verifyremotestate") { implicit t =>
       formFields(hostedStateUnmarshaller) { state =>
         complete(getHostedStateResult(state))
@@ -256,7 +250,7 @@ class HC extends Plugin with RouteProvider {
     }
 
     invoke ~ externalFulfill ~ findByRemoteId ~ overridePropose ~ overrideAccept ~ makePublic ~ makePrivate ~
-      resize ~ suspend ~ hide ~ verifyRemoteState ~ restoreFromRemoteState ~ broadcastPreimages ~ phcNodes
+      resize ~ suspend ~ verifyRemoteState ~ restoreFromRemoteState ~ broadcastPreimages ~ phcNodes
   }
 }
 
