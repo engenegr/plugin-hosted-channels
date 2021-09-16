@@ -27,21 +27,18 @@ case class PHC(shortChannelId: ShortChannelId, channelAnnounce: ChannelAnnouncem
   def tuple: (ShortChannelId, PHC) = (shortChannelId, this)
 
   def verifySig(update: ChannelUpdate): Boolean = {
-    val isNode1 = Announcements.isNode1(update.channelFlags)
-    if (isNode1) Announcements.checkSig(update, channelAnnounce.nodeId1)
+    if (update.channelFlags.isNode1) Announcements.checkSig(update, channelAnnounce.nodeId1)
     else Announcements.checkSig(update, channelAnnounce.nodeId2)
   }
 
   def isUpdateFresh(update: ChannelUpdate): Boolean = {
-    val isNode1 = Announcements.isNode1(update.channelFlags)
-    if (isNode1) channelUpdate1.forall(_.timestamp < update.timestamp)
+    if (update.channelFlags.isNode1) channelUpdate1.forall(_.timestamp < update.timestamp)
     else channelUpdate2.forall(_.timestamp < update.timestamp)
   }
 
   def withUpdate(update: ChannelUpdate): PHC = {
     val newUpdateOpt: Option[ChannelUpdate] = Some(update)
-    val isNode1 = Announcements.isNode1(update.channelFlags)
-    if (isNode1) copy(channelUpdate1 = newUpdateOpt)
+    if (update.channelFlags.isNode1) copy(channelUpdate1 = newUpdateOpt)
     else copy(channelUpdate2 = newUpdateOpt)
   }
 }

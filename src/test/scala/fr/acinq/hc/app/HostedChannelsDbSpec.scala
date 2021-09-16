@@ -67,7 +67,7 @@ class HostedChannelsDbSpec extends AnyFunSuite {
       commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32))
     val data3 = data.copy(channelUpdate = channelUpdate.copy(shortChannelId = ShortChannelId(3L)),
       commitments = hdc.copy(remoteNodeId = randomKey.publicKey, channelId = randomBytes32,
-      nextLocalUpdates = Nil, nextRemoteUpdates = Nil, localSpec = CommitmentSpec(htlcs = Set.empty, feeratePerKw = FeeratePerKw(Satoshi(0L)),
+      nextLocalUpdates = Nil, nextRemoteUpdates = Nil, localSpec = CommitmentSpec(htlcs = Set.empty, FeeratePerKw(Satoshi(0L)),
           toLocal = MilliSatoshi(Random.nextInt(Int.MaxValue)),
         toRemote = MilliSatoshi(Random.nextInt(Int.MaxValue)))))
 

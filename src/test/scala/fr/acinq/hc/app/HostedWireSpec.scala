@@ -48,12 +48,7 @@ object HostedWireSpec {
 
   val htlc1: IncomingHtlc = IncomingHtlc(add1)
   val htlc2: OutgoingHtlc = OutgoingHtlc(add2)
-  val cs: CommitmentSpec = CommitmentSpec(
-    htlcs = Set(htlc1, htlc2),
-    feeratePerKw = FeeratePerKw(Satoshi(0L)),
-    toLocal = MilliSatoshi(Random.nextInt(Int.MaxValue)),
-    toRemote = MilliSatoshi(Random.nextInt(Int.MaxValue))
-  )
+  val cs: CommitmentSpec = CommitmentSpec(htlcs = Set(htlc1, htlc2), FeeratePerKw(Satoshi(0L)), toLocal = MilliSatoshi(Random.nextInt(Int.MaxValue)), toRemote = MilliSatoshi(Random.nextInt(Int.MaxValue)))
 
   val channelUpdate: ChannelUpdate = Announcements.makeChannelUpdate(ByteVector32(ByteVector.fill(32)(1)), randomKey, randomKey.publicKey,
     ShortChannelId(142553), CltvExpiryDelta(42), MilliSatoshi(15), MilliSatoshi(575), 53, Channel.MAX_FUNDING.toMilliSatoshi)

@@ -36,8 +36,7 @@ class HostedUpdatesDb(val db: PostgresProfile.backend.Database) {
     Updates.insert(announce.shortChannelId.toLong, channelAnnouncementCodec.encode(announce).require.toHex)
 
   def addUpdate(update: ChannelUpdate): SqlAction[Int, PostgresProfile.api.NoStream, Effect] =
-    if (Announcements isNode1 update.channelFlags) addUpdate1(update)
-    else addUpdate2(update)
+    if (update.channelFlags.isNode1) addUpdate1(update) else addUpdate2(update)
 
   private def addUpdate1(update: ChannelUpdate): SqlAction[Int, PostgresProfile.api.NoStream, Effect] =
     Updates.update1st(update.shortChannelId.toLong, channelUpdateCodec.encode(update).require.toHex, update.timestamp)

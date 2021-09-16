@@ -99,8 +99,8 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
     awaitCond(bob.stateName == NORMAL)
     alice2bob.expectMsgType[ChannelUpdate]
     bob2alice.expectMsgType[ChannelUpdate]
-    awaitCond(!channelUpdateListener.expectMsgType[LocalChannelUpdate].channelUpdate.isNode1)
-    awaitCond(channelUpdateListener.expectMsgType[LocalChannelUpdate].channelUpdate.isNode1)
+    awaitCond(!channelUpdateListener.expectMsgType[LocalChannelUpdate].channelUpdate.channelFlags.isNode1)
+    awaitCond(channelUpdateListener.expectMsgType[LocalChannelUpdate].channelUpdate.channelFlags.isNode1)
     alice2bob.expectNoMessage()
     bob2alice.expectNoMessage()
   }

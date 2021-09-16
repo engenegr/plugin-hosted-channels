@@ -24,8 +24,7 @@ case class CollectedGossip(announces: Map[ShortChannelId, AnnouncementSeenFrom],
   }
 
   def addUpdate(update: ChannelUpdate, from: PublicKey): CollectedGossip =
-    if (Announcements isNode1 update.channelFlags) addUpdate1(update, from)
-    else addUpdate2(update, from)
+    if (update.channelFlags.isNode1) addUpdate1(update, from) else addUpdate2(update, from)
 
   private def addUpdate1(update: ChannelUpdate, from: PublicKey): CollectedGossip = updates1.get(update.shortChannelId) match {
     case Some(updateSeenFrom) => copy(updates1 = updates1 + UpdateSeenFrom(updateSeenFrom.seenFrom + from, update).tuple)
