@@ -1,24 +1,29 @@
 package fr.acinq.hc.app.network
 
 import fr.acinq.bitcoin._
+
 import scala.concurrent.duration._
 import fr.acinq.eclair.blockchain._
+
 import scala.collection.parallel.CollectionConverters._
 import fr.acinq.hc.app.network.PreimageBroadcastCatcher._
 import fr.acinq.hc.app.{HC, QueryPreimages, ReplyPreimages, Vals}
 import fr.acinq.eclair.wire.internal.channel.version3.HCProtocolCodecs
-import fr.acinq.eclair.blockchain.bitcoind.BitcoinCoreWallet
+
 import scala.concurrent.ExecutionContext.Implicits.global
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.io.UnknownMessageReceived
 import fr.acinq.hc.app.Tools.DuplicateHandler
 import fr.acinq.hc.app.db.PreimagesDb
 import org.json4s.JsonAST.JString
+
 import scala.collection.mutable
 import scodec.bits.ByteVector
 import grizzled.slf4j.Logging
 import fr.acinq.eclair.Kit
 import akka.actor.Actor
+import fr.acinq.eclair.blockchain.bitcoind.rpc.BitcoinCoreClient
+import fr.acinq.eclair.blockchain.bitcoind.rpc.BitcoinCoreClient.FundTransactionOptions
 import scodec.Attempt
 
 
@@ -45,7 +50,7 @@ class PreimageBroadcastCatcher(preimagesDb: PreimagesDb, kit: Kit, vals: Vals) e
   context.system.eventStream.subscribe(channel = classOf[NewTransaction], subscriber = self)
   context.system.eventStream.subscribe(channel = classOf[NewBlock], subscriber = self)
 
-  lazy val wallet: BitcoinCoreWallet = kit.wallet.asInstanceOf[BitcoinCoreWallet]
+  lazy val wallet: BitcoinCoreClient = kit.wallet.asInstanceOf[BitcoinCoreClient]
   val ipAntiSpam: mutable.Map[Array[Byte], Int] = mutable.Map.empty.withDefaultValue(0)
   val emptyUtxo: ByteVector => TxOut = TxOut(Satoshi(0L), _: ByteVector)
 
@@ -62,7 +67,7 @@ class PreimageBroadcastCatcher(preimagesDb: PreimagesDb, kit: Kit, vals: Vals) e
     case NewTransaction(tx) => extractPreimages(tx).foreach(dh.execute)
 
     case NewBlock(blockHash) =>
-      wallet.bitcoinClient.rpcClient.invoke("getblock", blockHash, 0).foreach {
+      wallet.rpcClient.invoke("getblock", blockHash, 0).foreach {
         case JString(rawBlock) => Block.read(rawBlock).tx.par.flatMap(extractPreimages).foreach(dh.execute)
         case otherwise => logger.error(s"PLGN PHC, PreimageBroadcastCatcher 'getblock' has returned $otherwise")
       }
@@ -72,15 +77,16 @@ class PreimageBroadcastCatcher(preimagesDb: PreimagesDb, kit: Kit, vals: Vals) e
     case PreimageBroadcastCatcher.SendPreimageBroadcast(feeRatePerKw, preimages) =>
       // Each single output may contain up to 2 preimages prefixed by OP_RETURN, a single tx itself may contain many such outputs
       val preimageTxOuts = preimages.toList.map(_.bytes).map(OP_PUSHDATA.apply).grouped(2).map(OP_RETURN :: _).map(Script.write).map(emptyUtxo)
+      val txOptions = FundTransactionOptions(feeRatePerKw, lockUtxos = true)
 
       for {
-        balance <- wallet.getBalance
+        balance <- wallet.onChainBalance
         toSend = (balance.confirmed + balance.unconfirmed) / 2
         ourAddress <- wallet.getReceiveAddress("Preimage broadcast")
         pubKeyScript = fr.acinq.eclair.addressToPublicKeyScript(ourAddress, kit.nodeParams.chainHash)
         txOutWithSendBack = TxOut(toSend, Script write pubKeyScript) :: preimageTxOuts.toList
         tx = Transaction(version = 2, txIn = Nil, txOut = txOutWithSendBack, lockTime = 0)
-        fundedTx <- wallet.fundTransaction(tx, lockUtxos = false, feeRatePerKw)
+        fundedTx <- wallet.fundTransaction(tx, txOptions)
         signedTx <- wallet.signTransaction(fundedTx.tx)
         true <- wallet.commit(signedTx.tx)
       } sender ! signedTx.tx.txid

@@ -1,10 +1,9 @@
 package fr.acinq.hc.app
 
 import java.io.File
-
 import akka.actor.ActorSystem
 import akka.testkit.TestProbe
-import fr.acinq.eclair.blockchain.TestWallet
+import fr.acinq.eclair.blockchain.DummyOnChainWallet
 import akka.actor.typed.scaladsl.adapter.{ClassicActorRefOps, actorRefAdapter}
 import fr.acinq.eclair.{Kit, NodeParams}
 import slick.jdbc.PostgresProfile
@@ -43,7 +42,7 @@ object HCTestUtils {
 
     val kit = Kit(nodeParams, system, null, paymentHandler.ref, register.ref,
       relayer.ref, router.ref, switchboard.ref, testPaymentInitiator.ref, server.ref,
-      channelsListener.ref.toTyped, balance.ref, new TestWallet)
+      channelsListener.ref.toTyped, balance.ref, new DummyOnChainWallet)
     (kit, relayer)
   }
 }

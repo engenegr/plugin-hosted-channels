@@ -12,7 +12,6 @@ import java.nio.file.{Files, Paths}
 import fr.acinq.eclair.wire.internal.channel.version3.HCProtocolCodecs
 import fr.acinq.eclair.channel.Channel.OutgoingMessage
 import fr.acinq.hc.app.channel.HostedCommitments
-import fr.acinq.eclair.channel.ChannelFeatures
 import net.ceedubs.ficus.readers.ValueReader
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.bitcoin.Crypto.PublicKey
