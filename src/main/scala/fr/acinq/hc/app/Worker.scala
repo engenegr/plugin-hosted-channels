@@ -39,7 +39,7 @@ object Worker {
 class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, channelsDb: HostedChannelsDb, cfg: Config) extends Actor with Logging { me =>
   context.system.scheduler.scheduleWithFixedDelay(60.minutes, 60.minutes, self, Worker.TickClearIpAntiSpam)
   context.system.scheduler.scheduleWithFixedDelay(20.seconds, 20.seconds, self, Worker.TickReconnectHosts)
-  context.system.scheduler.scheduleWithFixedDelay(2.days, 2.days, self, TickRemoveIdleChannels)
+  context.system.scheduler.scheduleWithFixedDelay(12.hours, 12.hours, self, TickRemoveIdleChannels)
 
   context.system.eventStream.subscribe(channel = classOf[UnknownMessageReceived], subscriber = self)
   context.system.eventStream.subscribe(channel = classOf[PeerDisconnected], subscriber = self)
@@ -48,7 +48,7 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
 
   val inMemoryHostedChannels: HashBiMap[PublicKey, ActorRef] = HashBiMap.create[PublicKey, ActorRef]
 
-  val ipAntiSpam: mutable.Map[Array[Byte], Int] = mutable.Map.empty withDefaultValue 0
+  val ipAntiSpam: mutable.Map[Array[Byte], Int] = mutable.Map.empty[Array[Byte], Int] withDefaultValue 0
 
   var clientChannelRemoteNodeIds: Set[PublicKey] = Set.empty
 
