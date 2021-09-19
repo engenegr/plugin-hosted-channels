@@ -53,7 +53,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
   when(OFFLINE) {
     case Event(cmd: HC_CMD_RESTORE, HC_NOTHING) =>
       val localLCSS = cmd.remoteData.lastCrossSignedState.reverse
-      val htlcSet: Set[DirectedHtlc] = localLCSS.incomingHtlcs.map(IncomingHtlc).toSet ++ localLCSS.outgoingHtlcs.map(OutgoingHtlc)
+      val htlcSet = localLCSS.incomingHtlcs.map(IncomingHtlc).toSet[DirectedHtlc] ++ localLCSS.outgoingHtlcs.map(OutgoingHtlc)
       val fakeOrigins: Map[Long, LocalCold] = localLCSS.incomingHtlcs.map(_.id).zip(LazyList continually UUID.randomUUID map LocalCold).toMap
       val data1 = restoreEmptyData(localLCSS).modify(_.commitments.localSpec.htlcs).setTo(htlcSet).modify(_.commitments.originChannels).setTo(fakeOrigins)
       stay StoringAndUsing data1 replying CMDResSuccess(cmd)
