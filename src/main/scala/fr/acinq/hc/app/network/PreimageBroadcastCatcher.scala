@@ -64,8 +64,11 @@ class PreimageBroadcastCatcher(preimagesDb: PreimagesDb, kit: Kit, vals: Vals) e
 
     case NewBlock(blockHash) =>
       wallet.rpcClient.invoke("getblock", blockHash, 0).foreach {
-        case JString(rawBlock) => Block.read(rawBlock).tx.par.flatMap(extractPreimages).foreach(dh.execute)
-        case otherwise => logger.error(s"PLGN PHC, PreimageBroadcastCatcher 'getblock' has returned $otherwise")
+        case JString(rawBlock) =>
+          Block.read(rawBlock).tx.par.flatMap(extractPreimages).foreach(dh.execute)
+          logger.error(s"PLGN PHC, PreimageBroadcastCatcher 'getblock' has been processed")
+        case otherwise =>
+          logger.error(s"PLGN PHC, PreimageBroadcastCatcher 'getblock' has returned $otherwise")
       }
 
     case PreimageBroadcastCatcher.TickClearIpAntiSpam => ipAntiSpam.clear
