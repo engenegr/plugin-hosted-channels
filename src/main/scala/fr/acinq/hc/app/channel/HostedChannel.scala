@@ -635,9 +635,9 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     for {
       theirAdd <- almostTimedOutIncomingHtlcs
       fulfill <- preimageMap.get(theirAdd.paymentHash)
-      sendAlarm = data.commitments.lastCrossSignedState.isHost
+      doNotSendAlarm = data.commitments.lastCrossSignedState.isHost
       msg = AlmostTimedoutIncomingHtlc(theirAdd, fulfill, remoteNodeId, blockCount)
-    } if (sendAlarm) context.system.eventStream publish msg else log.info(s"PLGN PHC, ${msg.message}")
+    } if (doNotSendAlarm) log.info(s"PLGN PHC, ${msg.message}") else context.system.eventStream publish msg
 
     if (timedoutOutgoingAdds.nonEmpty) {
       failTimedoutOutgoing(localAdds = timedoutOutgoingAdds, data) // Catch all outgoing HTLCs, even the ones they have failed but not signed yet

@@ -22,22 +22,17 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     HCTestUtils.resetEntireDatabase(aliceDB)
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
-    // To give Bob some money
     val (preimage1, add1) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
-    fulfillAliceHtlcByBob(add1.id, preimage1, f)
 
-    val (preimage2, add2) = addHtlcFromBob2Alice(10000L.msat, f)
-
-    bob ! Worker.HCPeerDisconnected
-    alice ! CMD_FULFILL_HTLC(add2.id, preimage2)
     alice ! Worker.HCPeerDisconnected
-
+    bob ! CMD_FULFILL_HTLC(add1.id, preimage1)
+    bob ! Worker.HCPeerDisconnected
     channelUpdateListener.expectMsgType[LocalChannelDown]
     channelUpdateListener.expectMsgType[LocalChannelDown]
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
 
-    alice ! CurrentBlockCount(currentBlockHeight + 37)
+    bob ! CurrentBlockCount(currentBlockHeight + 37)
     // 144 - (144 - 37) blocks left until timely knowledge of preimage is unprovable
     channelUpdateListener.expectMsgType[AlmostTimedoutIncomingHtlc]
     // No preimage for a second payment
