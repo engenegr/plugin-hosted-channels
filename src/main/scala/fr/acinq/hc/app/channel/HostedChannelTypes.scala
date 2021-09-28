@@ -249,9 +249,7 @@ case class HostedCommitments(localNodeId: PublicKey, remoteNodeId: PublicKey, ch
     else Right(addRemoteProposal(fail))
 
   def receiveFailMalformed(fail: UpdateFailMalformedHtlc): Either[ChannelException, HostedCommitments] = {
-    // A receiving node MUST fail the channel if the BADONION bit in failure_code is not set for update_fail_malformed_htlc.
-    if ((fail.failureCode & FailureMessageCodecs.BADONION) == 0) Left(InvalidFailureCode(channelId))
-    else if (getOutgoingHtlcCrossSigned(fail.id).isEmpty) Left(UnknownHtlcId(channelId, fail.id))
+    if (getOutgoingHtlcCrossSigned(fail.id).isEmpty) Left(UnknownHtlcId(channelId, fail.id))
     else Right(addRemoteProposal(fail))
   }
 }
