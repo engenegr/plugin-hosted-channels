@@ -11,7 +11,8 @@ JAR file can be found in `target` folder.
 ### Compiling AlarmBot plugin
 
 HC plugin depends on [AlarmBot](https://github.com/engenegr/eclair-alarmbot-plugin) plugin to send out 
-custom Telegram messages (more on this later), and Eclair instance must be run with both of these plugins added.
+custom Telegram messages (more on this later), and Eclair instance must be run with both of these plugins added, 
+compile AlarmBot as follows:
 
 ```
 $ cd <eclair-alarmbot-plugin>
@@ -30,6 +31,9 @@ Again, JAR file can be found in `target` folder.
 6. Run `eclair-node-<version>-<commit_id>/bin/eclair-node.sh 'hc-assembly-0.2.jar' 'eclair-alarmbot.jar'`.
 
 ---
+
+### How is AlarmBot used
+
 AlarmBot plugin is especially important when you have Client hosted channels and Host is stalling a resolution of your incoming
-payment. This is an adversarial situation where you need to take certain actions within a timeframe to timestamp Host's
+payment. This is an adversarial situation where you need to take certain actions within a certain timeframe to timestamp Host's
 obligations regarding a stalling payment, and it's important to be notified about this in time.
