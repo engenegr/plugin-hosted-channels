@@ -587,7 +587,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
         val disconnect = Peer.Disconnect(remoteNodeId)
         val peer = HC.remoteNode2Connection.get(remoteNodeId)
         peer.foreach(_.info.peer ! disconnect)
-        goto(OFFLINE)
+        goto(OFFLINE) StoringAndUsing data
 
       case Left(cause) =>
         val (data1, error) = withLocalError(data, cause.getMessage)
