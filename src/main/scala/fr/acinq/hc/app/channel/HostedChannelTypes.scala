@@ -222,7 +222,7 @@ case class HostedCommitments(localNodeId: PublicKey, remoteNodeId: PublicKey, ch
   def receiveFulfill(fulfill: UpdateFulfillHtlc): Either[ChannelException, (HostedCommitments, Origin, UpdateAddHtlc)] =
     // Technically peer may send a preimage at any moment, even if new LCSS has not been reached yet so do our best and always resolve on getting it
     // this is why for fulfills we look at `nextLocalSpec` only which may contain our not-yet-cross-signed Add which they may fulfill right away
-    nextLocalSpec.findOutgoingHtlcById(fulfill.id).orElse(localSpec.findOutgoingHtlcById(fulfill.id)) match {
+    nextLocalSpec.findOutgoingHtlcById(fulfill.id) match {
       case Some(htlc) if htlc.add.paymentHash == Crypto.sha256(fulfill.paymentPreimage) =>
         Right((addRemoteProposal(fulfill), originChannels(fulfill.id), htlc.add))
       case Some(_) => Left(InvalidHtlcPreimage(channelId, fulfill.id))

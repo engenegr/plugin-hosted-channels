@@ -567,6 +567,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     val localErrorExt: ErrorExt = ErrorExt generateFrom Error(channelId = channelId, msg = errorCode)
     val fulfillsAndFakeFails = data.commitments.nextRemoteUpdates.collect { case f: UpdateFulfillHtlc => f case f: UpdateFailHtlc if f.reason.isEmpty => f }
     val data1 = data.copy(commitments = data.commitments.copy(nextRemoteUpdates = fulfillsAndFakeFails), localErrors = localErrorExt :: data.localErrors)
+    context.system.eventStream publish HCSuspended(remoteNodeId, data.commitments.lastCrossSignedState.isHost, isLocal = true, errorCode)
     (data1, localErrorExt.error)
   }
 
@@ -623,6 +624,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
   def processRemoteError(errorState: FsmStateExt, remoteError: Error, data: HC_DATA_ESTABLISHED): HostedFsmState = if (data.remoteError.isEmpty) {
     val fulfillsAndFakeFails = data.commitments.nextRemoteUpdates.collect { case f: UpdateFulfillHtlc => f case f: UpdateFailHtlc if f.reason.isEmpty => f }
     val data1 = data.copy(commitments = data.commitments.copy(nextRemoteUpdates = fulfillsAndFakeFails), remoteError = Some(remoteError) map ErrorExt.generateFrom)
+    for (ext <- data1.remoteError) context.system.eventStream publish HCSuspended(remoteNodeId, data.commitments.lastCrossSignedState.isHost, isLocal = true, ext.description)
     errorState StoringAndUsing data1
   } else stay
 
@@ -636,10 +638,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       fulfill <- preimageMap.get(theirAdd.paymentHash)
       msg = AlmostTimedoutIncomingHtlc(theirAdd, fulfill, remoteNodeId, blockCount)
       if !data.commitments.lastCrossSignedState.isHost
-    } {
-      context.system.eventStream publish msg
-      log.info(s"PLGN PHC, ${msg.message}")
-    }
+    } context.system.eventStream publish msg
 
     if (timedoutOutgoingAdds.nonEmpty) {
       failTimedoutOutgoing(localAdds = timedoutOutgoingAdds, data) // Catch all outgoing HTLCs, even the ones they have failed but not signed yet

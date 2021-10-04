@@ -271,3 +271,8 @@ case class AlmostTimedoutIncomingHtlc(add: wire.protocol.UpdateAddHtlc, fulfill:
   override def message: String = s"AlmostTimedoutIncomingHtlc, id=${add.id}, amount=${add.amountMsat}, hash=${add.paymentHash}, expiry=${add.cltvExpiry.toLong}, tip=$blockCount, preimage=${fulfill.paymentPreimage}, peer=$nodeId"
   override def senderEntity: String = "HC"
 }
+
+case class HCSuspended(nodeId: PublicKey, isHost: Boolean, isLocal: Boolean, description: String) extends fr.acinq.alarmbot.CustomAlarmBotMessage {
+  override def message: String = s"HCSuspended, isHost=$isHost, isLocal=$isLocal, peer=$nodeId, description=$description"
+  override def senderEntity: String = "HC"
+}
