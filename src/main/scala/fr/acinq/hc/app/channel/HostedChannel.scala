@@ -210,6 +210,12 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
         val commits1 = data1.commitments.copy(nextLocalUpdates = localUpdatesAccountedByRemote, nextRemoteUpdates = remoteUpdatesAccountedByLocal)
         val restoredLCSS = commits1.nextLocalUnsignedLCSS(remoteLCSS.blockDay).copy(localSigOfRemote = remoteLCSS.remoteSigOfLocal, remoteSigOfLocal = remoteLCSS.localSigOfRemote)
 
+        println(s"restoredLCSS.reverse.incomingHtlcs: ${restoredLCSS.reverse.incomingHtlcs}")
+        println(s"restoredLCSS.reverse.outgoingHtlcs: ${restoredLCSS.reverse.outgoingHtlcs}")
+        println("-----------------------")
+        println(s"remoteLCSS.incomingHtlcs: ${remoteLCSS.incomingHtlcs}")
+        println(s"remoteLCSS.outgoingHtlcs: ${remoteLCSS.outgoingHtlcs}")
+
         if (restoredLCSS.reverse == remoteLCSS) {
           val retransmit = Vector(restoredLCSS) ++ data1.resizeProposal
           val restoredCommits = clearOrigin(commits1.copy(lastCrossSignedState = restoredLCSS, localSpec = commits1.nextLocalSpec, nextLocalUpdates = localUpdatesLeftover, nextRemoteUpdates = Nil), data1.commitments)
