@@ -195,26 +195,12 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
         val localUpdatesAcked = remoteLCSS.remoteUpdates - localLCSS.localUpdates
         val remoteUpdatesAcked = remoteLCSS.localUpdates - localLCSS.remoteUpdates
 
-        println("====================")
-        println(s"localUpdatesAcked: $localUpdatesAcked")
-        println(s"remoteUpdatesAcked: $remoteUpdatesAcked")
-
         val remoteUpdatesAccountedByLocal = data1.commitments.nextRemoteUpdates take remoteUpdatesAcked.toInt
         val localUpdatesAccountedByRemote = data1.commitments.nextLocalUpdates take localUpdatesAcked.toInt
         val localUpdatesLeftover = data1.commitments.nextLocalUpdates drop localUpdatesAcked.toInt
 
-        println(s"remoteUpdatesAccountedByLocal: ${remoteUpdatesAccountedByLocal.size}")
-        println(s"localUpdatesAccountedByRemote: ${localUpdatesAccountedByRemote.size}")
-        println(s"localUpdatesLeftover: ${localUpdatesLeftover.size}")
-
         val commits1 = data1.commitments.copy(nextLocalUpdates = localUpdatesAccountedByRemote, nextRemoteUpdates = remoteUpdatesAccountedByLocal)
         val restoredLCSS = commits1.nextLocalUnsignedLCSS(remoteLCSS.blockDay).copy(localSigOfRemote = remoteLCSS.remoteSigOfLocal, remoteSigOfLocal = remoteLCSS.localSigOfRemote)
-
-        println(s"restoredLCSS.reverse.incomingHtlcs: ${restoredLCSS.reverse.incomingHtlcs}")
-        println(s"restoredLCSS.reverse.outgoingHtlcs: ${restoredLCSS.reverse.outgoingHtlcs}")
-        println("-----------------------")
-        println(s"remoteLCSS.incomingHtlcs: ${remoteLCSS.incomingHtlcs}")
-        println(s"remoteLCSS.outgoingHtlcs: ${remoteLCSS.outgoingHtlcs}")
 
         if (restoredLCSS.reverse == remoteLCSS) {
           val retransmit = Vector(restoredLCSS) ++ data1.resizeProposal
