@@ -222,7 +222,7 @@ case class HostedCommitments(localNodeId: PublicKey, remoteNodeId: PublicKey, ch
   def receiveFulfill(fulfill: UpdateFulfillHtlc): Either[ChannelException, (HostedCommitments, Origin, UpdateAddHtlc)] =
     // Technically peer may send a preimage at any moment, even if new LCSS has not been reached yet so do our best and always resolve on getting it
     // this is why for fulfills we look at `nextLocalSpec` only which may contain our not-yet-cross-signed Add which they may fulfill right away
-    nextLocalSpec.findOutgoingHtlcById(fulfill.id) match {
+    nextLocalSpec.findOutgoingHtlcById(fulfill.id).orElse(localSpec.findOutgoingHtlcById(fulfill.id)) match {
       case Some(htlc) if htlc.add.paymentHash == Crypto.sha256(fulfill.paymentPreimage) =>
         Right((addRemoteProposal(fulfill), originChannels(fulfill.id), htlc.add))
       case Some(_) => Left(InvalidHtlcPreimage(channelId, fulfill.id))
@@ -244,12 +244,21 @@ case class HostedCommitments(localNodeId: PublicKey, remoteNodeId: PublicKey, ch
     }
 
   def receiveFail(fail: UpdateFailHtlc): Either[ChannelException, HostedCommitments] =
-    if (getOutgoingHtlcCrossSigned(fail.id).isEmpty) Left(UnknownHtlcId(channelId, fail.id)) // Unlike Fulfill, for Fail/FailMalformed we make sure they fail cross-signed outgoing payment
-    else if (fail.reason.isEmpty) Left(new ChannelException(channelId, "empty fail reason")) // Decline an empty reason since it's a special marker for our fake fails of timedout outgoing HTLCs
-    else Right(addRemoteProposal(fail))
+    getOutgoingHtlcCrossSigned(fail.id) match {
+      case None if nextLocalSpec.findOutgoingHtlcById(fail.id).isDefined => Left(UnsignedHtlcResolve(channelId))
+      case _ if fail.reason.isEmpty => Left(EmptyFailReason(channelId))
+      case None => Left(UnknownHtlcId(channelId, fail.id))
+      case _ => Right(addRemoteProposal(fail))
+    }
 
-  def receiveFailMalformed(fail: UpdateFailMalformedHtlc): Either[ChannelException, HostedCommitments] = {
-    if (getOutgoingHtlcCrossSigned(fail.id).isEmpty) Left(UnknownHtlcId(channelId, fail.id))
-    else Right(addRemoteProposal(fail))
-  }
+  def receiveFailMalformed(fail: UpdateFailMalformedHtlc): Either[ChannelException, HostedCommitments] =
+    getOutgoingHtlcCrossSigned(fail.id) match {
+      case None if nextLocalSpec.findOutgoingHtlcById(fail.id).isDefined => Left(UnsignedHtlcResolve(channelId))
+      case None => Left(UnknownHtlcId(channelId, fail.id))
+      case _ => Right(addRemoteProposal(fail))
+    }
 }
+
+case class EmptyFailReason(override val channelId: ByteVector32) extends ChannelException(channelId, "empty fail reason from remote peer")
+
+case class UnsignedHtlcResolve(override val channelId: ByteVector32) extends ChannelException(channelId, "unsigned HTLC resolution attempt from remote peer")

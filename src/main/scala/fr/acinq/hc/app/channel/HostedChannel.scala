@@ -24,6 +24,7 @@ import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.db.PendingCommandsDb
 import fr.acinq.hc.app.db.HostedChannelsDb
 import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.eclair.io.Peer
 import scodec.bits.ByteVector
 import scala.concurrent.Await
 import akka.pattern.ask
@@ -277,37 +278,17 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     // IMPORTANT: Peer adding and failing HTLCs is only accepted in NORMAL
 
-    case Event(add: UpdateAddHtlc, data: HC_DATA_ESTABLISHED) =>
-      data.commitments.receiveAdd(add) match {
-        case Right(commits1) => stay using data.copy(commitments = commits1)
-        case Left(cause) =>
-          val (data1, error) = withLocalError(data, cause.getMessage)
-          goto(CLOSED) StoringAndUsing data1 SendingHasChannelId error
-      }
+    case Event(add: UpdateAddHtlc, data: HC_DATA_ESTABLISHED) => processRemoteResolve(data.commitments.receiveAdd(add), data)
 
-    case Event(fail: UpdateFailHtlc, data: HC_DATA_ESTABLISHED) =>
-      data.commitments.receiveFail(fail) match {
-        case Right(commits1) => stay using data.copy(commitments = commits1)
-        case Left(cause) =>
-          val (data1, error) = withLocalError(data, cause.getMessage)
-          goto(CLOSED) StoringAndUsing data1 SendingHasChannelId error
-      }
+    case Event(fail: UpdateFailHtlc, data: HC_DATA_ESTABLISHED) => processRemoteResolve(data.commitments.receiveFail(fail), data)
 
-    case Event(fail: UpdateFailMalformedHtlc, data: HC_DATA_ESTABLISHED) =>
-      data.commitments.receiveFailMalformed(fail) match {
-        case Right(commits1) => stay using data.copy(commitments = commits1)
-        case Left(cause) =>
-          val (data1, error) = withLocalError(data, cause.getMessage)
-          goto(CLOSED) StoringAndUsing data1 SendingHasChannelId error
-      }
+    case Event(fail: UpdateFailMalformedHtlc, data: HC_DATA_ESTABLISHED) => processRemoteResolve(data.commitments.receiveFailMalformed(fail), data)
 
     case Event(_: CMD_SIGN, data: HC_DATA_ESTABLISHED) if data.commitments.nextLocalUpdates.nonEmpty || data.resizeProposal.isDefined =>
       val nextLocalLCSS = data.resizeProposal.map(data.withResize).getOrElse(data).commitments.nextLocalUnsignedLCSS(currentBlockDay)
       stay SendingHosted nextLocalLCSS.withLocalSigOfRemote(kit.nodeParams.privateKey).stateUpdate
 
-    case Event(remoteSU: StateUpdate, data: HC_DATA_ESTABLISHED)
-      if remoteSU.localSigOfRemoteLCSS != data.commitments.lastCrossSignedState.remoteSigOfLocal =>
-      attemptStateUpdate(remoteSU, data)
+    case Event(remoteSU: StateUpdate, data: HC_DATA_ESTABLISHED) if remoteSU.localSigOfRemoteLCSS != data.commitments.lastCrossSignedState.remoteSigOfLocal => attemptStateUpdate(remoteSU, data)
   }
 
   when(CLOSED) {
@@ -594,6 +575,24 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     replyToCommand(RES_ADD_FAILED(channelUpdate = Some(channelUpdate), t = cause, c = cmd), cmd)
     stay
   }
+
+  // Disconnect in a special case where they send a resolution before it is cross-signed
+  // This may happen if they have our earlier cross-signed state and we have got new commands while they were replying
+  def processRemoteResolve(result: Either[ChannelException, HostedCommitments], data: HC_DATA_ESTABLISHED): HostedFsmState =
+    result match {
+      case Right(commits1) =>
+        stay using data.copy(commitments = commits1)
+
+      case Left(_: UnsignedHtlcResolve) =>
+        val disconnect = Peer.Disconnect(remoteNodeId)
+        val peer = HC.remoteNode2Connection.get(remoteNodeId)
+        peer.foreach(_.info.peer ! disconnect)
+        goto(OFFLINE)
+
+      case Left(cause) =>
+        val (data1, error) = withLocalError(data, cause.getMessage)
+        goto(CLOSED) StoringAndUsing data1 SendingHasChannelId error
+    }
 
   def failTimedoutOutgoing(localAdds: Set[UpdateAddHtlc], data: HC_DATA_ESTABLISHED): Unit = localAdds foreach { add =>
     log.info(s"PLGN PHC, failing timed out outgoing htlc, hash=${add.paymentHash}, peer=$remoteNodeId")
