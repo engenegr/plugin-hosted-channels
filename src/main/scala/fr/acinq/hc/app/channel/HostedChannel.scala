@@ -624,7 +624,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
   def processRemoteError(errorState: FsmStateExt, remoteError: Error, data: HC_DATA_ESTABLISHED): HostedFsmState = if (data.remoteError.isEmpty) {
     val fulfillsAndFakeFails = data.commitments.nextRemoteUpdates.collect { case f: UpdateFulfillHtlc => f case f: UpdateFailHtlc if f.reason.isEmpty => f }
     val data1 = data.copy(commitments = data.commitments.copy(nextRemoteUpdates = fulfillsAndFakeFails), remoteError = Some(remoteError) map ErrorExt.generateFrom)
-    for (ext <- data1.remoteError) context.system.eventStream publish HCSuspended(remoteNodeId, data.commitments.lastCrossSignedState.isHost, isLocal = true, ext.description)
+    for (ext <- data1.remoteError) context.system.eventStream publish HCSuspended(remoteNodeId, data.commitments.lastCrossSignedState.isHost, isLocal = false, ext.description)
     errorState StoringAndUsing data1
   } else stay
 
