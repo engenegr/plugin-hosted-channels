@@ -53,6 +53,8 @@ object HC {
 
   final val HC_REPLY_PREIMAGES_TAG = 65513
 
+  final val HC_ASK_BRANDING_INFO = 65511
+
 
   final val PHC_ANNOUNCE_GOSSIP_TAG = 64513
 

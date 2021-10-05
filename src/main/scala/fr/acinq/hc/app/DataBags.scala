@@ -88,6 +88,8 @@ case class ResizeChannel(newCapacity: Satoshi, clientSig: ByteVector64 = ByteVec
   lazy val newCapacityMsatU64: UInt64 = UInt64(newCapacity.toMilliSatoshi.toLong)
 }
 
+case class AskBrandingInfo(chainHash: ByteVector32) extends HostedChannelMessage
+
 // PHC
 
 case class QueryPublicHostedChannels(chainHash: ByteVector32) extends HostedChannelMessage

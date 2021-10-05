@@ -437,7 +437,9 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
   onTransition {
     case state -> nextState =>
-      (HC.remoteNode2Connection.get(remoteNodeId), state, nextState, nextStateData) match {
+      val connectionOpt = HC.remoteNode2Connection.get(remoteNodeId)
+
+      (connectionOpt, state, nextState, nextStateData) match {
         case (Some(connection), SYNCING | CLOSED, NORMAL, d1: HC_DATA_ESTABLISHED) =>
           context.system.eventStream publish HostedChannelRestored(self, channelId, connection.info.peer, remoteNodeId)
           context.system.eventStream publish ChannelIdAssigned(self, remoteNodeId, temporaryChannelId = ByteVector32.Zeroes, channelId)
@@ -457,16 +459,14 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
         case _ =>
       }
 
-      (HC.remoteNode2Connection.get(remoteNodeId), state, nextState, nextStateData) match {
+      (connectionOpt, state, nextState, nextStateData) match {
         case (Some(connection), OFFLINE | SYNCING, NORMAL | CLOSED, d1: HC_DATA_ESTABLISHED) =>
           context.system.eventStream publish ChannelStateChanged(self, channelId, connection.info.peer, remoteNodeId, state, nextState, Some(d1.commitments))
           for (overrideProposal <- d1.overrideProposal if d1.commitments.lastCrossSignedState.isHost) connection sendHostedChannelMsg overrideProposal
         case _ =>
       }
 
-      (HC.remoteNode2Connection.get(remoteNodeId), state, nextState, stateData, nextStateData) match {
-        case (Some(connection), SYNCING, NORMAL | CLOSED, _: HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE, d1: HC_DATA_ESTABLISHED) =>
-          if (cfg.vals.branding.enabled && d1.commitments.lastCrossSignedState.isHost) connection sendHostedChannelMsg cfg.brandingMessage
+      (connectionOpt, state, nextState, stateData, nextStateData) match {
         case (Some(connection), OFFLINE | SYNCING, CLOSED, _, d1: HC_DATA_ESTABLISHED) =>
           // We may get fulfills for peer payments while offline when channel is in error state
           d1.commitments.pendingOutgoingFulfills.foreach(connection.sendHasChannelIdMsg)

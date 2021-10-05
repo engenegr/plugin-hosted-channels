@@ -38,7 +38,7 @@ object Worker {
 
 class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, channelsDb: HostedChannelsDb, cfg: Config) extends Actor with Logging { me =>
   context.system.scheduler.scheduleWithFixedDelay(60.minutes, 60.minutes, self, Worker.TickClearIpAntiSpam)
-  context.system.scheduler.scheduleWithFixedDelay(20.seconds, 20.seconds, self, Worker.TickReconnectHosts)
+  context.system.scheduler.scheduleWithFixedDelay(5.seconds, 5.seconds, self, Worker.TickReconnectHosts)
   context.system.scheduler.scheduleWithFixedDelay(12.hours, 12.hours, self, TickRemoveIdleChannels)
 
   context.system.eventStream.subscribe(channel = classOf[UnknownMessageReceived], subscriber = self)
@@ -75,6 +75,7 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
         case (Attempt.Successful(_: ReplyPublicHostedChannelsEnd), Some(wrap), _) => hostedSync ! HostedSync.GotAllSyncFrom(wrap)
         case (Attempt.Successful(_: QueryPublicHostedChannels), Some(wrap), _) => hostedSync ! HostedSync.SendSyncTo(wrap)
 
+        case (Attempt.Successful(_: AskBrandingInfo), Some(wrap), _) => if (cfg.vals.branding.enabled) wrap sendHostedChannelMsg cfg.brandingMessage
         // Special handling for InvokeHostedChannel: if chan exists neither in memory nor in db, then this is a new chan request and anti-spam rules apply
         case (Attempt.Successful(invoke: InvokeHostedChannel), Some(wrap), null) => restore(guardSpawn(nodeId, wrap, invoke), _ |> HCPeerConnected |> invoke)(nodeId)
         case (Attempt.Successful(_: HostedChannelMessage), _, null) => logger.info(s"PLGN PHC, no target for HostedMessage, messageTag=${message.tag}, peer=$nodeId")
