@@ -251,8 +251,12 @@ class HC extends Plugin with RouteProvider {
       complete(phcNodeAnnounces)
     }
 
+    val hotChannels: Route = postRequest("hc-hot") { implicit t =>
+      complete(channelsDb.listHotChannels)
+    }
+
     invoke ~ externalFulfill ~ findByRemoteId ~ overridePropose ~ overrideAccept ~ makePublic ~ makePrivate ~
-      resize ~ suspend ~ verifyRemoteState ~ restoreFromRemoteState ~ broadcastPreimages ~ phcNodes
+      resize ~ suspend ~ verifyRemoteState ~ restoreFromRemoteState ~ broadcastPreimages ~ phcNodes ~ hotChannels
   }
 }
 
