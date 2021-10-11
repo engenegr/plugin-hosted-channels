@@ -5,6 +5,8 @@ import scala.concurrent.duration._
 import fr.acinq.eclair.blockchain._
 import scala.collection.parallel.CollectionConverters._
 import fr.acinq.hc.app.network.PreimageBroadcastCatcher._
+
+import scala.util.{Success, Try}
 import fr.acinq.hc.app.{HC, QueryPreimages, ReplyPreimages, Vals}
 import fr.acinq.eclair.wire.internal.channel.version3.HCProtocolCodecs
 import fr.acinq.eclair.blockchain.bitcoind.rpc.BitcoinCoreClient.FundTransactionOptions
@@ -33,9 +35,9 @@ object PreimageBroadcastCatcher {
   }
 
   def extractPreimages(tx: Transaction): Seq[ByteVector32] =
-    tx.txOut.map(transactionOutput => Script parse transactionOutput.publicKeyScript).flatMap {
-      case OP_RETURN :: OP_PUSHDATA(preimage1, 32) :: OP_PUSHDATA(preimage2, 32) :: Nil => List(preimage1, preimage2)
-      case OP_RETURN :: OP_PUSHDATA(preimage1, 32) :: Nil => List(preimage1)
+    tx.txOut.map(transactionOutput => Try(transactionOutput.publicKeyScript) map Script.parse).flatMap {
+      case Success(OP_RETURN :: OP_PUSHDATA(preimage1, 32) :: OP_PUSHDATA(preimage2, 32) :: Nil) => List(preimage1, preimage2)
+      case Success(OP_RETURN :: OP_PUSHDATA(preimage1, 32) :: Nil) => List(preimage1)
       case _ => List.empty[ByteVector]
     }.map(ByteVector32.apply)
 }
