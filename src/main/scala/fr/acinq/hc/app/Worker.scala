@@ -115,7 +115,9 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
 
     case Terminated(channelRef) => inMemoryHostedChannels.inverse.remove(channelRef)
 
-    case TickRemoveIdleChannels => inMemoryHostedChannels.values.forEach(_ ! TickRemoveIdleChannels)
+    case TickRemoveIdleChannels =>
+      logger.info(s"PLGN PHC, in-memory HC#=${inMemoryHostedChannels.size}")
+      inMemoryHostedChannels.values.forEach(_ ! TickRemoveIdleChannels)
 
     case SyncProgress(1D) if clientChannelRemoteNodeIds.isEmpty =>
       // We need a fully loaded graph to find Host IP addresses and ports
