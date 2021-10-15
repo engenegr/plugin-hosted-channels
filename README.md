@@ -64,7 +64,7 @@ HC gets suspended for same reasons normal channels get force-closed: for example
 
 A tricky point here is that HC may get suspended while having incoming and outgoing active HTLCs, and this situation requires careful handling from Host and Client to properly calculate a new balance in `hc-overridepropose`. Specifically, Host must wait until all active HTLCs get resolved in one way or another, and only after that it's safe to propose an override.
 
-For `... -> Host -> Client -> ...` payments there are 3 ways in which these HTLCs may get resolved:
+For OUT `... -> Host -> Client -> ...` payments there are 3 ways in which these HTLCs may get resolved:
 
 1. Either Client provides a preimage for related HTLC off-chain before HTLC's CLTV expiry: in this case Host node resolves a payment upstream using a preimage immediately, and resolved payment info will be seen in logs later when Host inspects a suspended HC. An `UpdateFulfillHtlc` message will also be present in `nextRemoteUpdates` list of suspended HC.
 2. Or Client provides a preimage on-chain via `hc-broadcastpreimages` command before HTLC's CLTV expiry: given that Host listens to Blockchain live data a suspended HC will be notified with chain-extracted preimage once it gets included in a block, and further progress will be similar to the first case.
@@ -72,4 +72,4 @@ For `... -> Host -> Client -> ...` payments there are 3 ways in which these HTLC
 
 In general this means that before issuing `hc-overridepropose` Host must make sure that all `Host -> Client` HTLCs are either fulfilled by Client in one way or another, or chain height got past all CLTV expiries. All fulfilled `Host -> Client` HTLCs must be subtracted from new Host HC balance, all failed ones must be added to new Host HC balance.
 
-For `... <- Host <- Client <- ...` payments Host must wait until they either get failed or fulfilled downstream. All fulfilled `Host <- Client` HTLCs must be added to new Host HC balance, all failed ones must be added to new Client HC balance.
+For IN `... <- Host <- Client <- ...` payments Host must wait until they either get failed or fulfilled downstream. All fulfilled `Host <- Client` HTLCs must be added to new Host HC balance, all failed ones must be added to new Client HC balance.
