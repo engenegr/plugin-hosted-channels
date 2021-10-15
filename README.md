@@ -72,4 +72,4 @@ For `... -> Host -> Client -> ...` payments there are 3 ways in which these HTLC
 
 In general this means that before issuing `hc-overridepropose` Host must make sure that all `Host -> Client` HTLCs are either fulfilled by Client in one way or another, or chain height got past all CLTV expiries. All fulfilled `Host -> Client` HTLCs must be subtracted from new Host HC balance, all failed ones must be added to new Host HC balance.
 
-For `... <- Host <- Client <- ...` payments Host must wait until they either get failed or fulfilled downstream. All fulfilled `Host <- Client` HTLCs must be added to new Host HC balance, all failed ones should be added to new Client HC balance.
+For `... <- Host <- Client <- ...` payments Host must wait until they either get failed or fulfilled downstream. All fulfilled `Host <- Client` HTLCs must be added to new Host HC balance, all failed ones must be added to new Client HC balance.
