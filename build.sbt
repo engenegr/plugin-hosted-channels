@@ -19,8 +19,6 @@ libraryDependencies += "com.typesafe.slick" %% "slick" % "3.3.3"
 
 libraryDependencies += "com.typesafe.slick" %% "slick-hikaricp" % "3.3.3"
 
-libraryDependencies += "org.postgresql" % "postgresql" % "42.2.18"
-
 libraryDependencies += "org.scala-stm" % "scala-stm_2.13" % "0.11.0"
 
 libraryDependencies += "org.scala-lang.modules" %% "scala-parallel-collections" % "0.2.0"
@@ -39,9 +37,11 @@ assemblyMergeStrategy in assembly := {
 assemblyExcludedJars in assembly := {
   val cp = (fullClasspath in assembly).value
 
-  cp filter { f =>
-    f.data.getName.contains("scalatest") ||
-      f.data.getName.contains("akka-testkit") ||
-      f.data.getName.contains("eclair")
+  cp filterNot { f =>
+    f.data.getName.contains("quicklens") ||
+      f.data.getName.contains("ficus") ||
+      f.data.getName.contains("slick") ||
+      f.data.getName.contains("scala-stm") ||
+      f.data.getName.contains("parallel-collections")
   }
 }
