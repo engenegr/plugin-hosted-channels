@@ -31,8 +31,8 @@ class HostedChannelTypesSpec extends AnyFunSuite {
   val updateAddHtlc2: UpdateAddHtlc = UpdateAddHtlc(channelId, 103, 20000.msat, Crypto.sha256(preimage2), CltvExpiry(40), TestConstants.emptyOnionPacket)
 
   val lcss: LastCrossSignedState = LastCrossSignedState(isHost = true, refundScriptPubKey = randomBytes(119), initHostedChannel, blockDay = 100,
-    localBalanceMsat = 100000.msat, remoteBalanceMsat = 900000.msat, localUpdates = 201, remoteUpdates = 101, incomingHtlcs = List(updateAddHtlc1, updateAddHtlc2),
-    outgoingHtlcs = List(updateAddHtlc2, updateAddHtlc1), remoteSigOfLocal = ByteVector64.Zeroes, localSigOfRemote = ByteVector64.Zeroes)
+    localBalanceMsat = 100000.msat, remoteBalanceMsat = 900000.msat, localUpdates = 201, remoteUpdates = 101, incomingHtlcs = List(updateAddHtlc1, updateAddHtlc2).sortBy(_.id),
+    outgoingHtlcs = List(updateAddHtlc2, updateAddHtlc1).sortBy(_.id), remoteSigOfLocal = ByteVector64.Zeroes, localSigOfRemote = ByteVector64.Zeroes)
 
   val lcss1: LastCrossSignedState = lcss.copy(incomingHtlcs = Nil, outgoingHtlcs = Nil)
 
@@ -41,7 +41,7 @@ class HostedChannelTypesSpec extends AnyFunSuite {
   val channelUpdate: ChannelUpdate = ChannelUpdate(randomBytes64, Block.RegtestGenesisBlock.hash, ShortChannelId(1), 2, ChannelUpdate.ChannelFlags.DUMMY, CltvExpiryDelta(3), 4.msat, 5.msat, 6, None)
 
   test("LCSS has the same sigHash for different order of in-flight HTLCs") {
-    val lcssDifferentHtlcOrder = lcss.copy(incomingHtlcs = List(updateAddHtlc2, updateAddHtlc1), outgoingHtlcs = List(updateAddHtlc1, updateAddHtlc2))
+    val lcssDifferentHtlcOrder = lcss.copy(incomingHtlcs = List(updateAddHtlc1, updateAddHtlc2).sortBy(_.id), outgoingHtlcs = List(updateAddHtlc1, updateAddHtlc2).sortBy(_.id))
     assert(lcss.hostedSigHash == lcssDifferentHtlcOrder.hostedSigHash)
   }
 
