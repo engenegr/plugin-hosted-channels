@@ -73,3 +73,26 @@ For OUT `... -> Host -> Client -> ...` payments there are 3 ways in which these 
 In general this means that before issuing `hc-overridepropose` Host must make sure that all `Host -> Client` HTLCs are either fulfilled by Client in one way or another, or chain height got past all CLTV expiries. All fulfilled `Host -> Client` HTLCs must be subtracted from new Host HC balance, all failed ones must be added to new Host HC balance.
 
 For IN `... <- Host <- Client <- ...` payments Host must wait until they either get failed or fulfilled downstream. All fulfilled `Host <- Client` HTLCs must be added to new Host HC balance, all failed ones must be added to new Client HC balance.
+
+## Public HCs
+
+Any pair of nodes can establish an HC and declare it public. By doing this HC routing parameters get gossiped to other HC-supporting nodes
+which form a parallel routing graph consisiting only of public HCs, which then in turn gets merged with normal channel graph. 
+An effect of this is increased network liquidity and more routed payments.
+
+There are 3 requirements which both public HC nodes must meet:
+- Each node must have and keep maintaining at least 5 normal public channels.
+- Each pair of nodes can have only one public HC declared between them.
+- Each node can have at most 2 public HCs declared.
+
+Failure to meet any of these requirements will make public HCs declared by a node ignored by other nodes which follow these rules.
+
+## Provability and preimage broadcast
+
+A distinguishing feature of HC is that although its balance can not be enforced on chain it can be cryptographically 
+proved at all times so issues can be resolved in standard ways and scam attempts are clearly visible by everyone.
+
+First thing which can be proved is HC balance excluding in-flight HTLCs: each state update in HC contains balance distribution and gets 
+cross-signed by both channel sides while having a monotonically increasing state counter. Thus, any side of channel can claim that its 
+cross-signed state is the latest one, the other side can refute this claim by providing a cross-signed update with a higher counter 
+value, and they both can keep doing this until one of them fails to provide.
