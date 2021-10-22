@@ -86,7 +86,7 @@ value, and they both can keep doing this until one of them fails to provide.
 
 Second thing which can be proved is in-flight payment owner, but this one is more involved and may require an action to be taken. 
 Any HTLC can be seen as the following contract: either receiving side can provide a secret preimage before certain block height and get the money or
-fail to do that, in which case money returns to receiving side. This enables an adversarial condition where reciving side reveals a preimage but
+fail to do that, in which case money returns to sending side. This enables an adversarial condition where reciving side reveals a preimage but
 sender refuses to update channel state such that it clears an in-flight HTLC and assigns payment value to receiver. 
 
 In normal channels this is resolved by receiver force-closing a channel and using a preimage to obtain an in-flight payment on chain. 
