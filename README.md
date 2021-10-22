@@ -74,6 +74,30 @@ In general this means that before issuing `hc-overridepropose` Host must make su
 
 For IN `... <- Host <- Client <- ...` payments Host must wait until they either get failed or fulfilled downstream. All fulfilled `Host <- Client` HTLCs must be added to new Host HC balance, all failed ones must be added to new Client HC balance.
 
+## Provability and preimage broadcast
+
+A distinguishing feature of HC is that although its balance can not be enforced on chain it can be cryptographically
+proved at all times so issues can be resolved in standard ways and scam attempts are clearly visible by everyone.
+
+First thing which can be proved is HC balance excluding in-flight HTLCs: each state update in HC contains balance distribution and gets
+cross-signed by both channel sides while having a monotonically increasing counter. Thus, any side of channel can claim that its
+cross-signed state is the latest one, the other side can refute this claim by providing a cross-signed update with a higher counter
+value, and they both can keep doing this until one of them fails to provide.
+
+Second thing which can be proved is in-flight payment owner, but this one is more involved and may require an action to be taken. 
+Any HTLC can be seen as the following contract: either receiving side can provide a secret preimage before certain block height and get the money or
+fail to do that, in which case money returns to receiving side. This enables an adversarial condition where reciving side reveals a preimage but
+sender refuses to update channel state such that it clears an in-flight HTLC and assigns payment value to receiver. 
+
+In normal channels this is resolved by receiver force-closing a channel and using a preimage to obtain an in-flight payment on chain. 
+In HC this is impossible, but receiver still can prove at a later time that he had revealed a preimage before HTLC expiry by embedding 
+a preimage into blockchain by means of `OP_RETURN`. 
+
+This works as follows: after preimage for incoming HTLC has been revealed but channel state has not been updated for a number of blocks, 
+and well before HTLC expiry a receiver would get a Telegram warning. After that receiver may broadcast an `OP_RETURN` transaction with a 
+preimage using `hc-broadcastpreimages` API call. At a later time receiver will be able to demonstrate the latest cross-signed HC state
+with HTLC in-flight and a transaction with related preimage existing in a blockchain before HTLC expiry block.
+
 ## Public HCs
 
 Any pair of nodes can establish an HC and declare it public. By doing this HC routing parameters get gossiped to other HC-supporting nodes
@@ -85,14 +109,9 @@ There are 3 requirements which both public HC nodes must meet:
 - Each pair of nodes can have only one public HC declared between them.
 - Each node can have at most 2 public HCs declared.
 
-Failure to meet any of these requirements will make public HCs declared by a node ignored by other nodes which follow these rules.
+Failure to meet any of these requirements will make a public HC ignored by other nodes which follow these rules.
 
-## Provability and preimage broadcast
+## Running Eclair with HC plugin
 
-A distinguishing feature of HC is that although its balance can not be enforced on chain it can be cryptographically 
-proved at all times so issues can be resolved in standard ways and scam attempts are clearly visible by everyone.
-
-First thing which can be proved is HC balance excluding in-flight HTLCs: each state update in HC contains balance distribution and gets 
-cross-signed by both channel sides while having a monotonically increasing state counter. Thus, any side of channel can claim that its 
-cross-signed state is the latest one, the other side can refute this claim by providing a cross-signed update with a higher counter 
-value, and they both can keep doing this until one of them fails to provide.
+Once Eclair node has in-flight payments in HCs it must always be launched with HC plugin after restarts, otherwise money loss may happen.
+If one wishes to stop using an HC plugin then one should first make sure there are no in-flight HTLCs left in HCs.
