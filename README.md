@@ -1,29 +1,42 @@
-### Compiling Hosted Channels plugin
+## Compiling
+
+### 1. Compiling Eclair itself
+
+- Obtain compatible Eclair release source code and compile it:
 
 ```
-$ cd <plugin-hosted-channels>
-$ sbt
-sbt$ assembly
+$ cd <eclair>
+$ git checkout v0.6.2
+$ mvn clean install -DskipTests=true
 ```
 
-JAR file can be found in `target` folder.
+ZIP archive with runnable Eclair node can be found in `<eclair>/eclair-node/target/eclair-node-<release>-bin.zip`.
 
-### Compiling AlarmBot plugin
+### 2. Compiling AlarmBot plugin
 
 HC plugin depends on [AlarmBot](https://github.com/engenegr/eclair-alarmbot-plugin) plugin to send out 
-custom Telegram messages, and Eclair instance must be run with both of these plugins added, 
-compile AlarmBot as follows:
+custom Telegram messages, and Eclair instance must be run with both of these plugins added, compile AlarmBot as follows:
 
 ```
 $ cd <eclair-alarmbot-plugin>
 $ mvn clean install
 ```
 
-Again, JAR file can be found in `target` folder.  
+JAR file can be found in `<eclair-alarmbot-plugin>/target` folder.  
 
-AlarmBot plugin is especially important when you have Client hosted channels and Host is stalling a resolution of your incoming
-payment. This is an adversarial situation where you need to take certain actions within a certain timeframe to timestamp Host's
-obligations regarding a stalling payment, and it's important to be notified about this in time.
+### 3. Compiling Hosted Channels plugin
+
+- Unzip `<eclair>/eclair-node/target/eclair-node-<release>-bin.zip`, copy its `lib` folder into `<plugin-hosted-channels>/lib/`
+
+```
+$ cp <eclair>/eclair-core/target/eclair-core_2.13-<release>-tests.jar <plugin-hosted-channels>/lib/eclair-core_2.13-<release>-tests.jar
+$ cp <eclair-alarmbot-plugin>/target/eclair-alarmbot_2.13-<release>.jar <plugin-hosted-channels>/lib/eclair-alarmbot_2.13-<release>.jar
+$ cd <plugin-hosted-channels>
+$ sbt
+sbt$ assembly
+```
+
+JAR file can be found in `<plugin-hosted-channels>/target` folder.
 
 ### Running
 
@@ -86,7 +99,7 @@ value, and they both can keep doing this until one of them fails to provide.
 
 Second thing which can be proved is in-flight payment owner, but this one is more involved and may require an action to be taken. 
 Any HTLC can be seen as the following contract: either receiving side can provide a secret preimage before certain block height and get the money or
-fail to do that, in which case money returns to receiving side. This enables an adversarial condition where reciving side reveals a preimage but
+fail to do that, in which case money returns to sending side. This enables an adversarial condition where reciving side reveals a preimage but
 sender refuses to update channel state such that it clears an in-flight HTLC and assigns payment value to receiver. 
 
 In normal channels this is resolved by receiver force-closing a channel and using a preimage to obtain an in-flight payment on chain. 
@@ -114,4 +127,7 @@ Failure to meet any of these requirements will make a public HC ignored by other
 ## Running Eclair with HC plugin
 
 Once Eclair node has in-flight payments in HCs it must always be launched with HC plugin after restarts, otherwise money loss may happen.
-If one wishes to stop using an HC plugin then one should first make sure there are no in-flight HTLCs left in HCs.
+If one wishes to stop using an HC plugin then one should first make sure there are no in-flight HTLCs left in HCs (`hc-hot` and `channels` API methods
+are helpful here to determine which HTLCs are still pending in both HCs and normal channels).
+
+HC plugin `0.6.2` can only work with Eclair `0.6.2`, HC plugin updates are expected to be released shortly after base Eclair releases.
