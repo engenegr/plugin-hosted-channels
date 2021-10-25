@@ -1,17 +1,16 @@
 package fr.acinq.hc.app
 
-import java.io.File
 import akka.actor.ActorSystem
+import akka.actor.typed.scaladsl.adapter.{ClassicActorRefOps, actorRefAdapter}
 import akka.testkit.TestProbe
 import fr.acinq.eclair.blockchain.DummyOnChainWallet
-import akka.actor.typed.scaladsl.adapter.{ClassicActorRefOps, actorRefAdapter}
 import fr.acinq.eclair.{Kit, NodeParams}
 import slick.jdbc.PostgresProfile
-
-import scala.concurrent.duration._
 import slick.jdbc.PostgresProfile.api._
 
+import java.io.File
 import scala.concurrent.Await
+import scala.concurrent.duration._
 
 
 object HCTestUtils {

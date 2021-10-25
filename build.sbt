@@ -23,6 +23,8 @@ libraryDependencies += "org.scala-stm" % "scala-stm_2.13" % "0.11.0"
 
 libraryDependencies += "org.scala-lang.modules" %% "scala-parallel-collections" % "0.2.0"
 
+Test / parallelExecution := false
+
 // Assembly
 
 mainClass in assembly := Some("fr.acinq.hc.app.HC")
