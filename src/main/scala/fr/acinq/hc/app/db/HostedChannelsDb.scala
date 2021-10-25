@@ -1,12 +1,12 @@
 package fr.acinq.hc.app.db
 
-import slick.jdbc.PostgresProfile.api._
-import scodec.bits.{BitVector, ByteVector}
+import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.wire.internal.channel.version3.HostedChannelCodecs.HC_DATA_ESTABLISHED_Codec
 import fr.acinq.hc.app.channel.HC_DATA_ESTABLISHED
 import fr.acinq.hc.app.db.Blocking.ByteArray
-import fr.acinq.bitcoin.Crypto.PublicKey
+import scodec.bits.{BitVector, ByteVector}
 import slick.jdbc.PostgresProfile
+import slick.jdbc.PostgresProfile.api._
 
 
 class HostedChannelsDb(db: PostgresProfile.backend.Database) {

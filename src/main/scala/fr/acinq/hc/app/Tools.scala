@@ -1,25 +1,25 @@
 package fr.acinq.hc.app
 
-import fr.acinq.eclair._
-import net.ceedubs.ficus.Ficus._
-import fr.acinq.eclair.wire.protocol._
-import net.ceedubs.ficus.readers.ArbitraryTypeReader._
-import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol}
 import com.typesafe.config.{ConfigFactory, Config => TypesafeConfig}
-import java.io.{ByteArrayInputStream, File}
-import java.nio.file.{Files, Paths}
-
-import fr.acinq.eclair.wire.internal.channel.version3.HCProtocolCodecs
-import fr.acinq.eclair.channel.Channel.OutgoingMessage
-import fr.acinq.hc.app.channel.HostedCommitments
-import net.ceedubs.ficus.readers.ValueReader
-import fr.acinq.eclair.router.Announcements
 import fr.acinq.bitcoin.Crypto.PublicKey
-import org.postgresql.util.PSQLException
+import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol}
+import fr.acinq.eclair._
+import fr.acinq.eclair.channel.Channel.OutgoingMessage
 import fr.acinq.eclair.io.PeerConnected
-import slick.jdbc.PostgresProfile
+import fr.acinq.eclair.router.Announcements
+import fr.acinq.eclair.wire.internal.channel.version3.HCProtocolCodecs
+import fr.acinq.eclair.wire.protocol._
+import fr.acinq.hc.app.channel.HostedCommitments
+import net.ceedubs.ficus.Ficus._
+import net.ceedubs.ficus.readers.ArbitraryTypeReader._
+import net.ceedubs.ficus.readers.ValueReader
+import org.postgresql.util.PSQLException
 import scodec.bits.ByteVector
+import slick.jdbc.PostgresProfile
+
+import java.io.{ByteArrayInputStream, File}
 import java.nio.ByteOrder
+import java.nio.file.{Files, Paths}
 import scala.util.Try
 
 

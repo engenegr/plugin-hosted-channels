@@ -1,12 +1,12 @@
 package fr.acinq.eclair.wire.internal.channel.version3
 
-import HCProtocolCodecs._
-import fr.acinq.eclair.wire.protocol.LightningMessageCodecs._
 import fr.acinq.eclair.wire.internal.channel.version3.ChannelCodecs3.Codecs.{commitmentSpecCodec, originsMapCodec}
-import fr.acinq.hc.app.channel.{ErrorExt, HC_DATA_ESTABLISHED, HostedCommitments, HostedState}
+import fr.acinq.eclair.wire.internal.channel.version3.HCProtocolCodecs._
 import fr.acinq.eclair.wire.protocol.CommonCodecs.{bool8, bytes32, lengthDelimited, publicKey}
-import scodec.codecs.{listOfN, optional, uint16, utf8, variableSizeBytes}
+import fr.acinq.eclair.wire.protocol.LightningMessageCodecs._
 import fr.acinq.eclair.wire.protocol.{HasChannelId, UpdateMessage}
+import fr.acinq.hc.app.channel.{ErrorExt, HC_DATA_ESTABLISHED, HostedCommitments, HostedState}
+import scodec.codecs.{listOfN, optional, uint16, utf8, variableSizeBytes}
 import scodec.{Attempt, Codec}
 
 

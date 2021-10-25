@@ -1,28 +1,28 @@
 package fr.acinq.hc.app.network
 
+import akka.actor.Actor
 import fr.acinq.bitcoin._
-import scala.concurrent.duration._
+import fr.acinq.eclair.Kit
 import fr.acinq.eclair.blockchain._
-import scala.collection.parallel.CollectionConverters._
-import fr.acinq.hc.app.network.PreimageBroadcastCatcher._
-
-import scala.util.{Success, Try}
-import fr.acinq.hc.app.{HC, QueryPreimages, ReplyPreimages, Vals}
-import fr.acinq.eclair.wire.internal.channel.version3.HCProtocolCodecs
-import fr.acinq.eclair.blockchain.bitcoind.rpc.BitcoinCoreClient.FundTransactionOptions
 import fr.acinq.eclair.blockchain.bitcoind.rpc.BitcoinCoreClient
-import scala.concurrent.ExecutionContext.Implicits.global
+import fr.acinq.eclair.blockchain.bitcoind.rpc.BitcoinCoreClient.FundTransactionOptions
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.io.UnknownMessageReceived
+import fr.acinq.eclair.wire.internal.channel.version3.HCProtocolCodecs
 import fr.acinq.hc.app.Tools.DuplicateHandler
 import fr.acinq.hc.app.db.PreimagesDb
-import org.json4s.JsonAST.JString
-import scala.collection.mutable
-import scodec.bits.ByteVector
+import fr.acinq.hc.app.network.PreimageBroadcastCatcher._
+import fr.acinq.hc.app.{HC, QueryPreimages, ReplyPreimages, Vals}
 import grizzled.slf4j.Logging
-import fr.acinq.eclair.Kit
-import akka.actor.Actor
+import org.json4s.JsonAST.JString
 import scodec.Attempt
+import scodec.bits.ByteVector
+
+import scala.collection.mutable
+import scala.collection.parallel.CollectionConverters._
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
+import scala.util.{Success, Try}
 
 
 object PreimageBroadcastCatcher {

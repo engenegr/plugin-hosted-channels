@@ -1,25 +1,26 @@
 package fr.acinq.hc.app
 
-import fr.acinq.eclair.io._
-import fr.acinq.hc.app.Worker._
-import fr.acinq.hc.app.channel._
-import scala.concurrent.duration._
-import fr.acinq.eclair.router.{Router, SyncProgress}
 import akka.actor.{Actor, ActorRef, Props, Terminated}
-import fr.acinq.eclair.wire.internal.channel.version3.HCProtocolCodecs
-import scala.concurrent.ExecutionContext.Implicits.global
-import fr.acinq.hc.app.db.Blocking.timeout
-import fr.acinq.hc.app.db.HostedChannelsDb
+import akka.pattern.ask
 import com.google.common.collect.HashBiMap
-import fr.acinq.hc.app.network.HostedSync
-import fr.acinq.bitcoin.Crypto.PublicKey
 import com.google.common.net.HostAndPort
 import fr.acinq.bitcoin.ByteVector32
-import scala.collection.mutable
-import grizzled.slf4j.Logging
-import akka.pattern.ask
+import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair
+import fr.acinq.eclair.io._
+import fr.acinq.eclair.router.{Router, SyncProgress}
+import fr.acinq.eclair.wire.internal.channel.version3.HCProtocolCodecs
+import fr.acinq.hc.app.Worker._
+import fr.acinq.hc.app.channel._
+import fr.acinq.hc.app.db.Blocking.timeout
+import fr.acinq.hc.app.db.HostedChannelsDb
+import fr.acinq.hc.app.network.HostedSync
+import grizzled.slf4j.Logging
 import scodec.Attempt
+
+import scala.collection.mutable
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
 
 
 object Worker {

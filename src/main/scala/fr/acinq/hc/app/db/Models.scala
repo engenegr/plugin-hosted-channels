@@ -1,15 +1,15 @@
 package fr.acinq.hc.app.db
 
-import scala.concurrent.duration._
-import fr.acinq.hc.app.db.Blocking._
-import slick.jdbc.PostgresProfile.api._
-import slick.lifted.{Index, Tag}
-
-import slick.jdbc.PostgresProfile.backend.Database
-import scala.concurrent.Await
-import slick.sql.SqlAction
-import slick.dbio.Effect
 import akka.util.Timeout
+import fr.acinq.hc.app.db.Blocking._
+import slick.dbio.Effect
+import slick.jdbc.PostgresProfile.api._
+import slick.jdbc.PostgresProfile.backend.Database
+import slick.lifted.{Index, Tag}
+import slick.sql.SqlAction
+
+import scala.concurrent.Await
+import scala.concurrent.duration._
 
 
 object Blocking {

@@ -1,12 +1,12 @@
 package fr.acinq.hc.app.db
 
-import slick.jdbc.PostgresProfile.api._
+import fr.acinq.eclair.ShortChannelId
 import fr.acinq.eclair.wire.protocol.LightningMessageCodecs._
 import fr.acinq.eclair.wire.protocol.{ChannelAnnouncement, ChannelUpdate}
 import fr.acinq.hc.app.network.{PHC, PHCNetwork}
-import fr.acinq.eclair.ShortChannelId
-import slick.jdbc.PostgresProfile
 import scodec.bits.BitVector
+import slick.jdbc.PostgresProfile
+import slick.jdbc.PostgresProfile.api._
 import slick.sql.SqlAction
 
 

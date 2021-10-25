@@ -1,11 +1,11 @@
 package fr.acinq.eclair.wire.internal.channel.version3
 
-import scodec.codecs._
-import fr.acinq.hc.app._
-import fr.acinq.hc.app.HC._
-import fr.acinq.eclair.wire.protocol._
 import fr.acinq.eclair.wire.protocol.CommonCodecs._
 import fr.acinq.eclair.wire.protocol.LightningMessageCodecs._
+import fr.acinq.eclair.wire.protocol._
+import fr.acinq.hc.app.HC._
+import fr.acinq.hc.app._
+import scodec.codecs._
 import scodec.{Attempt, Err}
 
 

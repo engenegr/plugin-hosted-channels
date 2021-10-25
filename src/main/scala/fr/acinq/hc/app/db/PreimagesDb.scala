@@ -1,9 +1,9 @@
 package fr.acinq.hc.app.db
 
-import slick.jdbc.PostgresProfile.api._
 import fr.acinq.bitcoin.ByteVector32
-import slick.jdbc.PostgresProfile
 import scodec.bits.ByteVector
+import slick.jdbc.PostgresProfile
+import slick.jdbc.PostgresProfile.api._
 
 
 class PreimagesDb(val db: PostgresProfile.backend.Database) {

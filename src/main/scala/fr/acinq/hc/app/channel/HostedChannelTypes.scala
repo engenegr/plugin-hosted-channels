@@ -1,17 +1,16 @@
 package fr.acinq.hc.app.channel
 
-import fr.acinq.eclair._
-import fr.acinq.hc.app._
-import fr.acinq.eclair.channel._
-import com.softwaremill.quicklens._
-import fr.acinq.eclair.wire.protocol._
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
-import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc}
-import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, Satoshi}
-import fr.acinq.eclair.payment.OutgoingPacket
-import fr.acinq.bitcoin.SatoshiLong
-import scodec.bits.ByteVector
 import akka.actor.ActorRef
+import com.softwaremill.quicklens._
+import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
+import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, Satoshi, SatoshiLong}
+import fr.acinq.eclair._
+import fr.acinq.eclair.channel._
+import fr.acinq.eclair.payment.OutgoingPacket
+import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc}
+import fr.acinq.eclair.wire.protocol._
+import fr.acinq.hc.app._
+import scodec.bits.ByteVector
 
 
 case class HostedChannelRestored(channel: ActorRef, channelId: ByteVector32, peer: ActorRef, remoteNodeId: PublicKey) extends AbstractChannelRestored

@@ -1,10 +1,11 @@
 package fr.acinq.hc.app
 
-import fr.acinq.eclair._
-import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, LexicographicalOrdering, Protocol, Satoshi}
-import fr.acinq.eclair.wire.protocol.{Color, LightningMessageCodecs, UpdateAddHtlc}
 import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
+import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, Protocol, Satoshi}
+import fr.acinq.eclair._
+import fr.acinq.eclair.wire.protocol.{Color, LightningMessageCodecs, UpdateAddHtlc}
 import scodec.bits.ByteVector
+
 import java.nio.ByteOrder
 
 

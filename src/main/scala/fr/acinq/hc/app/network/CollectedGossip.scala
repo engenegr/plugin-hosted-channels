@@ -1,8 +1,8 @@
 package fr.acinq.hc.app.network
 
-import fr.acinq.eclair.wire.protocol.{ChannelAnnouncement, ChannelUpdate}
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.ShortChannelId
+import fr.acinq.eclair.wire.protocol.{ChannelAnnouncement, ChannelUpdate}
 
 
 case class AnnouncementSeenFrom(seenFrom: Set[PublicKey], announcement: ChannelAnnouncement) {
