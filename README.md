@@ -6,6 +6,7 @@
 
 ```
 $ cd <eclair>
+$ git checkout v0.6.2
 $ mvn clean install -DskipTests=true
 ```
 
