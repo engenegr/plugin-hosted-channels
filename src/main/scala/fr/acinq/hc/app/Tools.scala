@@ -117,10 +117,10 @@ case class HCOverrideParams(nodeId: String, params: HCParams)
 
 case class Branding(logo: String, color: Color, contactInfo: String, enabled: Boolean)
 
-case class PHCConfig(maxPerNode: Long, minNormalChans: Long, maxSyncSendsPerIpPerMinute: Int) {
-  val maxCapacity: MilliSatoshi = MilliSatoshi(1000000000000000L) // No more than 10 000 BTC
+case class PHCConfig(maxPerNode: Long, minNormalChans: Long, maxSyncSendsPerIpPerMinute: Int, minCapacityMsat: Long, maxCapacityMsat: Long) {
+  val minCapacity: MilliSatoshi = MilliSatoshi(minCapacityMsat)
 
-  val minCapacity: MilliSatoshi = MilliSatoshi(5000000000L) // At least 0.05 BTC
+  val maxCapacity: MilliSatoshi = MilliSatoshi(maxCapacityMsat)
 }
 
 case class Vals(hcDefaultParams: HCParams,
