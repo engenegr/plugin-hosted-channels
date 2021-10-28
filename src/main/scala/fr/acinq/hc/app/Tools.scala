@@ -113,8 +113,6 @@ case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDelt
   lazy val feeBase: MilliSatoshi = feeBaseMsat.msat
 }
 
-case class HCOverrideParams(nodeId: String, params: HCParams)
-
 case class Branding(logo: String, color: Color, contactInfo: String, enabled: Boolean)
 
 case class PHCConfig(maxPerNode: Long, minNormalChans: Long, maxSyncSendsPerIpPerMinute: Int, minCapacityMsat: Long, maxCapacityMsat: Long) {
@@ -123,11 +121,4 @@ case class PHCConfig(maxPerNode: Long, minNormalChans: Long, maxSyncSendsPerIpPe
   val maxCapacity: MilliSatoshi = MilliSatoshi(maxCapacityMsat)
 }
 
-case class Vals(hcDefaultParams: HCParams,
-                hcOverrideParams: List[HCOverrideParams], maxNewChansPerIpPerHour: Int,
-                maxPreimageRequestsPerIpPerMinute: Int, branding: Branding, phcConfig: PHCConfig) {
-
-  val hcOverrideMap: Map[PublicKey, HCOverrideParams] = hcOverrideParams.map { hcParams =>
-    (PublicKey.fromBin(ByteVector.fromValidHex(hcParams.nodeId), checkValid = true), hcParams)
-  }.toMap
-}
+case class Vals(hcParams: HCParams, maxNewChansPerIpPerHour: Int, maxPreimageRequestsPerIpPerMinute: Int, branding: Branding, phcConfig: PHCConfig)
