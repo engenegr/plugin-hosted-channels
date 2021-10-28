@@ -1,7 +1,7 @@
 
 name := "hc"
 
-version := "0.2"
+version := "0.6.2.2"
 
 scalaVersion := "2.13.3"
 

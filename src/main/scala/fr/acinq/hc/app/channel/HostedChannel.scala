@@ -354,26 +354,11 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     case Event(Worker.HCPeerDisconnected, _) => stop(FSM.Normal)
 
-    case Event(cmd: CMD_FULFILL_HTLC, data: HC_DATA_ESTABLISHED) =>
-      data.commitments.sendFulfill(cmd) match {
-        case Right((commits1, fulfill)) if cmd.commit => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fulfill Receiving CMD_SIGN(None)
-        case Right((commits1, fulfill)) => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fulfill
-        case Left(cause) => stay.AckingFail(cause, cmd)
-      }
+    case Event(cmd: CMD_FULFILL_HTLC, data: HC_DATA_ESTABLISHED) => resolveSettlementCommand(data.commitments.sendFulfill(cmd), data, cmd, cmd.commit)
 
-    case Event(cmd: CMD_FAIL_HTLC, data: HC_DATA_ESTABLISHED) =>
-      data.commitments.sendFail(cmd, kit.nodeParams.privateKey) match {
-        case Right((commits1, fail)) if cmd.commit => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fail Receiving CMD_SIGN(None)
-        case Right((commits1, fail)) => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fail
-        case Left(cause) => stay.AckingFail(cause, cmd)
-      }
+    case Event(cmd: CMD_FAIL_HTLC, data: HC_DATA_ESTABLISHED) => resolveSettlementCommand(data.commitments.sendFail(cmd, kit.nodeParams.privateKey), data, cmd, cmd.commit)
 
-    case Event(cmd: CMD_FAIL_MALFORMED_HTLC, data: HC_DATA_ESTABLISHED) =>
-      data.commitments.sendFailMalformed(cmd) match {
-        case Right((commits1, fail)) if cmd.commit => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fail Receiving CMD_SIGN(None)
-        case Right((commits1, fail)) => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId fail
-        case Left(cause) => stay.AckingFail(cause, cmd)
-      }
+    case Event(cmd: CMD_FAIL_MALFORMED_HTLC, data: HC_DATA_ESTABLISHED) => resolveSettlementCommand(data.commitments.sendFailMalformed(cmd), data, cmd, cmd.commit)
 
     case Event(cmd: CMD_ADD_HTLC, data: HC_DATA_ESTABLISHED) =>
       ackAddFail(cmd, ChannelUnavailable(channelId), data.channelUpdate)
@@ -489,12 +474,6 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     def AckingSuccess(command: HtlcSettlementCommand): HostedFsmState = {
       PendingCommandsDb.ackSettlementCommand(kit.nodeParams.db.pendingCommands, channelId, command)
       replyToCommand(RES_SUCCESS(command, channelId), command)
-      state
-    }
-
-    def AckingFail(cause: Throwable, command: HtlcSettlementCommand): HostedFsmState = {
-      PendingCommandsDb.ackSettlementCommand(kit.nodeParams.db.pendingCommands, channelId, command)
-      replyToCommand(RES_FAILURE(command, cause), command)
       state
     }
 
@@ -700,6 +679,16 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       context.system.eventStream publish AvailableBalanceChanged(self, channelId, shortChannelId, commitments = commitments1)
       stay StoringAndUsing data.copy(commitments = commitments1) RelayingRemoteUpdates data.commitments SendingHosted commits1.lastCrossSignedState.stateUpdate
     }
+  }
+
+  type CommitsAndHtlcMessage = (HostedCommitments, HasChannelId)
+  private def resolveSettlementCommand(result: Either[ChannelException, CommitsAndHtlcMessage], data: HC_DATA_ESTABLISHED, cmd: HtlcSettlementCommand, commit: Boolean) = result match {
+    case Right((commits1, message)) if commit => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId message Receiving CMD_SIGN(None)
+    case Right((commits1, message)) => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId message
+    case Left(cause) =>
+      PendingCommandsDb.ackSettlementCommand(kit.nodeParams.db.pendingCommands, channelId, cmd)
+      replyToCommand(RES_FAILURE(cmd, cause), cmd)
+      stay
   }
 
   private def replyToCommand(reply: CommandResponse[Command], cmd: Command): Unit = cmd match {
