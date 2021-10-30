@@ -121,58 +121,54 @@
             <groupId>fr.acinq.eclair</groupId>
             <artifactId>eclair-core_2.13</artifactId>
             <version>${eclair.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>fr.acinq.eclair</groupId>
             <artifactId>eclair-node_2.13</artifactId>
             <version>${eclair.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>fr.acinq.alarmbot</groupId>
             <artifactId>eclair-alarmbot_2.13</artifactId>
             <version>${eclair.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>com.iheart</groupId>
             <artifactId>ficus_2.13</artifactId>
             <version>1.5.0</version>
-            <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>com.typesafe.slick</groupId>
             <artifactId>slick_2.13</artifactId>
             <version>3.3.3</version>
-            <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>com.typesafe.slick</groupId>
             <artifactId>slick-hikaricp_2.13</artifactId>
             <version>3.3.3</version>
-            <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>org.scala-stm</groupId>
             <artifactId>scala-stm_2.13</artifactId>
             <version>0.11.0</version>
-            <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>org.scala-lang.modules</groupId>
             <artifactId>scala-parallel-collections_2.13</artifactId>
             <version>0.2.0</version>
-            <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>com.typesafe.akka</groupId>
             <artifactId>akka-testkit_2.13</artifactId>
             <version>2.6.15</version>
-            <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>com.typesafe.akka</groupId>
             <artifactId>akka-actor-testkit-typed_2.13</artifactId>
             <version>2.6.15</version>
-            <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>org.scalatest</groupId>
