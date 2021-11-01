@@ -402,6 +402,11 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       replyToCommand(RES_GETINFO(remoteNodeId, channelId, stateName, data = null), cmd)
       stay
 
+    case Event(cmd: Command, _) =>
+      val exception = new Throwable("HC can not react to this command")
+      replyToCommand(RES_FAILURE(cmd, exception), cmd)
+      stay
+
     case Event(cmd: HC_CMD_RESIZE, data: HC_DATA_ESTABLISHED) =>
       val msg = ResizeChannel(cmd.newCapacity).sign(kit.nodeParams.privateKey)
       if (data.errorExt.nonEmpty) stay replying CMDResFailure("Resizing declined: channel is in error state")

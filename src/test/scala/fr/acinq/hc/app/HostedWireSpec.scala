@@ -1,19 +1,19 @@
 package fr.acinq.hc.app
 
-import fr.acinq.eclair._
 import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto, Satoshi}
-import fr.acinq.eclair.transactions.{CommitmentSpec, IncomingHtlc, OutgoingHtlc}
-import fr.acinq.eclair.wire.protocol.{ChannelUpdate, Error, UpdateAddHtlc, UpdateFailHtlc}
-import fr.acinq.eclair.wire.internal.channel.version3.{HCProtocolCodecs, HostedChannelCodecs}
-import fr.acinq.hc.app.channel.{ErrorCodes, ErrorExt, HC_DATA_ESTABLISHED, HostedCommitments, HostedState}
+import fr.acinq.eclair._
+import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.channel.{Channel, Origin}
+import fr.acinq.eclair.router.Announcements
+import fr.acinq.eclair.transactions.{CommitmentSpec, IncomingHtlc, OutgoingHtlc}
+import fr.acinq.eclair.wire.internal.channel.version3.{HCProtocolCodecs, HostedChannelCodecs}
+import fr.acinq.eclair.wire.protocol.{ChannelUpdate, Error, UpdateAddHtlc, UpdateFailHtlc}
+import fr.acinq.hc.app.channel._
+import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits.{BitVector, ByteVector}
 
-import fr.acinq.eclair.blockchain.fee.FeeratePerKw
-import fr.acinq.eclair.router.Announcements
-import org.scalatest.funsuite.AnyFunSuite
-import scala.util.Random
 import java.util.UUID
+import scala.util.Random
 
 
 object HostedWireSpec {
