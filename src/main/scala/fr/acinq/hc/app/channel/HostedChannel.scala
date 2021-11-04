@@ -397,9 +397,14 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     case Event(_: HC_CMD_GET_INFO, data: HC_DATA_ESTABLISHED) => stay replying CMDResInfo(stateName, data, data.commitments.nextLocalSpec)
 
-    case Event(cmd: Command, _) =>
-      val exception = new Throwable("HC can not react to this command")
-      replyToCommand(RES_FAILURE(cmd, exception), cmd)
+    case Event(cmd: CMD_GETINFO, _) =>
+      // We get this for example when user issues "channels" API command, must reply with something
+      replyToCommand(RES_GETINFO(remoteNodeId, channelId, stateName, data = null), cmd)
+      stay
+
+    case Event(cmd: CMD_UPDATE_RELAY_FEE, _) =>
+      // Must reply with something for API to work well
+      replyToCommand(RES_SUCCESS(cmd, channelId), cmd)
       stay
 
     case Event(cmd: HC_CMD_RESIZE, data: HC_DATA_ESTABLISHED) =>
@@ -562,6 +567,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       case Left(_: UnsignedHtlcResolve) =>
         val disconnect = Peer.Disconnect(remoteNodeId)
         val peer = HC.remoteNode2Connection.get(remoteNodeId)
+        log.info(s"PLGN PHC, force-disconnecting peer=$remoteNodeId")
         peer.foreach(_.info.peer ! disconnect)
         goto(OFFLINE) StoringAndUsing data
 
