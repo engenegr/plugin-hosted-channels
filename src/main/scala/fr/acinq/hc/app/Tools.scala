@@ -119,6 +119,10 @@ case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDelt
   lazy val htlcMinimum: MilliSatoshi = htlcMinimumMsat.msat
 
   lazy val feeBase: MilliSatoshi = feeBaseMsat.msat
+
+  def lastUpdateDiffers(update: ChannelUpdate): Boolean =
+    update.cltvExpiryDelta.toInt != cltvDeltaBlocks || update.htlcMinimumMsat != htlcMinimum ||
+      update.feeBaseMsat != feeBase || update.feeProportionalMillionths != feeProportionalMillionths
 }
 
 case class Branding(logo: String, color: Color, contactInfo: String, enabled: Boolean)

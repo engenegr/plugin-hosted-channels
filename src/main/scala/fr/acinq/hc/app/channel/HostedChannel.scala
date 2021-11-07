@@ -431,7 +431,14 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
           context.system.eventStream publish ChannelIdAssigned(self, remoteNodeId, temporaryChannelId = ByteVector32.Zeroes, channelId)
           context.system.eventStream publish ShortChannelIdAssigned(self, channelId, shortChannelId, previousShortChannelId = None)
           context.system.eventStream publish makeLocalUpdateEvent(d1.channelUpdate, d1.commitments)
-          if (!d1.commitments.announceChannel) connection sendRoutingMsg d1.channelUpdate
+
+          if (!d1.commitments.announceChannel) {
+            connection sendRoutingMsg d1.channelUpdate
+          } else if (cfg.vals.hcParams lastUpdateDiffers d1.channelUpdate) {
+            log.info(s"PLGN PHC, re-announcing because params changed, peer=$remoteNodeId")
+            self ! HostedChannel.SendAnnouncements(force = true)
+          }
+
         case (_, NORMAL, OFFLINE | CLOSED, _) =>
           context.system.eventStream publish LocalChannelDown(self, channelId, shortChannelId, remoteNodeId)
         case _ =>
