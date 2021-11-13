@@ -26,7 +26,6 @@ import scodec.bits.ByteVector
 
 import java.util.UUID
 import scala.concurrent.Await
-import scala.concurrent.duration._
 import scala.util.{Failure, Success}
 
 
@@ -214,14 +213,13 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     // PHC announcements
 
     case Event(HostedChannel.SendAnnouncements(force), data: HC_DATA_ESTABLISHED) if data.commitments.announceChannel =>
-      val lastUpdateTooLongAgo = force || data.channelUpdate.timestamp < System.currentTimeMillis.millis.toSeconds - PHC.reAnnounceThreshold
       val update1 = makeChannelUpdate(localLCSS = data.commitments.lastCrossSignedState, enable = true)
       context.system.eventStream publish makeLocalUpdateEvent(update1, data.commitments)
       val data1 = data.copy(channelUpdate = update1)
 
       data1.channelAnnouncement match {
         case None => stay StoringAndUsing data1 SendingHosted Tools.makePHCAnnouncementSignature(kit.nodeParams, data.commitments, shortChannelId, wantsReply = true)
-        case Some(announce) if lastUpdateTooLongAgo => stay StoringAndUsing data1 Announcing announce Announcing update1
+        case Some(announce) if force || data.shouldRebroadcastAnnounce => stay StoringAndUsing data1 Announcing announce Announcing update1
         case _ => stay StoringAndUsing data1 Announcing update1
       }
 
@@ -435,8 +433,11 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
           if (!d1.commitments.announceChannel) {
             connection sendRoutingMsg d1.channelUpdate
           } else if (cfg.vals.hcParams lastUpdateDiffers d1.channelUpdate) {
-            log.info(s"PLGN PHC, re-announcing because params changed, peer=$remoteNodeId")
-            self ! HostedChannel.SendAnnouncements(force = true)
+            log.info(s"PLGN PHC, re-broadcasting because params differ, peer=$remoteNodeId")
+            self ! HostedChannel.SendAnnouncements(force = false)
+          } else if (d1.shouldBroadcastUpdateRightAway) {
+            log.info(s"PLGN PHC, re-broadcasting becase last one was too long ago, peer=$remoteNodeId")
+            self ! HostedChannel.SendAnnouncements(force = false)
           }
 
         case (_, NORMAL, OFFLINE | CLOSED, _) =>
