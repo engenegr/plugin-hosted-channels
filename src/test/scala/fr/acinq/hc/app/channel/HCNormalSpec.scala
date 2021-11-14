@@ -27,8 +27,6 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     alice ! Worker.HCPeerDisconnected
     bob ! CMD_FULFILL_HTLC(add1.id, preimage1)
     bob ! Worker.HCPeerDisconnected
-    channelUpdateListener.expectMsgType[LocalChannelDown]
-    channelUpdateListener.expectMsgType[LocalChannelDown]
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
 
