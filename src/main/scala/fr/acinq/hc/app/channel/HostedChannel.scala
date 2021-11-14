@@ -440,6 +440,8 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
           else if (cfg.vals.hcParams lastUpdateDiffers d1.channelUpdate) self ! HostedChannel.SendAnnouncements(force = false)
 
         case (_, prev, OFFLINE, d1: HC_DATA_ESTABLISHED) if prev != OFFLINE =>
+          // Public channels are expected to have good connectivity, so we inform the system right away once they get offline
+          // Private channels often have flaky connections or users turning wallets off too early so we keep accepting and holding HTLCs for some time
           if (d1.commitments.announceChannel) context.system.eventStream publish LocalChannelDown(self, channelId, shortChannelId, remoteNodeId)
           else startSingleTimer(HostedChannel.BroadcastDelayedDown.label, HostedChannel.BroadcastDelayedDown, delay = 30.minutes)
 
