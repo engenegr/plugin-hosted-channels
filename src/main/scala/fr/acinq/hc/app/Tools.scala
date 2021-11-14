@@ -18,6 +18,7 @@ import scodec.bits.ByteVector
 import slick.jdbc.PostgresProfile
 
 import java.io.{ByteArrayInputStream, File}
+import java.net.URL
 import java.nio.ByteOrder
 import java.nio.file.{Files, Paths}
 import scala.util.Try
@@ -95,15 +96,24 @@ class Config(datadir: File) {
 
   val vals: Vals = config.as[Vals]("config.vals")
 
-  lazy val brandingMessage: HostedChannelBranding =
-    HostedChannelBranding(vals.branding.color, pngIcon = Try {
+
+  lazy val brandingMessage: HostedChannelBranding = {
+    // This will throw if not URL, which is desired
+    new URL(vals.branding.contactInfo)
+
+    val optionalPng = Try {
       val pngIconFile = new File(resourcesDir, vals.branding.logo)
-      ByteVector view Files.readAllBytes(Paths get pngIconFile.getAbsolutePath)
-    }.toOption, vals.branding.contactInfo)
+      val pngBytes = Files.readAllBytes(Paths get pngIconFile.getAbsolutePath)
+      ByteVector.view(pngBytes)
+    }.toOption
+
+    HostedChannelBranding(vals.branding.color, optionalPng, vals.branding.contactInfo)
+  }
 }
 
-
 case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDeltaBlocks: Int, channelCapacityMsat: Long, htlcMinimumMsat: Long, maxAcceptedHtlcs: Int, isResizable: Boolean) {
+  def lastUpdateDiffers(u: ChannelUpdate): Boolean = u.cltvExpiryDelta.toInt != cltvDeltaBlocks || u.htlcMinimumMsat != htlcMinimum || u.feeBaseMsat != feeBase || u.feeProportionalMillionths != feeProportionalMillionths
+
   val initMsg: InitHostedChannel = InitHostedChannel(UInt64(channelCapacityMsat), htlcMinimum, maxAcceptedHtlcs, channelCapacityMsat.msat, initialClientBalanceMsat = 0L.msat, channelFeatures)
 
   lazy val channelFeatures: List[Int] = if (isResizable) List(HCFeature.mandatory, ResizeableHCFeature.mandatory) else List(HCFeature.mandatory)

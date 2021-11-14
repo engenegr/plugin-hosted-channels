@@ -117,7 +117,7 @@ class HC extends Plugin with RouteProvider {
 
     override def messageTags: Set[Int] = hostedMessageTags ++ preimageQueryTags ++ announceTags ++ chanIdMessageTags
 
-    override def name: String = "Hosted channels"
+    override def name: String = "HostedChannels"
 
     override def feature: Feature = HCFeature
 
