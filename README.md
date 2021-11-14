@@ -10,8 +10,6 @@ $ git checkout v0.6.2
 $ mvn clean install -DskipTests=true
 ```
 
-ZIP archive with runnable Eclair node can be found in `<eclair>/eclair-node/target/eclair-node-<release>-bin.zip`.
-
 ### 2. Compiling AlarmBot plugin
 
 HC plugin depends on [AlarmBot](https://github.com/engenegr/eclair-alarmbot-plugin) plugin to send out 
@@ -19,21 +17,16 @@ custom Telegram messages, and Eclair instance must be run with both of these plu
 
 ```
 $ cd <eclair-alarmbot-plugin>
-$ mvn clean install
+$ mvn clean install -DskipTests=true
 ```
 
 JAR file can be found in `<eclair-alarmbot-plugin>/target` folder.  
 
 ### 3. Compiling Hosted Channels plugin
 
-- Unzip `<eclair>/eclair-node/target/eclair-node-<release>-bin.zip`, copy its `lib` folder into `<plugin-hosted-channels>/lib/`
-
 ```
-$ cp <eclair>/eclair-core/target/eclair-core_2.13-<release>-tests.jar <plugin-hosted-channels>/lib/eclair-core_2.13-<release>-tests.jar
-$ cp <eclair-alarmbot-plugin>/target/eclair-alarmbot_2.13-<release>.jar <plugin-hosted-channels>/lib/eclair-alarmbot_2.13-<release>.jar
 $ cd <plugin-hosted-channels>
-$ sbt
-sbt$ assembly
+$ mvn clean install -DskipTests=true
 ```
 
 JAR file can be found in `<plugin-hosted-channels>/target` folder.

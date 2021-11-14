@@ -8,7 +8,7 @@ import fr.acinq.bitcoin.ByteVector32
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair
 import fr.acinq.eclair.io._
-import fr.acinq.eclair.router.{Router, SyncProgress}
+import fr.acinq.eclair.router.Router
 import fr.acinq.eclair.wire.internal.channel.version3.HCProtocolCodecs
 import fr.acinq.hc.app.Worker._
 import fr.acinq.hc.app.channel._
@@ -45,13 +45,21 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
   context.system.eventStream.subscribe(channel = classOf[UnknownMessageReceived], subscriber = self)
   context.system.eventStream.subscribe(channel = classOf[PeerDisconnected], subscriber = self)
   context.system.eventStream.subscribe(channel = classOf[PeerConnected], subscriber = self)
-  context.system.eventStream.subscribe(channel = classOf[SyncProgress], subscriber = self)
 
   val inMemoryHostedChannels: HashBiMap[PublicKey, ActorRef] = HashBiMap.create[PublicKey, ActorRef]
 
   val ipAntiSpam: mutable.Map[Array[Byte], Int] = mutable.Map.empty[Array[Byte], Int] withDefaultValue 0
 
   var clientChannelRemoteNodeIds: Set[PublicKey] = Set.empty
+
+  {
+    val clientChannels = channelsDb.listClientChannels
+    val nodeIdCheck = clientChannels.forall(_.commitments.localNodeId == kit.nodeParams.nodeId)
+    logger.info(s"PLGN PHC, all HCs have the same NodeId which matches current NodeId=$nodeIdCheck")
+    clientChannelRemoteNodeIds ++= clientChannels.map(_.commitments.remoteNodeId)
+    clientChannels.foreach(spawnPreparedChannel)
+    if (!nodeIdCheck) System.exit(0)
+  }
 
   override def receive: Receive = {
     case systemMessage: PeerConnected
@@ -120,22 +128,6 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
       logger.info(s"PLGN PHC, in-memory HC#=${inMemoryHostedChannels.size}")
       inMemoryHostedChannels.values.forEach(_ ! TickRemoveIdleChannels)
 
-    case SyncProgress(1D) if clientChannelRemoteNodeIds.isEmpty =>
-      // We need a fully loaded graph to find Host IP addresses and ports
-      val clientChannels: Seq[HC_DATA_ESTABLISHED] = channelsDb.listClientChannels
-      val clientRemoteNodeIds: Seq[PublicKey] = clientChannels.map(_.commitments.remoteNodeId)
-      val nodeIdCheck = clientChannels.forall(_.commitments.localNodeId == kit.nodeParams.nodeId)
-
-      if (!nodeIdCheck) {
-        // Our nodeId has changed, this is very bad
-        logger.info("PLGN PHC, NODE ID CHECK FAILED")
-        System.exit(0)
-      } else {
-        clientChannelRemoteNodeIds ++= clientRemoteNodeIds
-        clientChannels.foreach(spawnPreparedChannel)
-        self ! TickReconnectHosts
-      }
-
     case TickReconnectHosts =>
       // Of all remote peers which are Hosts to our HCs, select those which are not connected
       val unconnectedHosts = clientChannelRemoteNodeIds.filterNot(HC.remoteNode2Connection.contains)
@@ -157,7 +149,7 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
 
   def spawnChannel(nodeId: PublicKey): ActorRef = {
     val spawnedChannelProps = Props(classOf[HostedChannel], kit, nodeId, channelsDb, hostedSync, cfg)
-    val channelRef = context watch context.actorOf(spawnedChannelProps)
+    val channelRef = context.watch(context actorOf spawnedChannelProps)
     inMemoryHostedChannels.put(nodeId, channelRef)
     channelRef
   }

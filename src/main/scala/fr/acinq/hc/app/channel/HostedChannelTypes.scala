@@ -10,7 +10,10 @@ import fr.acinq.eclair.payment.OutgoingPacket
 import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc}
 import fr.acinq.eclair.wire.protocol._
 import fr.acinq.hc.app._
+import fr.acinq.hc.app.network.PHC
 import scodec.bits.ByteVector
+
+import scala.concurrent.duration._
 
 
 case class HostedChannelRestored(channel: ActorRef, channelId: ByteVector32, peer: ActorRef, remoteNodeId: PublicKey) extends AbstractChannelRestored
@@ -79,6 +82,10 @@ case class HC_DATA_ESTABLISHED(commitments: HostedCommitments,
     // but pending HTLCs can be cleared by our fake FAIL on timeout or by peer's FULFILL
     commitments.nextLocalSpec.htlcs
   }
+
+  def shouldRebroadcastAnnounce: Boolean = channelUpdate.timestamp < System.currentTimeMillis.millis.toSeconds - PHC.reAnnounceThreshold
+
+  def shouldBroadcastUpdateRightAway: Boolean = channelUpdate.timestamp < System.currentTimeMillis.millis.toSeconds - PHC.tickAnnounceThreshold.toSeconds
 
   def isResizeSupported: Boolean = commitments.lastCrossSignedState.initHostedChannel.features.contains(ResizeableHCFeature.mandatory)
 

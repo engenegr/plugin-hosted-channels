@@ -112,6 +112,8 @@ class Config(datadir: File) {
 }
 
 case class HCParams(feeBaseMsat: Long, feeProportionalMillionths: Long, cltvDeltaBlocks: Int, channelCapacityMsat: Long, htlcMinimumMsat: Long, maxAcceptedHtlcs: Int, isResizable: Boolean) {
+  def lastUpdateDiffers(u: ChannelUpdate): Boolean = u.cltvExpiryDelta.toInt != cltvDeltaBlocks || u.htlcMinimumMsat != htlcMinimum || u.feeBaseMsat != feeBase || u.feeProportionalMillionths != feeProportionalMillionths
+
   val initMsg: InitHostedChannel = InitHostedChannel(UInt64(channelCapacityMsat), htlcMinimum, maxAcceptedHtlcs, channelCapacityMsat.msat, initialClientBalanceMsat = 0L.msat, channelFeatures)
 
   lazy val channelFeatures: List[Int] = if (isResizable) List(HCFeature.mandatory, ResizeableHCFeature.mandatory) else List(HCFeature.mandatory)
