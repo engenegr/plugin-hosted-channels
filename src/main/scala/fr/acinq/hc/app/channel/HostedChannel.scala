@@ -441,7 +441,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
         case (_, prev, OFFLINE, d1: HC_DATA_ESTABLISHED) if prev != OFFLINE =>
           if (d1.commitments.announceChannel) context.system.eventStream publish LocalChannelDown(self, channelId, shortChannelId, remoteNodeId)
-          else startSingleTimer(HostedChannel.BroadcastDelayedDown.label, HostedChannel.BroadcastDelayedDown, delay = 60.seconds)
+          else startSingleTimer(HostedChannel.BroadcastDelayedDown.label, HostedChannel.BroadcastDelayedDown, delay = 180.seconds)
 
         case (_, prev, CLOSED, _) if prev != CLOSED =>
           context.system.eventStream publish LocalChannelDown(self, channelId, shortChannelId, remoteNodeId)
