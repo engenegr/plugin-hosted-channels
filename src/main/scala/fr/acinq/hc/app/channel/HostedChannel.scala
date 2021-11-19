@@ -433,10 +433,10 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
           if (!d1.commitments.announceChannel) {
             connection sendRoutingMsg d1.channelUpdate
           } else if (cfg.vals.hcParams lastUpdateDiffers d1.channelUpdate) {
-            log.info(s"PLGN PHC, re-broadcasting because params differ, peer=$remoteNodeId")
+            log.info(s"PLGN PHC, re-broadcasting, params differ, peer=$remoteNodeId")
             self ! HostedChannel.SendAnnouncements(force = false)
           } else if (d1.shouldBroadcastUpdateRightAway) {
-            log.info(s"PLGN PHC, re-broadcasting becase last one was too long ago, peer=$remoteNodeId")
+            log.info(s"PLGN PHC, re-broadcasting, last was long ago, peer=$remoteNodeId")
             self ! HostedChannel.SendAnnouncements(force = false)
           }
 
