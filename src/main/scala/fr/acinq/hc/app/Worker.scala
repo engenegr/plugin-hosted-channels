@@ -53,11 +53,18 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
   var clientChannelRemoteNodeIds: Set[PublicKey] = Set.empty
 
   {
+    val hotChannels = channelsDb.listHotChannels
     val clientChannels = channelsDb.listClientChannels
+
+    val hotNodeIds = hotChannels.map(_.commitments.remoteNodeId).mkString(", ")
+    val clientNodeIds = clientChannels.map(_.commitments.remoteNodeId).mkString(", ")
+    logger.info(s"PLGN PHC, in-memory NodeIds, hot=$hotNodeIds, client=$clientNodeIds")
+
+    clientChannelRemoteNodeIds ++= clientChannels.map(_.commitments.remoteNodeId)
+    (clientChannels ++ hotChannels).distinctBy(_.commitments.remoteNodeId).foreach(spawnPreparedChannel)
+
     val nodeIdCheck = clientChannels.forall(_.commitments.localNodeId == kit.nodeParams.nodeId)
     logger.info(s"PLGN PHC, all HCs have the same NodeId which matches current NodeId=$nodeIdCheck")
-    clientChannelRemoteNodeIds ++= clientChannels.map(_.commitments.remoteNodeId)
-    clientChannels.foreach(spawnPreparedChannel)
     if (!nodeIdCheck) System.exit(0)
   }
 

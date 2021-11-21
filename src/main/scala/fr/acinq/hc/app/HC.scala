@@ -9,6 +9,7 @@ import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.bitcoin.{ByteVector32, Satoshi, Script}
 import fr.acinq.eclair._
 import fr.acinq.eclair.api.directives.EclairDirectives
+import fr.acinq.eclair.api.serde.FormParamExtractors._
 import fr.acinq.eclair.blockchain.fee.{FeeratePerByte, FeeratePerKw}
 import fr.acinq.eclair.channel.Origin
 import fr.acinq.eclair.payment.IncomingPacket
@@ -25,6 +26,7 @@ import fr.acinq.hc.app.network.{HostedSync, OperationalData, PHC, PreimageBroadc
 import scodec.bits.ByteVector
 
 import scala.collection.mutable
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.stm._
 import scala.util.Try
 
@@ -142,11 +144,8 @@ class HC extends Plugin with RouteProvider {
   }
 
   override def route(eclairDirectives: EclairDirectives): Route = {
-    import eclairDirectives._
-    import fr.acinq.eclair.api.serde.FormParamExtractors._
     import fr.acinq.eclair.api.serde.JsonSupport.{formats, marshaller, serialization}
-
-    import scala.concurrent.ExecutionContext.Implicits.global
+    import eclairDirectives._
 
     val hostedStateUnmarshaller = "state".as[ByteVector](binaryDataUnmarshaller)
 
