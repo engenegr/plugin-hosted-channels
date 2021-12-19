@@ -253,7 +253,7 @@ class HC extends Plugin with RouteProvider {
     }
 
     val phcDump = postRequest("hc-phcdump") { implicit t =>
-      val phcNetwork = (syncRef ? HostedSync.GetHostedSyncData).mapTo[OperationalData].map(_.phcNetwork)
+      val phcNetwork = (syncRef ? HostedSync.GetHostedSyncData).mapTo[OperationalData].map(_.phcNetwork.channels.values)
       complete(phcNetwork)
     }
 
