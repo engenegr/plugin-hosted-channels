@@ -252,7 +252,7 @@ class HC extends Plugin with RouteProvider {
       complete(phcNodeAnnounces)
     }
 
-    val phcDump = postRequest("hc-dump") { implicit t =>
+    val phcDump = postRequest("hc-phcdump") { implicit t =>
       complete(syncRef ? HostedSync.GetHostedSyncData)
     }
 
