@@ -252,12 +252,17 @@ class HC extends Plugin with RouteProvider {
       complete(phcNodeAnnounces)
     }
 
+    val phcDump = postRequest("hc-dump") { implicit t =>
+      complete(syncRef ? HostedSync.GetHostedSyncData)
+    }
+
     val hotChannels: Route = postRequest("hc-hot") { implicit t =>
       complete(channelsDb.listHotChannels)
     }
 
-    invoke ~ externalFulfill ~ findByRemoteId ~ overridePropose ~ overrideAccept ~ makePublic ~ makePrivate ~
-      resize ~ suspend ~ verifyRemoteState ~ restoreFromRemoteState ~ broadcastPreimages ~ phcNodes ~ hotChannels
+    invoke ~ externalFulfill ~ findByRemoteId ~ overridePropose ~ overrideAccept ~
+      makePublic ~ makePrivate ~ resize ~ suspend ~ verifyRemoteState ~ restoreFromRemoteState ~
+      broadcastPreimages ~ phcNodes ~ phcDump ~ hotChannels
   }
 }
 
