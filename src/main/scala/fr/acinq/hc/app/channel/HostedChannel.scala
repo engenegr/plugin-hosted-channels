@@ -415,8 +415,9 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       else if (cfg.vals.phcConfig.maxCapacity < msg.newCapacity) stay replying CMDResFailure("Resizing declined: new capacity must not exceed max allowed capacity")
       else stay StoringAndUsing data.copy(resizeProposal = Some(msg), overrideProposal = None) SendingHosted msg replying CMDResSuccess(cmd) Receiving CMD_SIGN(None)
 
-    case _ =>
-      stay
+    case Event(cmd: HasRemoteNodeIdHostedCommand, _) => stay replying CMDResFailure(s"Can not process cmd=${cmd.getClass.getName} in state=$stateName")
+
+    case _ => stay
   }
 
   onTransition {
