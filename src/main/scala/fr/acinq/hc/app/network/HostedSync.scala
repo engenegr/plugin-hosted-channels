@@ -270,29 +270,29 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
       okNormalChans && data.phcNetwork.isAnnounceAcceptable(ann)
     }
 
-    def isUpdateAcceptable(update: ChannelUpdate, data: OperationalData): Boolean = data.phcNetwork.channels.get(update.shortChannelId) match {
+    def isUpdateAcceptable(update: ChannelUpdate, data: OperationalData, fromNodeId: PublicKey): Boolean = data.phcNetwork.channels.get(update.shortChannelId) match {
       case Some(pubHostedChan) if data.tooFewNormalChans(pubHostedChan.channelAnnounce.nodeId1, pubHostedChan.channelAnnounce.nodeId2, phcConfig).isDefined =>
-        log.info(s"PLGN PHC, gossip update fail: too few normal channels, msg=$update")
+        log.info(s"PLGN PHC, gossip update fail: too few normal channels, msg=$update, peer=$fromNodeId")
         false
 
       case _ if update.htlcMaximumMsat.forall(_ > phcConfig.maxCapacity) =>
-        log.info(s"PLGN PHC, gossip update fail: capacity is above max, msg=$update")
+        log.info(s"PLGN PHC, gossip update fail: capacity is above max, msg=$update, peer=$fromNodeId")
         false
 
       case _ if update.htlcMaximumMsat.forall(_ < phcConfig.minCapacity) =>
-        log.info(s"PLGN PHC, gossip update fail: capacity is below min, msg=$update")
+        log.info(s"PLGN PHC, gossip update fail: capacity is below min, msg=$update, peer=$fromNodeId")
         false
 
       case Some(pubHostedChan) if !pubHostedChan.isUpdateFresh(update) =>
-        log.info(s"PLGN PHC, gossip update fail: not fresh, msg=$update")
+        log.info(s"PLGN PHC, gossip update fail: not fresh, msg=$update, peer=$fromNodeId")
         false
 
       case Some(pubHostedChan) if !pubHostedChan.verifySig(update) =>
-        log.info(s"PLGN PHC, gossip update fail: wrong signature, msg=$update")
+        log.info(s"PLGN PHC, gossip update fail: wrong signature, msg=$update, peer=$fromNodeId")
         false
 
       case None =>
-        log.info(s"PLGN PHC, gossip update fail: not a PHC update, msg=$update")
+        log.info(s"PLGN PHC, gossip update fail: not a PHC update, msg=$update, peer=$fromNodeId")
         false
 
       case _ =>
@@ -310,7 +310,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
           // This is a new PHC so we must check if any of related nodes already has too many PHCs before proceeding
           processNewAnnounce(message, data, fromNodeId)
 
-        case Attempt.Successful(msg: ChannelUpdate) if isUpdateAcceptable(msg, data) =>
+        case Attempt.Successful(msg: ChannelUpdate) if isUpdateAcceptable(msg, data, fromNodeId) =>
           processUpdate(msg, data, fromNodeId)
 
         case Attempt.Successful(something) =>
