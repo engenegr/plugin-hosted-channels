@@ -42,7 +42,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
   startTimerWithFixedDelay("SendAnnouncements", HostedChannel.SendAnnouncements(force = false), PHC.tickAnnounceThreshold)
 
   context.system.eventStream.subscribe(channel = classOf[PreimageBroadcastCatcher.BroadcastedPreimage], subscriber = self)
-
+  context.system.eventStream.subscribe(channel = classOf[HostedSync.RouterIsOperational], subscriber = self)
   context.system.eventStream.subscribe(channel = classOf[CurrentBlockCount], subscriber = self)
 
   startWith(OFFLINE, HC_NOTHING)
@@ -211,6 +211,11 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
   when(NORMAL) {
 
     // PHC announcements
+
+    case Event(_: HostedSync.RouterIsOperational, data: HC_DATA_ESTABLISHED) if data.commitments.announceChannel =>
+      // PHC with remote peer may become NORMAL sooner than our PHC router becomes operational
+      manageUpdates(data)
+      stay
 
     case Event(HostedChannel.SendAnnouncements(force), data: HC_DATA_ESTABLISHED) if data.commitments.announceChannel =>
       val update1 = makeChannelUpdate(localLCSS = data.commitments.lastCrossSignedState, enable = true)
@@ -426,20 +431,11 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
       (connectionOpt, state, nextState, nextStateData) match {
         case (Some(connection), SYNCING | CLOSED, NORMAL, d1: HC_DATA_ESTABLISHED) =>
+          if (d1.commitments.announceChannel) manageUpdates(d1) else connection sendRoutingMsg d1.channelUpdate
           context.system.eventStream publish HostedChannelRestored(self, channelId, connection.info.peer, remoteNodeId)
           context.system.eventStream publish ChannelIdAssigned(self, remoteNodeId, temporaryChannelId = ByteVector32.Zeroes, channelId)
           context.system.eventStream publish ShortChannelIdAssigned(self, channelId, shortChannelId, previousShortChannelId = None)
           context.system.eventStream publish makeLocalUpdateEvent(d1.channelUpdate, d1.commitments)
-
-          if (!d1.commitments.announceChannel) {
-            connection sendRoutingMsg d1.channelUpdate
-          } else if (cfg.vals.hcParams lastUpdateDiffers d1.channelUpdate) {
-            log.info(s"PLGN PHC, re-broadcasting, params differ, peer=$remoteNodeId")
-            self ! HostedChannel.SendAnnouncements(force = false)
-          } else if (d1.shouldBroadcastUpdateRightAway) {
-            log.info(s"PLGN PHC, re-broadcasting, last was long ago, peer=$remoteNodeId")
-            self ! HostedChannel.SendAnnouncements(force = false)
-          }
 
         case (_, NORMAL, OFFLINE | CLOSED, _) =>
           context.system.eventStream publish LocalChannelDown(self, channelId, shortChannelId, remoteNodeId)
@@ -667,6 +663,16 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     } else {
       log.info(s"PLGN PHC, channel resize successfully accepted, peer=$remoteNodeId")
       stay StoringAndUsing data.copy(resizeProposal = Some(resize), overrideProposal = None)
+    }
+  }
+
+  def manageUpdates(data: HC_DATA_ESTABLISHED): Unit = {
+    if (cfg.vals.hcParams lastUpdateDiffers data.channelUpdate) {
+      log.info(s"PLGN PHC, re-broadcasting, params differ, peer=$remoteNodeId")
+      self ! HostedChannel.SendAnnouncements(force = false)
+    } else if (data.shouldBroadcastUpdateRightAway) {
+      log.info(s"PLGN PHC, re-broadcasting, last was long ago, peer=$remoteNodeId")
+      self ! HostedChannel.SendAnnouncements(force = false)
     }
   }
 

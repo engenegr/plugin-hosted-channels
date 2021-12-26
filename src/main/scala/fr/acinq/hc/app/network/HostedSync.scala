@@ -32,6 +32,8 @@ object HostedSync {
 
   case object TickSendGossip { val label = "TickSendGossip" }
 
+  case class RouterIsOperational(data: OperationalData)
+
   case class GotAllSyncFrom(info: PeerConnectedWrap)
 
   case class SendSyncTo(info: PeerConnectedWrap)
@@ -111,13 +113,13 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
           // Note: nodes whose NC count falls below minimum will eventually be pruned out
           val u1Count = updatesDb.pruneOldUpdates1(System.currentTimeMillis.millis.toSeconds)
           val u2Count = updatesDb.pruneOldUpdates2(System.currentTimeMillis.millis.toSeconds)
-          val annCount = updatesDb.pruneUpdateLessAnnounces
-          val phcNetwork1 = updatesDb.getState
+          val data1 = data.copy(phcNetwork = updatesDb.getState)
 
           // In case of success we prune database and recreate network from scratch
-          log.info(s"PLGN PHC, HostedSync, added=${adds.sum}, removed u1=$u1Count, removed u2=$u2Count, removed ann=$annCount")
-          log.info(s"PLGN PHC, HostedSync, chans old=${data.phcNetwork.channels.size}, new=${phcNetwork1.channels.size}")
-          goto(OPERATIONAL) using data.copy(phcNetwork = phcNetwork1)
+          log.info(s"PLGN PHC, HostedSync, added=${adds.sum}, removed u1=$u1Count, removed u2=$u2Count, removed ann=${updatesDb.pruneUpdateLessAnnounces}")
+          log.info(s"PLGN PHC, HostedSync, channels old=${data.phcNetwork.channels.size}, new=${data1.phcNetwork.channels.size}")
+          context.system.eventStream publish RouterIsOperational(data1)
+          goto(OPERATIONAL) using data1
       }
   }
 
