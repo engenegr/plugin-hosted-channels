@@ -167,4 +167,16 @@ class HostedWireSpec extends AnyFunSuite {
 
     assert(fr.acinq.eclair.wire.protocol.LightningMessageCodecs.updateAddHtlcCodec.decode(BitVector.fromValidHex(updateAdd)).require.value.tlvStream.unknown.head.tag == UInt64(4127926135L))
   }
+
+  test("Test vectors") {
+    val invoke_hosted_channel_raw = HCProtocolCodecs.invokeHostedChannelCodec.encode(invoke_hosted_channel).require.toHex
+    assert(invoke_hosted_channel_raw == s"6fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000002000000000000000000000000000000000000000000000000000000000000000000020" +
+      s"0000000000000000000000000000000000000000000000000000000000000000")
+
+    val init_hosted_channel_raw = HCProtocolCodecs.initHostedChannelCodec.encode(init_hosted_channel).require.toHex
+    assert(init_hosted_channel_raw == s"0000000000000006000000000000000a0014000000001dcd650000000000000f4240000280cc80ce")
+
+    val state_update_raw = HCProtocolCodecs.stateUpdateCodec.encode(state_update).require.toHex
+    assert(state_update_raw == s"00004e34000004b20000000a00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000")
+  }
 }
