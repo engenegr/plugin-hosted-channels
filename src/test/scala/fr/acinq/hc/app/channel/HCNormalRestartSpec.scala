@@ -151,11 +151,13 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
   }
 
   test("Alice falls behind, then re-syncs on restart") { f =>
-    val probe = TestProbe()
     import f._
     HCTestUtils.resetEntireDatabase(aliceDB)
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
+
+    val probe = TestProbe()
+
     val (preimage0, alice2bobUpdateAdd0) = addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight)
     fulfillAliceHtlcByBob(alice2bobUpdateAdd0.id, preimage0, f) // To give Bob some money
 
@@ -236,11 +238,13 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
   }
 
   test("Alice sends 2 HTLCs, then re-sends by one on two next restarts") { f =>
-    val probe = TestProbe()
     import f._
     HCTestUtils.resetEntireDatabase(aliceDB)
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
+
+    val probe = TestProbe()
+
     val (preimage1, cmd_add1, _) = makeCmdAdd(10000L.msat, bobKit.nodeParams.nodeId, currentBlockHeight)
     val (preimage2, cmd_add2, _) = makeCmdAdd(10000L.msat, bobKit.nodeParams.nodeId, currentBlockHeight)
     alice ! cmd_add1
@@ -335,10 +339,12 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
   }
 
   test("Bob channel terminates before getting a fulfill, then gets it from db on restart") { f =>
-    val probe = TestProbe()
     HCTestUtils.resetEntireDatabase(f.aliceDB)
     HCTestUtils.resetEntireDatabase(f.bobDB)
     reachNormal(f)
+
+    val probe = TestProbe()
+
     val channelId = f.bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.channelId
     val (preimage3, alice2bobUpdateAdd3) = addHtlcFromAliceToBob(100000L.msat, f, f.currentBlockHeight)
     val bobData = f.bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED]
@@ -372,11 +378,13 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
   }
 
   test("Bob re-sends an HTLC fulfill in got in OFFLINE for a CLOSED channel") { f =>
-    val probe = TestProbe()
     import f._
     HCTestUtils.resetEntireDatabase(aliceDB)
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
+
+    val probe = TestProbe()
+
     val (preimage3, alice2bobUpdateAdd3) = addHtlcFromAliceToBob(15000L.msat, f, currentBlockHeight)
 
     alice ! Worker.HCPeerDisconnected
@@ -405,12 +413,13 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
   }
 
   test("Alice loses channel data with HTLCs, restores from Bob's data") { f =>
-    val probe = TestProbe()
     HCTestUtils.resetEntireDatabase(f.aliceDB)
     HCTestUtils.resetEntireDatabase(f.bobDB)
     reachNormal(f)
     val (preimage0, alice2bobUpdateAdd0) = addHtlcFromAliceToBob(200000L.msat, f, f.currentBlockHeight)
     fulfillAliceHtlcByBob(alice2bobUpdateAdd0.id, preimage0, f) // To give Bob some money
+
+    val probe = TestProbe()
 
     val (preimage1, alice2bobUpdateAdd1) = addHtlcFromAliceToBob(10000L.msat, f, f.currentBlockHeight)
     val (preimage2, alice2bobUpdateAdd2) = addHtlcFromBob2Alice(10000L.msat, f)

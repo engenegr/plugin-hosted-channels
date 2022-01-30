@@ -19,12 +19,13 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
   override def withFixture(test: OneArgTest): Outcome = withFixture(test.toNoArgTest(init()))
 
   test("Warn about pending incoming HTLCs with revealed preimages") { f =>
-    val probe = TestProbe()
     import f._
     HCTestUtils.resetEntireDatabase(aliceDB)
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
     val (preimage1, add1) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
+
+    val probe = TestProbe()
 
     alice ! Worker.HCPeerDisconnected
     bob ! CMD_FULFILL_HTLC(add1.id, preimage1, replyTo_opt = Some(probe.ref))

@@ -20,9 +20,9 @@ object HCTestUtils {
     val setup = DBIO.seq(
       fr.acinq.hc.app.db.Channels.model.schema.dropIfExists,
       fr.acinq.hc.app.db.Updates.model.schema.dropIfExists,
+      fr.acinq.hc.app.db.Preimages.model.schema.dropIfExists,
       fr.acinq.hc.app.db.Channels.model.schema.create,
       fr.acinq.hc.app.db.Updates.model.schema.create,
-      fr.acinq.hc.app.db.Preimages.model.schema.dropIfExists,
       fr.acinq.hc.app.db.Preimages.model.schema.create
     )
     Await.result(db.run(setup.transactionally), 10.seconds)
