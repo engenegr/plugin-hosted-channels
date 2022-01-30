@@ -143,7 +143,7 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
           sockAddress <- nodeAnnouncement.addresses.headOption.map(_.socketAddress)
           hostAndPort = HostAndPort.fromParts(sockAddress.getHostString, sockAddress.getPort)
           _ = logger.info(s"PLGN PHC, trying to reconnect to ${nodeAnnouncement.nodeId}/$hostAndPort")
-        } kit.switchboard ! Peer.Connect(address_opt = Some(hostAndPort), nodeId = nodeId)
+        } kit.switchboard ! Peer.Connect(nodeId = nodeId, address_opt = Some(hostAndPort), replyTo = hostedSync, isPersistent = true)
       }
   }
 

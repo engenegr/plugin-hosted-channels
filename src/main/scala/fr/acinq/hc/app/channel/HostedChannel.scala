@@ -6,7 +6,7 @@ import com.softwaremill.quicklens._
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, SatoshiLong}
 import fr.acinq.eclair._
-import fr.acinq.eclair.blockchain.CurrentBlockCount
+import fr.acinq.eclair.blockchain.CurrentBlockHeight
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.channel.Origin.LocalCold
 import fr.acinq.eclair.channel._
@@ -44,8 +44,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
   startTimerWithFixedDelay("SendAnnouncements", HostedChannel.SendAnnouncements(force = false), PHC.tickAnnounceThreshold)
 
   context.system.eventStream.subscribe(channel = classOf[PreimageBroadcastCatcher.BroadcastedPreimage], subscriber = self)
-
-  context.system.eventStream.subscribe(channel = classOf[CurrentBlockCount], subscriber = self)
+  context.system.eventStream.subscribe(channel = classOf[CurrentBlockHeight], subscriber = self)
 
   startWith(OFFLINE, HC_NOTHING)
 
@@ -79,7 +78,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     case Event(resize: ResizeChannel, data: HC_DATA_ESTABLISHED) if data.commitments.lastCrossSignedState.isHost => processResizeProposal(stay, resize, data)
 
-    case Event(cmd: CurrentBlockCount, data: HC_DATA_ESTABLISHED) => processBlockCount(stay, cmd.blockCount, data)
+    case Event(cmd: CurrentBlockHeight, data: HC_DATA_ESTABLISHED) => processBlockCount(stay, cmd.blockHeight.toLong, data)
 
     case Event(fulfill: UpdateFulfillHtlc, data: HC_DATA_ESTABLISHED) => processIncomingFulfill(stay, fulfill, data)
 
@@ -333,7 +332,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
   whenUnhandled {
     case Event(resize: ResizeChannel, data: HC_DATA_ESTABLISHED) if data.commitments.lastCrossSignedState.isHost => processResizeProposal(goto(CLOSED), resize, data)
 
-    case Event(cmd: CurrentBlockCount, data: HC_DATA_ESTABLISHED) => processBlockCount(goto(CLOSED), cmd.blockCount, data)
+    case Event(cmd: CurrentBlockHeight, data: HC_DATA_ESTABLISHED) => processBlockCount(goto(CLOSED), cmd.blockHeight.toLong, data)
 
     case Event(fulfill: UpdateFulfillHtlc, data: HC_DATA_ESTABLISHED) => processIncomingFulfill(goto(CLOSED), fulfill, data)
 
@@ -537,7 +536,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
   initialize()
 
-  def currentBlockDay: Long = kit.nodeParams.currentBlockHeight / 144
+  def currentBlockDay: Long = kit.nodeParams.currentBlockHeight.toLong / 144
 
   def isBlockDayOutOfSync(remoteSU: StateUpdate): Boolean = math.abs(remoteSU.blockDay - currentBlockDay) > 1
 

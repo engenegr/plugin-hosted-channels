@@ -7,7 +7,7 @@ import fr.acinq.eclair._
 import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto, SatoshiLong}
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.channel._
-import fr.acinq.eclair.payment.OutgoingPacket
+import fr.acinq.eclair.payment.OutgoingPaymentPacket
 import fr.acinq.eclair.router.Router.ChannelHop
 import fr.acinq.eclair.transactions.CommitmentSpec
 import fr.acinq.eclair.wire.protocol.Onion.createSinglePartPayload
@@ -75,7 +75,7 @@ class HostedChannelTypesSpec extends AnyFunSuite {
     val payment_preimage: ByteVector32 = randomBytes32
     val payment_hash: ByteVector32 = Crypto.sha256(payment_preimage)
     val expiry = CltvExpiryDelta(144).toCltvExpiry(currentBlockHeight)
-    val cmd = OutgoingPacket.buildCommand(null, OutgoingPacket.Upstream.Local(UUID.randomUUID), payment_hash,
+    val cmd = OutgoingPaymentPacket.buildCommand(null, OutgoingPaymentPacket.Upstream.Local(UUID.randomUUID), payment_hash,
       ChannelHop(null, destination, null) :: Nil, createSinglePartPayload(amount, expiry, randomBytes32))._1.copy(commit = false)
     (payment_preimage, cmd)
   }

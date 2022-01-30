@@ -4,7 +4,7 @@ import com.typesafe.config.{ConfigFactory, Config => TypesafeConfig}
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol}
 import fr.acinq.eclair._
-import fr.acinq.eclair.channel.Channel.OutgoingMessage
+import fr.acinq.eclair.io.Peer.OutgoingMessage
 import fr.acinq.eclair.io.PeerConnected
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.wire.internal.channel.version3.HCProtocolCodecs

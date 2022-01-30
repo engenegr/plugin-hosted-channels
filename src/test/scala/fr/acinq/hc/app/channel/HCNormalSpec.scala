@@ -2,7 +2,7 @@ package fr.acinq.hc.app.channel
 
 import fr.acinq.bitcoin.Crypto
 import fr.acinq.eclair._
-import fr.acinq.eclair.blockchain.CurrentBlockCount
+import fr.acinq.eclair.blockchain.CurrentBlockHeight
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.payment.relay.Relayer
 import fr.acinq.eclair.wire.protocol.{TemporaryNodeFailure, UpdateAddHtlc, UpdateFailHtlc, UpdateFulfillHtlc}
@@ -30,7 +30,7 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
 
-    bob ! CurrentBlockCount(currentBlockHeight + 37)
+    bob ! CurrentBlockHeight(currentBlockHeight + 37)
     // 144 - (144 - 37) blocks left until timely knowledge of preimage is unprovable
     channelUpdateListener.expectMsgType[AlmostTimedoutIncomingHtlc]
     // No preimage for a second payment
@@ -354,10 +354,10 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     alice ! UpdateFulfillHtlc(randomBytes32, alice2bobUpdateAdd1.id, preimage1)
     awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.size == 3)
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]] // Fulfill is accepted
-    alice ! CurrentBlockCount(currentBlockHeight + 145)
+    alice ! CurrentBlockHeight(currentBlockHeight + 145)
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]] // One HTLC timed out
     awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.size == 2)
-    alice ! CurrentBlockCount(currentBlockHeight + 245)
+    alice ! CurrentBlockHeight(currentBlockHeight + 245)
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]] // Two more HTLCS timed out
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]]
     awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.isEmpty)
@@ -375,17 +375,17 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
     addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight + 100)
     addHtlcFromAliceToBob(300000L.msat, f, currentBlockHeight + 200)
-    alice ! CurrentBlockCount(currentBlockHeight + 145)
+    alice ! CurrentBlockHeight(currentBlockHeight + 145)
     alice2bob.expectMsgType[wire.protocol.Error]
     awaitCond(alice.stateName == CLOSED)
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]] // One HTLC timed out
-    alice ! CurrentBlockCount(currentBlockHeight + 245)
+    alice ! CurrentBlockHeight(currentBlockHeight + 245)
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]] // One HTLC timed out
     awaitCond(alice.stateName == CLOSED)
     alice ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     alice ! Worker.TickRemoveIdleChannels // Has no effect because 1 payment is pending
-    alice ! CurrentBlockCount(currentBlockHeight + 345)
+    alice ! CurrentBlockHeight(currentBlockHeight + 345)
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]] // One HTLC timed out
     alice2bob.expectMsgType[wire.protocol.Error]
     alice2bob.expectMsgType[wire.protocol.Error]
@@ -463,7 +463,7 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     awaitCond(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.isEmpty) // Alice state is cleared
     awaitCond(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.size == 1) // Bob does not accept fail in CLOSED state
 
-    bob ! CurrentBlockCount(currentBlockHeight + 145)
+    bob ! CurrentBlockHeight(currentBlockHeight + 145)
     alice ! bob2alice.expectMsgType[wire.protocol.Error]
 
     awaitCond(bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.isEmpty) // Bob state is cleared too after timeout
