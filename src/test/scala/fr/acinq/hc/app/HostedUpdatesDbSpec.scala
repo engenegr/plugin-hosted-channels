@@ -48,8 +48,8 @@ class HostedUpdatesDbSpec extends AnyFunSuite {
     assert(channelAnnouncementCodec.decode(BitVector.fromValidHex(res1._3)).require.value == channel1)
     assert(res1._4.isEmpty)
 
-    Blocking.txWrite(Updates.update1st(channel_update_1.shortChannelId.toLong, channelUpdateCodec.encode(channel_update_1).require.toHex, channel_update_1.timestamp), HCTestUtils.config.db)
-    Blocking.txWrite(Updates.update2nd(channel_update_2.shortChannelId.toLong, channelUpdateCodec.encode(channel_update_2).require.toHex, channel_update_1.timestamp), HCTestUtils.config.db)
+    Blocking.txWrite(Updates.update1st(channel_update_1.shortChannelId.toLong, channelUpdateCodec.encode(channel_update_1).require.toHex, channel_update_1.timestamp.toLong), HCTestUtils.config.db)
+    Blocking.txWrite(Updates.update2nd(channel_update_2.shortChannelId.toLong, channelUpdateCodec.encode(channel_update_2).require.toHex, channel_update_1.timestamp.toLong), HCTestUtils.config.db)
 
     val res2 = Blocking.txRead(Updates.model.result, HCTestUtils.config.db).head
     assert(channelUpdateCodec.decode(BitVector.fromValidHex(res2._4.get)).require.value == channel_update_1)

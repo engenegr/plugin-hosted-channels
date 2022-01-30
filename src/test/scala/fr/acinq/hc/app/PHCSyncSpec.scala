@@ -7,7 +7,7 @@ import akka.testkit.{TestFSMRef, TestProbe}
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.bitcoin.{Block, ByteVector64, Crypto}
 import fr.acinq.eclair._
-import fr.acinq.eclair.channel.Channel.OutgoingMessage
+import fr.acinq.eclair.io.Peer.OutgoingMessage
 import fr.acinq.eclair.io.{ConnectionInfo, PeerConnected, UnknownMessageReceived}
 import fr.acinq.eclair.router.Router.Data
 import fr.acinq.eclair.router.{Announcements, BaseRouterSpec, Router, SyncProgress}

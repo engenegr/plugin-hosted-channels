@@ -2,7 +2,6 @@ package fr.acinq.hc.app.channel
 
 import java.net.InetSocketAddress
 import java.util.UUID
-
 import akka.actor.ActorSystem
 import akka.testkit.{TestFSMRef, TestKitBase, TestProbe}
 import fr.acinq.bitcoin.Crypto.PublicKey
@@ -14,9 +13,10 @@ import fr.acinq.eclair.payment.OutgoingPaymentPacket
 import fr.acinq.eclair.payment.OutgoingPaymentPacket.Upstream
 import fr.acinq.eclair.payment.relay.Relayer
 import fr.acinq.eclair.router.Router.ChannelHop
-import fr.acinq.eclair.wire.protocol.Onion.createSinglePartPayload
+import fr.acinq.eclair.wire.protocol.PaymentOnion.createSinglePartPayload
+import fr.acinq.eclair.wire.protocol.PaymentOnion.createSinglePartPayload
 import fr.acinq.eclair.wire.protocol.{AnnouncementMessage, ChannelUpdate, HasChannelId, UnknownMessage, UpdateAddHtlc, UpdateFulfillHtlc}
-import fr.acinq.eclair.{CltvExpiryDelta, Kit, MilliSatoshi, TestConstants, randomBytes32}
+import fr.acinq.eclair.{BlockHeight, CltvExpiryDelta, Kit, MilliSatoshi, TestConstants, randomBytes32}
 import fr.acinq.hc.app.db.HostedChannelsDb
 import fr.acinq.hc.app._
 import org.scalatest.{FixtureTestSuite, ParallelTestExecution}
@@ -37,7 +37,7 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
                           aliceDB: PostgresProfile.backend.Database,
                           bobDB: PostgresProfile.backend.Database,
                           channelUpdateListener: TestProbe) {
-    def currentBlockHeight: Long = aliceKit.nodeParams.currentBlockHeight
+    def currentBlockHeight: BlockHeight = aliceKit.nodeParams.currentBlockHeight
   }
 
   case class PeerConnectedWrapTest(info: PeerConnected) extends PeerConnectedWrap { me =>
@@ -128,16 +128,16 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
     bobSync.expectNoMessage()
   }
 
-  def makeCmdAdd(amount: MilliSatoshi, destination: PublicKey, currentBlockHeight: Long, paymentPreimage: ByteVector32 = randomBytes32,
+  def makeCmdAdd(amount: MilliSatoshi, destination: PublicKey, currentBlockHeight: BlockHeight, paymentPreimage: ByteVector32 = randomBytes32,
                  upstream: Upstream = Upstream.Local(UUID.randomUUID), replyTo: TestProbe = TestProbe()): (ByteVector32, CMD_ADD_HTLC, TestProbe) = {
     val paymentHash: ByteVector32 = Crypto.sha256(paymentPreimage)
     val expiry = CltvExpiryDelta(144).toCltvExpiry(currentBlockHeight)
     val cmd = OutgoingPaymentPacket.buildCommand(replyTo.ref, upstream, paymentHash, ChannelHop(null, destination, null) :: Nil,
-      createSinglePartPayload(amount, expiry, randomBytes32))._1.copy(commit = false)
+      createSinglePartPayload(amount, expiry, randomBytes32, None)).get._1.copy(commit = false)
     (paymentPreimage, cmd, replyTo)
   }
 
-  def addHtlcFromAliceToBob(amount: MilliSatoshi, setup: SetupFixture, blockHeight: Long): (ByteVector32, UpdateAddHtlc) = {
+  def addHtlcFromAliceToBob(amount: MilliSatoshi, setup: SetupFixture, blockHeight: BlockHeight): (ByteVector32, UpdateAddHtlc) = {
     import setup._
     val (preimage, cmd_add, replyListener) = makeCmdAdd(amount, bobKit.nodeParams.nodeId, blockHeight)
     alice ! cmd_add

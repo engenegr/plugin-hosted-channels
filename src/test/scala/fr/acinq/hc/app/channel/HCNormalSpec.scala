@@ -1,5 +1,6 @@
 package fr.acinq.hc.app.channel
 
+import akka.testkit.TestProbe
 import fr.acinq.bitcoin.Crypto
 import fr.acinq.eclair._
 import fr.acinq.eclair.blockchain.CurrentBlockHeight
@@ -18,6 +19,7 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
   override def withFixture(test: OneArgTest): Outcome = withFixture(test.toNoArgTest(init()))
 
   test("Warn about pending incoming HTLCs with revealed preimages") { f =>
+    val probe = TestProbe()
     import f._
     HCTestUtils.resetEntireDatabase(aliceDB)
     HCTestUtils.resetEntireDatabase(bobDB)
@@ -25,7 +27,7 @@ class HCNormalSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCS
     val (preimage1, add1) = addHtlcFromAliceToBob(100000L.msat, f, currentBlockHeight)
 
     alice ! Worker.HCPeerDisconnected
-    bob ! CMD_FULFILL_HTLC(add1.id, preimage1)
+    bob ! CMD_FULFILL_HTLC(add1.id, preimage1, replyTo_opt = Some(probe.ref))
     bob ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)

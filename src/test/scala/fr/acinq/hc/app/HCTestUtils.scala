@@ -38,10 +38,23 @@ object HCTestUtils {
     val channelsListener = TestProbe()
     val server = TestProbe()
     val balance = TestProbe()
+    val postman = TestProbe()
 
-    val kit = Kit(nodeParams, system, null, paymentHandler.ref, register.ref,
-      relayer.ref, router.ref, switchboard.ref, testPaymentInitiator.ref, server.ref,
-      channelsListener.ref.toTyped, balance.ref, new DummyOnChainWallet)
+    val kit = Kit(
+      nodeParams,
+      system,
+      null,
+      paymentHandler.ref,
+      register.ref,
+      relayer.ref,
+      router.ref,
+      switchboard.ref,
+      testPaymentInitiator.ref,
+      server.ref,
+      channelsListener.ref.toTyped,
+      balance.ref.toTyped,
+      postman.ref.toTyped,
+      new DummyOnChainWallet())
     (kit, relayer)
   }
 }

@@ -132,7 +132,7 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.collect(DirectedHtlc.outgoing).size == 1)
     alice ! UpdateFailHtlc(alice2bobUpdateAdd1.channelId, alice2bobUpdateAdd1.id, ByteVector.fill(152)(0)) // Fail is disregarded by Alice in CLOSED state
     aliceRelayer.expectNoMessage()
-    alice ! CurrentBlockHeight(Long.MaxValue)
+    alice ! BlockHeight(Long.MaxValue)
     bob ! alice2bob.expectMsgType[wire.protocol.Error] // One htlc timed out
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]] // Pending outgoing HTLC is failed upstream
     alice ! UpdateFulfillHtlc(alice2bobUpdateAdd1.channelId, alice2bobUpdateAdd1.id, preimage1) // Fulfill in CLOSED state after timing out is disregarded by Alice

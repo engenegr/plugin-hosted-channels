@@ -1,6 +1,7 @@
 package fr.acinq.hc.app.channel
 
 import akka.actor.PoisonPill
+import akka.testkit.TestProbe
 import fr.acinq.eclair._
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.payment.relay.Relayer
@@ -150,6 +151,7 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
   }
 
   test("Alice falls behind, then re-syncs on restart") { f =>
+    val probe = TestProbe()
     import f._
     HCTestUtils.resetEntireDatabase(aliceDB)
     HCTestUtils.resetEntireDatabase(bobDB)
@@ -192,7 +194,7 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
 
-    bob ! CMD_FULFILL_HTLC(aliceAdd1.id, preimage1) // Bob gets a fulfill for a first payment while offline
+    bob ! CMD_FULFILL_HTLC(aliceAdd1.id, preimage1, replyTo_opt = Some(probe.ref)) // Bob gets a fulfill for a first payment while offline
     bob2alice.expectMsgType[UpdateFulfillHtlc] // Goes nowhere
 
     bob ! Worker.HCPeerConnected
@@ -234,6 +236,7 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
   }
 
   test("Alice sends 2 HTLCs, then re-sends by one on two next restarts") { f =>
+    val probe = TestProbe()
     import f._
     HCTestUtils.resetEntireDatabase(aliceDB)
     HCTestUtils.resetEntireDatabase(bobDB)
@@ -286,9 +289,9 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     bob2alice.expectNoMessage()
     alice2bob.expectNoMessage()
 
-    bob ! CMD_FULFILL_HTLC(aliceAdd1.id, preimage1) // Bob gets a fulfill for a first payment while offline
+    bob ! CMD_FULFILL_HTLC(aliceAdd1.id, preimage1, replyTo_opt = Some(probe.ref)) // Bob gets a fulfill for a first payment while offline
     bob ! CMD_SIGN(None)
-    bob ! CMD_FULFILL_HTLC(aliceAdd2.id, preimage2) // Bob gets a fulfill for a first payment while offline
+    bob ! CMD_FULFILL_HTLC(aliceAdd2.id, preimage2, replyTo_opt = Some(probe.ref)) // Bob gets a fulfill for a first payment while offline
     bob ! CMD_SIGN(None)
     alice ! bob2alice.expectMsgType[UpdateFulfillHtlc]
     alice ! bob2alice.expectMsgType[StateUpdate]
@@ -332,6 +335,7 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
   }
 
   test("Bob channel terminates before getting a fulfill, then gets it from db on restart") { f =>
+    val probe = TestProbe()
     HCTestUtils.resetEntireDatabase(f.aliceDB)
     HCTestUtils.resetEntireDatabase(f.bobDB)
     reachNormal(f)
@@ -345,7 +349,7 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     f.alice2bob.expectTerminated(f.alice)
 
     val f2 = init()
-    f2.bobKit.nodeParams.db.pendingCommands.addSettlementCommand(channelId, CMD_FULFILL_HTLC(alice2bobUpdateAdd3.id, preimage3))
+    f2.bobKit.nodeParams.db.pendingCommands.addSettlementCommand(channelId, CMD_FULFILL_HTLC(alice2bobUpdateAdd3.id, preimage3, replyTo_opt = Some(probe.ref)))
     f2.bob ! bobData
     f2.alice ! aliceData
     f2.bob ! Worker.HCPeerConnected
@@ -368,6 +372,7 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
   }
 
   test("Bob re-sends an HTLC fulfill in got in OFFLINE for a CLOSED channel") { f =>
+    val probe = TestProbe()
     import f._
     HCTestUtils.resetEntireDatabase(aliceDB)
     HCTestUtils.resetEntireDatabase(bobDB)
@@ -385,7 +390,7 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     bob ! HC_CMD_SUSPEND(randomKey.publicKey)
     awaitCond(bob.stateName == OFFLINE) // Not leaving an OFFLINE state
 
-    bob ! CMD_FULFILL_HTLC(alice2bobUpdateAdd3.id, preimage3) // Bob gets a fulfill for a first payment while offline
+    bob ! CMD_FULFILL_HTLC(alice2bobUpdateAdd3.id, preimage3, replyTo_opt = Some(probe.ref)) // Bob gets a fulfill for a first payment while offline
     bob2alice.expectMsgType[UpdateFulfillHtlc] // Goes nowhere
 
     bob ! Worker.HCPeerConnected
@@ -400,6 +405,7 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
   }
 
   test("Alice loses channel data with HTLCs, restores from Bob's data") { f =>
+    val probe = TestProbe()
     HCTestUtils.resetEntireDatabase(f.aliceDB)
     HCTestUtils.resetEntireDatabase(f.bobDB)
     reachNormal(f)
@@ -428,11 +434,11 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     val bobData = HostedState(f.bobKit.nodeParams.nodeId, f2.aliceKit.nodeParams.nodeId,
       f.bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.lastCrossSignedState)
 
-    f.bob ! CMD_FULFILL_HTLC(alice2bobUpdateAdd1.id, preimage1)
+    f.bob ! CMD_FULFILL_HTLC(alice2bobUpdateAdd1.id, preimage1, replyTo_opt = Some(probe.ref))
     f2.bob2alice.expectMsgType[UpdateFulfillHtlc] // Alice does not receive this
 
     val f3 = init()
-    f3.aliceKit.nodeParams.db.pendingCommands.addSettlementCommand(channelId, CMD_FULFILL_HTLC(alice2bobUpdateAdd2.id, preimage2)) // Alice gets Bob's payment fulfilled, HC is not there
+    f3.aliceKit.nodeParams.db.pendingCommands.addSettlementCommand(channelId, CMD_FULFILL_HTLC(alice2bobUpdateAdd2.id, preimage2, replyTo_opt = Some(probe.ref))) // Alice gets Bob's payment fulfilled, HC is not there
     f3.alice ! HC_CMD_RESTORE(bobData.nodeId1, bobData)
 
     f3.alice ! Worker.HCPeerDisconnected
