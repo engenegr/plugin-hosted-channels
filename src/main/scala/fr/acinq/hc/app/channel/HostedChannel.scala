@@ -401,8 +401,8 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     case Event(_: HC_CMD_GET_INFO, data: HC_DATA_ESTABLISHED) => stay replying CMDResInfo(stateName, data, data.commitments.nextLocalSpec)
 
     case Event(cmd: CMD_GETINFO, _) =>
-      // We get this for example when user issues "channels" API command, must reply with something
-      replyToCommand(RES_GETINFO(remoteNodeId, channelId, stateName, data = null), cmd)
+      val msg = new IllegalArgumentException("Non-standard channel")
+      replyToCommand(RES_FAILURE(cmd, msg), cmd)
       stay
 
     case Event(cmd: CMD_UPDATE_RELAY_FEE, _) =>
