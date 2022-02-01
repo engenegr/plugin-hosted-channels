@@ -26,13 +26,11 @@ import scodec.bits.ByteVector
 
 import java.util.UUID
 import scala.concurrent.Await
-import scala.concurrent.duration.DurationInt
 import scala.util.{Failure, Success}
 
 
 object HostedChannel {
   case class SendAnnouncements(force: Boolean)
-  case object BroadcastDelayedDown { val label = "BroadcastDelayedDown" }
 }
 
 class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannelsDb, hostedSync: ActorRef, cfg: Config) extends FSMDiagnosticActorLogging[ChannelState, HostedData] {
@@ -44,6 +42,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
   startTimerWithFixedDelay("SendAnnouncements", HostedChannel.SendAnnouncements(force = false), PHC.tickAnnounceThreshold)
 
   context.system.eventStream.subscribe(channel = classOf[PreimageBroadcastCatcher.BroadcastedPreimage], subscriber = self)
+  context.system.eventStream.subscribe(channel = classOf[HostedSync.RouterIsOperational], subscriber = self)
   context.system.eventStream.subscribe(channel = classOf[CurrentBlockHeight], subscriber = self)
 
   startWith(OFFLINE, HC_NOTHING)
@@ -213,6 +212,11 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     // PHC announcements
 
+    case Event(_: HostedSync.RouterIsOperational, data: HC_DATA_ESTABLISHED) if data.commitments.announceChannel =>
+      // PHC with remote peer may become NORMAL sooner than our PHC router becomes operational
+      manageUpdates(data)
+      stay
+
     case Event(HostedChannel.SendAnnouncements(force), data: HC_DATA_ESTABLISHED) if data.commitments.announceChannel =>
       val update1 = makeChannelUpdate(localLCSS = data.commitments.lastCrossSignedState, enable = true)
       context.system.eventStream publish makeLocalUpdateEvent(update1, data.commitments)
@@ -261,6 +265,15 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       // This does not immediately affect PHC graph and other HC nodes will keep this channel for `PHC.staleThreshold` days
       val data1 = data.modify(_.commitments.announceChannel).setTo(false).copy(channelAnnouncement = None)
       stay StoringAndUsing data1 replying CMDResSuccess(cmd)
+
+    // Payments
+
+    case Event(cmd: CMD_ADD_HTLC, data: HC_DATA_ESTABLISHED) =>
+      data.commitments.sendAdd(cmd, kit.nodeParams.currentBlockHeight) match {
+        case Right((commits1, add)) if cmd.commit => stay StoringAndUsing data.copy(commitments = commits1) AckingAddSuccess cmd SendingHasChannelId add Receiving CMD_SIGN(None)
+        case Right((commits1, add)) => stay StoringAndUsing data.copy(commitments = commits1) AckingAddSuccess cmd SendingHasChannelId add
+        case Left(cause) => ackAddFail(cmd, cause, data.channelUpdate)
+      }
 
     // IMPORTANT: Peer adding and failing HTLCs is only accepted in NORMAL
 
@@ -351,14 +364,9 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     case Event(cmd: CMD_FAIL_MALFORMED_HTLC, data: HC_DATA_ESTABLISHED) => resolveSettlementCommand(data.commitments.sendFailMalformed(cmd), data, cmd, cmd.commit)
 
     case Event(cmd: CMD_ADD_HTLC, data: HC_DATA_ESTABLISHED) =>
-      data.commitments.sendAdd(cmd, kit.nodeParams.currentBlockHeight) match {
-        case Right((commits1, add)) if cmd.commit => stay StoringAndUsing data.copy(commitments = commits1) AckingAddSuccess cmd SendingHasChannelId add Receiving CMD_SIGN(None)
-        case Right((commits1, add)) => stay StoringAndUsing data.copy(commitments = commits1) AckingAddSuccess cmd SendingHasChannelId add
-        case Left(cause) =>
-          log.warning(s"PLGN PHC, ${cause.getMessage} while processing CMD_ADD_HTLC in state=$stateName")
-          replyToCommand(RES_ADD_FAILED(channelUpdate = Some(data.channelUpdate), t = cause, c = cmd), cmd)
-          stay
-      }
+      ackAddFail(cmd, ChannelUnavailable(channelId), data.channelUpdate)
+      log.info(s"PLGN PHC, rejecting htlc in state=$stateName, peer=$remoteNodeId")
+      stay
 
     // Scheduling override
 
@@ -412,13 +420,9 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
       else if (cfg.vals.phcConfig.maxCapacity < msg.newCapacity) stay replying CMDResFailure("Resizing declined: new capacity must not exceed max allowed capacity")
       else stay StoringAndUsing data.copy(resizeProposal = Some(msg), overrideProposal = None) SendingHosted msg replying CMDResSuccess(cmd) Receiving CMD_SIGN(None)
 
-    case Event(HostedChannel.BroadcastDelayedDown, _) =>
-      val msg = LocalChannelDown(self, channelId, shortChannelId, remoteNodeId)
-      context.system.eventStream publish msg
-      stay
+    case Event(cmd: HasRemoteNodeIdHostedCommand, _) => stay replying CMDResFailure(s"Can not process cmd=${cmd.getClass.getName} in state=$stateName")
 
-    case _ =>
-      stay
+    case _ => stay
   }
 
   onTransition {
@@ -427,24 +431,13 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
       (connectionOpt, state, nextState, nextStateData) match {
         case (Some(connection), SYNCING | CLOSED, NORMAL, d1: HC_DATA_ESTABLISHED) =>
-          cancelTimer(name = HostedChannel.BroadcastDelayedDown.label)
-
+          if (d1.commitments.announceChannel) manageUpdates(d1) else connection sendRoutingMsg d1.channelUpdate
           context.system.eventStream publish HostedChannelRestored(self, channelId, connection.info.peer, remoteNodeId)
           context.system.eventStream publish ChannelIdAssigned(self, remoteNodeId, temporaryChannelId = ByteVector32.Zeroes, channelId)
           context.system.eventStream publish ShortChannelIdAssigned(self, channelId, shortChannelId, previousShortChannelId = None)
           context.system.eventStream publish makeLocalUpdateEvent(d1.channelUpdate, d1.commitments)
 
-          if (!d1.commitments.announceChannel) connection sendRoutingMsg d1.channelUpdate
-          else if (d1.shouldBroadcastUpdateRightAway) self ! HostedChannel.SendAnnouncements(force = false)
-          else if (cfg.vals.hcParams lastUpdateDiffers d1.channelUpdate) self ! HostedChannel.SendAnnouncements(force = false)
-
-        case (_, prev, OFFLINE, d1: HC_DATA_ESTABLISHED) if prev != OFFLINE =>
-          // Public channels are expected to have good connectivity, so we inform the system right away once they get offline
-          // Private channels often have flaky connections or users turning wallets off too early so we keep accepting and holding HTLCs for some time
-          if (d1.commitments.announceChannel) context.system.eventStream publish LocalChannelDown(self, channelId, shortChannelId, remoteNodeId)
-          else startSingleTimer(HostedChannel.BroadcastDelayedDown.label, HostedChannel.BroadcastDelayedDown, delay = 30.minutes)
-
-        case (_, prev, CLOSED, _) if prev != CLOSED =>
+        case (_, NORMAL, OFFLINE | CLOSED, _) =>
           context.system.eventStream publish LocalChannelDown(self, channelId, shortChannelId, remoteNodeId)
         case _ =>
       }
@@ -563,6 +556,12 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     (data1, localErrorExt.error)
   }
 
+  def ackAddFail(cmd: CMD_ADD_HTLC, cause: ChannelException, channelUpdate: ChannelUpdate): HostedFsmState = {
+    log.warning(s"PLGN PHC, ${cause.getMessage} while processing cmd=${cmd.getClass.getSimpleName} in state=$stateName")
+    replyToCommand(RES_ADD_FAILED(channelUpdate = Some(channelUpdate), t = cause, c = cmd), cmd)
+    stay
+  }
+
   // Disconnect in a special case where they send a resolution before it is cross-signed
   // This may happen if they have our earlier cross-signed state and we have got new commands while they were replying
   def processRemoteResolve(result: Either[ChannelException, HostedCommitments], data: HC_DATA_ESTABLISHED): HostedFsmState =
@@ -572,8 +571,9 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
       case Left(_: UnsignedHtlcResolve) =>
         val disconnect = Peer.Disconnect(remoteNodeId)
-        HC.remoteNode2Connection.get(remoteNodeId).foreach(_.info.peer ! disconnect)
-        log.info(s"PLGN PHC, force-disconnect, update overflow, peer=$remoteNodeId")
+        val peer = HC.remoteNode2Connection.get(remoteNodeId)
+        log.info(s"PLGN PHC, force-disconnecting peer=$remoteNodeId")
+        peer.foreach(_.info.peer ! disconnect)
         goto(OFFLINE) StoringAndUsing data
 
       case Left(cause) =>
@@ -666,6 +666,16 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     }
   }
 
+  def manageUpdates(data: HC_DATA_ESTABLISHED): Unit = {
+    if (cfg.vals.hcParams lastUpdateDiffers data.channelUpdate) {
+      log.info(s"PLGN PHC, re-broadcasting, params differ, peer=$remoteNodeId")
+      self ! HostedChannel.SendAnnouncements(force = false)
+    } else if (data.shouldBroadcastUpdateRightAway) {
+      log.info(s"PLGN PHC, re-broadcasting, last was long ago, peer=$remoteNodeId")
+      self ! HostedChannel.SendAnnouncements(force = false)
+    }
+  }
+
   def attemptStateUpdate(remoteSU: StateUpdate, data: HC_DATA_ESTABLISHED): HostedFsmState = {
     val lcss1 = data.commitments.nextLocalUnsignedLCSS(remoteSU.blockDay).copy(remoteSigOfLocal = remoteSU.localSigOfRemoteLCSS).withLocalSigOfRemote(kit.nodeParams.privateKey)
     val commits1 = data.commitments.copy(lastCrossSignedState = lcss1, localSpec = data.commitments.nextLocalSpec, nextLocalUpdates = Nil, nextRemoteUpdates = Nil)
@@ -698,7 +708,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     case Right((commits1, message)) => stay StoringAndUsing data.copy(commitments = commits1) AckingSuccess cmd SendingHasChannelId message
     case Left(cause) =>
       PendingCommandsDb.ackSettlementCommand(kit.nodeParams.db.pendingCommands, channelId, cmd)
-      replyToCommand(reply = RES_FAILURE(cmd, cause), cmd)
+      replyToCommand(RES_FAILURE(cmd, cause), cmd)
       stay
   }
 

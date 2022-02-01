@@ -1,15 +1,15 @@
 package fr.acinq.hc.app.channel
 
+import fr.acinq.bitcoin.{ByteVector32, ByteVector64}
 import fr.acinq.eclair._
+import fr.acinq.eclair.blockchain.CurrentBlockHeight
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.transactions.DirectedHtlc
-import fr.acinq.eclair.blockchain.CurrentBlockHeight
-import fr.acinq.bitcoin.{ByteVector32, ByteVector64}
 import fr.acinq.eclair.wire.protocol.{ChannelUpdate, UpdateFailHtlc, UpdateFulfillHtlc}
-import fr.acinq.hc.app.{HCTestUtils, InvokeHostedChannel, LastCrossSignedState, StateOverride, StateUpdate, Worker}
+import fr.acinq.hc.app._
+import org.scalatest.Outcome
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 import scodec.bits.ByteVector
-import org.scalatest.Outcome
 
 class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCStateTestsHelperMethods {
 
@@ -132,7 +132,7 @@ class HCOverrideSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with H
     assert(alice.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.nextLocalSpec.htlcs.collect(DirectedHtlc.outgoing).size == 1)
     alice ! UpdateFailHtlc(alice2bobUpdateAdd1.channelId, alice2bobUpdateAdd1.id, ByteVector.fill(152)(0)) // Fail is disregarded by Alice in CLOSED state
     aliceRelayer.expectNoMessage()
-    alice ! BlockHeight(Long.MaxValue)
+    alice ! CurrentBlockHeight(BlockHeight(Long.MaxValue))
     bob ! alice2bob.expectMsgType[wire.protocol.Error] // One htlc timed out
     aliceRelayer.expectMsgType[RES_ADD_SETTLED[_, _]] // Pending outgoing HTLC is failed upstream
     alice ! UpdateFulfillHtlc(alice2bobUpdateAdd1.channelId, alice2bobUpdateAdd1.id, preimage1) // Fulfill in CLOSED state after timing out is disregarded by Alice

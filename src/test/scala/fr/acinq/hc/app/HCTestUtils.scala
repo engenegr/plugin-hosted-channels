@@ -20,12 +20,12 @@ object HCTestUtils {
     val setup = DBIO.seq(
       fr.acinq.hc.app.db.Channels.model.schema.dropIfExists,
       fr.acinq.hc.app.db.Updates.model.schema.dropIfExists,
-      fr.acinq.hc.app.db.Preimages.model.schema.dropIfExists,
       fr.acinq.hc.app.db.Channels.model.schema.create,
       fr.acinq.hc.app.db.Updates.model.schema.create,
-      fr.acinq.hc.app.db.Preimages.model.schema.create,
+      fr.acinq.hc.app.db.Preimages.model.schema.dropIfExists,
+      fr.acinq.hc.app.db.Preimages.model.schema.create
     )
-    Await.result(db.run(setup.transactionally), 5 seconds)
+    Await.result(db.run(setup.transactionally), 10.seconds)
   }
 
   def testKit(nodeParams: NodeParams)(implicit system: ActorSystem): (Kit, TestProbe) = {
@@ -40,21 +40,9 @@ object HCTestUtils {
     val balance = TestProbe()
     val postman = TestProbe()
 
-    val kit = Kit(
-      nodeParams,
-      system,
-      null,
-      paymentHandler.ref,
-      register.ref,
-      relayer.ref,
-      router.ref,
-      switchboard.ref,
-      testPaymentInitiator.ref,
-      server.ref,
-      channelsListener.ref.toTyped,
-      balance.ref.toTyped,
-      postman.ref.toTyped,
-      new DummyOnChainWallet())
+    val kit = Kit(nodeParams, system, null, paymentHandler.ref, register.ref,
+      relayer.ref, router.ref, switchboard.ref, testPaymentInitiator.ref, server.ref,
+      channelsListener.ref.toTyped, balance.ref, postman.ref, new DummyOnChainWallet)
     (kit, relayer)
   }
 }

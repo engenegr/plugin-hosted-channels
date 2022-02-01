@@ -101,7 +101,7 @@ class HCRestartCleanupSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike 
 
     awaitCond(aliceHC.params.asInstanceOf[CustomCommitmentsPlugin].getHtlcsRelayedOut(Nil, bobKit.nodeParams, null).values.flatten.map(_._2).toSet == Set(id4, aliceAdd5.id)) // Remote fail in CLOSED (disregarded)
 
-    alice ! CurrentBlockHeight(currentBlockHeight + 145)
+    alice ! CurrentBlockHeight(BlockHeight(currentBlockHeight + 145))
     awaitCond(aliceHC.params.asInstanceOf[CustomCommitmentsPlugin].getHtlcsRelayedOut(Nil, bobKit.nodeParams, null).values.flatten.map(_._2).isEmpty) // Local fake fail of outgoing payment on timeout
   }
 }

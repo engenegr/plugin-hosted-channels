@@ -1,7 +1,5 @@
 package fr.acinq.hc.app
 
-import java.net.InetSocketAddress
-
 import akka.actor.ActorSystem
 import akka.testkit.{TestFSMRef, TestProbe}
 import fr.acinq.bitcoin.Crypto.PublicKey
@@ -17,6 +15,8 @@ import fr.acinq.hc.app.db.HostedUpdatesDb
 import fr.acinq.hc.app.network.HostedSync.{GotAllSyncFrom, SendSyncTo, TickSendGossip}
 import fr.acinq.hc.app.network._
 
+import java.net.InetSocketAddress
+
 
 class PHCSyncSpec extends BaseRouterSpec {
   private def createPeer(nodeId: PublicKey)(implicit system: ActorSystem) = {
@@ -29,12 +29,10 @@ class PHCSyncSpec extends BaseRouterSpec {
 
   test("Hosted sync and gossip") { fixture =>
     HCTestUtils.resetEntireDatabase(HCTestUtils.config.db)
+    val probe = TestProbe()
     val config = HCTestUtils.config.vals.phcConfig.copy(minNormalChans = 1, maxPerNode = 1)
     val (kit, _) = HCTestUtils.testKit(TestConstants.Alice.nodeParams)(system)
     val syncActor = TestFSMRef(new HostedSync(kit.copy(router = fixture.router), new HostedUpdatesDb(HCTestUtils.config.db), config))
-
-    val probe = TestProbe()
-
     awaitCond(syncActor.stateName == WAIT_FOR_ROUTER_DATA)
     // Router has finished synchronization
     syncActor ! SyncProgress(1D)

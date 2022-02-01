@@ -32,6 +32,8 @@ object HostedSync {
 
   case object TickSendGossip { val label = "TickSendGossip" }
 
+  case class RouterIsOperational(data: OperationalData)
+
   case class GotAllSyncFrom(info: PeerConnectedWrap)
 
   case class SendSyncTo(info: PeerConnectedWrap)
@@ -111,13 +113,13 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
           // Note: nodes whose NC count falls below minimum will eventually be pruned out
           val u1Count = updatesDb.pruneOldUpdates1(System.currentTimeMillis.millis.toSeconds)
           val u2Count = updatesDb.pruneOldUpdates2(System.currentTimeMillis.millis.toSeconds)
-          val annCount = updatesDb.pruneUpdateLessAnnounces
-          val phcNetwork1 = updatesDb.getState
+          val data1 = data.copy(phcNetwork = updatesDb.getState)
 
           // In case of success we prune database and recreate network from scratch
-          log.info(s"PLGN PHC, HostedSync, added=${adds.sum}, removed u1=$u1Count, removed u2=$u2Count, removed ann=$annCount")
-          log.info(s"PLGN PHC, HostedSync, chans old=${data.phcNetwork.channels.size}, new=${phcNetwork1.channels.size}")
-          goto(OPERATIONAL) using data.copy(phcNetwork = phcNetwork1)
+          log.info(s"PLGN PHC, HostedSync, added=${adds.sum}, removed u1=$u1Count, removed u2=$u2Count, removed ann=${updatesDb.pruneUpdateLessAnnounces}")
+          log.info(s"PLGN PHC, HostedSync, channels old=${data.phcNetwork.channels.size}, new=${data1.phcNetwork.channels.size}")
+          context.system.eventStream publish RouterIsOperational(data1)
+          goto(OPERATIONAL) using data1
       }
   }
 
@@ -270,29 +272,29 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
       okNormalChans && data.phcNetwork.isAnnounceAcceptable(ann)
     }
 
-    def isUpdateAcceptable(update: ChannelUpdate, data: OperationalData): Boolean = data.phcNetwork.channels.get(update.shortChannelId) match {
+    def isUpdateAcceptable(update: ChannelUpdate, data: OperationalData, fromNodeId: PublicKey): Boolean = data.phcNetwork.channels.get(update.shortChannelId) match {
       case Some(pubHostedChan) if data.tooFewNormalChans(pubHostedChan.channelAnnounce.nodeId1, pubHostedChan.channelAnnounce.nodeId2, phcConfig).isDefined =>
-        log.info(s"PLGN PHC, gossip update fail: too few normal channels, msg=$update")
+        log.info(s"PLGN PHC, gossip update fail: too few normal channels, msg=$update, peer=$fromNodeId")
         false
 
       case _ if update.htlcMaximumMsat.forall(_ > phcConfig.maxCapacity) =>
-        log.info(s"PLGN PHC, gossip update fail: capacity is above max, msg=$update")
+        log.info(s"PLGN PHC, gossip update fail: capacity is above max, msg=$update, peer=$fromNodeId")
         false
 
       case _ if update.htlcMaximumMsat.forall(_ < phcConfig.minCapacity) =>
-        log.info(s"PLGN PHC, gossip update fail: capacity is below min, msg=$update")
+        log.info(s"PLGN PHC, gossip update fail: capacity is below min, msg=$update, peer=$fromNodeId")
         false
 
       case Some(pubHostedChan) if !pubHostedChan.isUpdateFresh(update) =>
-        log.info(s"PLGN PHC, gossip update fail: not fresh, msg=$update")
+        log.info(s"PLGN PHC, gossip update fail: not fresh, msg=$update, peer=$fromNodeId")
         false
 
       case Some(pubHostedChan) if !pubHostedChan.verifySig(update) =>
-        log.info(s"PLGN PHC, gossip update fail: wrong signature, msg=$update")
+        log.info(s"PLGN PHC, gossip update fail: wrong signature, msg=$update, peer=$fromNodeId")
         false
 
       case None =>
-        log.info(s"PLGN PHC, gossip update fail: not a PHC update, msg=$update")
+        log.info(s"PLGN PHC, gossip update fail: not a PHC update, msg=$update, peer=$fromNodeId")
         false
 
       case _ =>
@@ -310,7 +312,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
           // This is a new PHC so we must check if any of related nodes already has too many PHCs before proceeding
           processNewAnnounce(message, data, fromNodeId)
 
-        case Attempt.Successful(msg: ChannelUpdate) if isUpdateAcceptable(msg, data) =>
+        case Attempt.Successful(msg: ChannelUpdate) if isUpdateAcceptable(msg, data, fromNodeId) =>
           processUpdate(msg, data, fromNodeId)
 
         case Attempt.Successful(something) =>

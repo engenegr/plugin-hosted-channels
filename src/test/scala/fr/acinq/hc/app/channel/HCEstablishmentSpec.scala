@@ -7,7 +7,6 @@ import fr.acinq.eclair.{TestKitBaseClass, wire}
 import fr.acinq.hc.app._
 import org.scalatest.Outcome
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
-import scala.concurrent.duration._
 
 class HCEstablishmentSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike with HCStateTestsHelperMethods {
 
@@ -121,9 +120,9 @@ class HCEstablishmentSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     alice ! Worker.HCPeerDisconnected
     bob ! Worker.HCPeerDisconnected
     awaitCond(alice.stateName == OFFLINE)
-    channelUpdateListener.expectNoMessage(1 second)
     awaitCond(bob.stateName == OFFLINE)
-    channelUpdateListener.expectNoMessage(1 second)
+    channelUpdateListener.expectMsgType[LocalChannelDown]
+    channelUpdateListener.expectMsgType[LocalChannelDown]
     bob ! Worker.HCPeerConnected
     alice ! Worker.HCPeerConnected
     alice ! bob2alice.expectMsgType[InvokeHostedChannel]

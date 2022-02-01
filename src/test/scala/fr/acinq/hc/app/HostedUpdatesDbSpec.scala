@@ -1,16 +1,16 @@
 package fr.acinq.hc.app
 
 import fr.acinq.bitcoin.Crypto.PrivateKey
-import fr.acinq.eclair._
-import slick.jdbc.PostgresProfile.api._
-import fr.acinq.eclair.wire.protocol.LightningMessageCodecs._
 import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto}
+import fr.acinq.eclair._
 import fr.acinq.eclair.router.Announcements
+import fr.acinq.eclair.wire.protocol.LightningMessageCodecs._
 import fr.acinq.hc.app.Tools.DuplicateHandler
 import fr.acinq.hc.app.db.{Blocking, HostedUpdatesDb, PreimagesDb, Updates}
 import fr.acinq.hc.app.network.{CollectedGossip, PHC}
 import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits.BitVector
+import slick.jdbc.PostgresProfile.api._
 
 
 class HostedUpdatesDbSpec extends AnyFunSuite {

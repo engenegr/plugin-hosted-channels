@@ -9,6 +9,7 @@ import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.bitcoin.{ByteVector32, Satoshi, Script}
 import fr.acinq.eclair._
 import fr.acinq.eclair.api.directives.EclairDirectives
+import fr.acinq.eclair.api.serde.FormParamExtractors._
 import fr.acinq.eclair.blockchain.fee.{FeeratePerByte, FeeratePerKw}
 import fr.acinq.eclair.channel.Origin
 import fr.acinq.eclair.payment.IncomingPaymentPacket
@@ -25,6 +26,7 @@ import fr.acinq.hc.app.network.{HostedSync, OperationalData, PHC, PreimageBroadc
 import scodec.bits.ByteVector
 
 import scala.collection.mutable
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.stm._
 import scala.util.Try
 
@@ -142,11 +144,8 @@ class HC extends Plugin with RouteProvider {
   }
 
   override def route(eclairDirectives: EclairDirectives): Route = {
-    import eclairDirectives._
-    import fr.acinq.eclair.api.serde.FormParamExtractors._
     import fr.acinq.eclair.api.serde.JsonSupport.{formats, marshaller, serialization}
-
-    import scala.concurrent.ExecutionContext.Implicits.global
+    import eclairDirectives._
 
     val hostedStateUnmarshaller = "state".as[ByteVector](binaryDataUnmarshaller)
 
@@ -253,12 +252,18 @@ class HC extends Plugin with RouteProvider {
       complete(phcNodeAnnounces)
     }
 
+    val phcDump = postRequest("hc-phcdump") { implicit t =>
+      val phcNetwork = (syncRef ? HostedSync.GetHostedSyncData).mapTo[OperationalData].map(_.phcNetwork.channels.values)
+      complete(phcNetwork)
+    }
+
     val hotChannels: Route = postRequest("hc-hot") { implicit t =>
       complete(channelsDb.listHotChannels)
     }
 
-    invoke ~ externalFulfill ~ findByRemoteId ~ overridePropose ~ overrideAccept ~ makePublic ~ makePrivate ~
-      resize ~ suspend ~ verifyRemoteState ~ restoreFromRemoteState ~ broadcastPreimages ~ phcNodes ~ hotChannels
+    invoke ~ externalFulfill ~ findByRemoteId ~ overridePropose ~ overrideAccept ~
+      makePublic ~ makePrivate ~ resize ~ suspend ~ verifyRemoteState ~ restoreFromRemoteState ~
+      broadcastPreimages ~ phcNodes ~ phcDump ~ hotChannels
   }
 }
 

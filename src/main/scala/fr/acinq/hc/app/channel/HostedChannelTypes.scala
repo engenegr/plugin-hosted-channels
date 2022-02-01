@@ -5,6 +5,7 @@ import com.softwaremill.quicklens._
 import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
 import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, Satoshi, SatoshiLong}
 import fr.acinq.eclair._
+import fr.acinq.eclair.blockchain.CurrentBlockHeight
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.payment.OutgoingPaymentPacket
 import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc}
@@ -235,11 +236,10 @@ case class HostedCommitments(localNodeId: PublicKey, remoteNodeId: PublicKey, ch
       case None => Left(UnknownHtlcId(channelId, fulfill.id))
     }
 
-  def sendFail(cmd: CMD_FAIL_HTLC, nodeSecret: PrivateKey): Either[ChannelException, (HostedCommitments, UpdateFailHtlc)] =
-    getIncomingHtlcCrossSigned(cmd.id) match {
-      case Some(add) => OutgoingPaymentPacket.buildHtlcFailure(nodeSecret, cmd, add).map(updateFail => (addLocalProposal(updateFail), updateFail))
-      case None => Left(UnknownHtlcId(channelId, cmd.id))
-    }
+  def sendFail(cmd: CMD_FAIL_HTLC, nodeSecret: PrivateKey): Either[ChannelException, (HostedCommitments, UpdateFailHtlc)] = getIncomingHtlcCrossSigned(cmd.id) match {
+    case Some(add) => OutgoingPaymentPacket.buildHtlcFailure(nodeSecret, cmd, add).map(updateFail => (addLocalProposal(updateFail), updateFail))
+    case None => Left(UnknownHtlcId(channelId, cmd.id))
+  }
 
   def sendFailMalformed(cmd: CMD_FAIL_MALFORMED_HTLC): Either[ChannelException, (HostedCommitments, UpdateFailMalformedHtlc)] =
     if ((cmd.failureCode & FailureMessageCodecs.BADONION) == 0) Left(InvalidFailureCode(channelId))

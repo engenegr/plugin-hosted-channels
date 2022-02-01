@@ -1,10 +1,8 @@
 package fr.acinq.hc.app
 
-import java.util.UUID
-
 import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.eclair._
 import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto, SatoshiLong}
+import fr.acinq.eclair._
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.payment.OutgoingPaymentPacket
@@ -14,6 +12,8 @@ import fr.acinq.eclair.wire.protocol.PaymentOnion.createSinglePartPayload
 import fr.acinq.eclair.wire.protocol.{ChannelUpdate, UpdateAddHtlc, UpdateFulfillHtlc}
 import fr.acinq.hc.app.channel.{HC_DATA_ESTABLISHED, HostedCommitments}
 import org.scalatest.funsuite.AnyFunSuite
+
+import java.util.UUID
 
 
 class HostedChannelTypesSpec extends AnyFunSuite {
@@ -71,47 +71,44 @@ class HostedChannelTypesSpec extends AnyFunSuite {
     assert(bobLocallySignedLCSS.reverse.verifyRemoteSig(bobPrivKey.publicKey)) // Alice verifies Bob remote sig of Alice local view of LCSS
   }
 
-  def makeCmdAdd(amount: MilliSatoshi, destination: PublicKey, currentBlockHeight: BlockHeight): (ByteVector32, CMD_ADD_HTLC) = {
+  def makeCmdAdd(amount: MilliSatoshi, destination: PublicKey, currentBlockHeight: Long): (ByteVector32, CMD_ADD_HTLC) = {
     val payment_preimage: ByteVector32 = randomBytes32
     val payment_hash: ByteVector32 = Crypto.sha256(payment_preimage)
-    val expiry = CltvExpiryDelta(144).toCltvExpiry(currentBlockHeight)
+    val expiry = CltvExpiryDelta(144).toCltvExpiry(BlockHeight(currentBlockHeight))
     val cmd = OutgoingPaymentPacket.buildCommand(null, OutgoingPaymentPacket.Upstream.Local(UUID.randomUUID), payment_hash,
       ChannelHop(null, destination, null) :: Nil, createSinglePartPayload(amount, expiry, randomBytes32, None)).get._1.copy(commit = false)
     (payment_preimage, cmd)
   }
-//PaymentOnion.createSinglePartPayload(add.amountMsat, add.cltvExpiry, pr.paymentSecret.get, pr.paymentMetadata)))
+
   private val hdc =
     HostedCommitments(randomKey.publicKey, randomKey.publicKey, channelId, localCommitmentSpec,
       originChannels = Map.empty, lcss1, nextLocalUpdates = Nil, nextRemoteUpdates = Nil, announceChannel = true)
 
-  var blockHeight = BlockHeight(100)
-  var expBlockHeight = BlockHeight(300)
-
   test("Processing HTLCs") {
-    val (_, cmdAdd1) = makeCmdAdd(5.msat, randomKey.publicKey, currentBlockHeight = blockHeight)
-    val Left(_: HtlcValueTooSmall) = hdc.sendAdd(cmdAdd1, blockHeight = blockHeight)
-    val (_, cmdAdd2) = makeCmdAdd(50.msat, randomKey.publicKey, currentBlockHeight = blockHeight)
-    val Left(_: ExpiryTooSmall) = hdc.sendAdd(cmdAdd2, blockHeight = expBlockHeight)
-    val (_, cmdAdd3) = makeCmdAdd(50000.msat, randomKey.publicKey, currentBlockHeight = blockHeight)
-    val Right((hdc1, _)) = hdc.sendAdd(cmdAdd3, blockHeight = blockHeight)
+    val (_, cmdAdd1) = makeCmdAdd(5.msat, randomKey.publicKey, currentBlockHeight = 100)
+    val Left(_: HtlcValueTooSmall) = hdc.sendAdd(cmdAdd1, blockHeight = BlockHeight(100))
+    val (_, cmdAdd2) = makeCmdAdd(50.msat, randomKey.publicKey, currentBlockHeight = 100)
+    val Left(_: ExpiryTooSmall) = hdc.sendAdd(cmdAdd2, blockHeight = BlockHeight(300))
+    val (_, cmdAdd3) = makeCmdAdd(50000.msat, randomKey.publicKey, currentBlockHeight = 100)
+    val Right((hdc1, _)) = hdc.sendAdd(cmdAdd3, blockHeight = BlockHeight(100))
     assert(hdc1.nextLocalSpec.toLocal == 50000.msat)
-    val (_, cmdAdd4) = makeCmdAdd(40000.msat, randomKey.publicKey, currentBlockHeight = blockHeight)
-    val Right((hdc2, _)) = hdc1.sendAdd(cmdAdd4, blockHeight = blockHeight)
+    val (_, cmdAdd4) = makeCmdAdd(40000.msat, randomKey.publicKey, currentBlockHeight = 100)
+    val Right((hdc2, _)) = hdc1.sendAdd(cmdAdd4, blockHeight = BlockHeight(100))
     assert(hdc2.nextLocalSpec.toLocal == 10000.msat)
-    val (_, cmdAdd5) = makeCmdAdd(20000.msat, randomKey.publicKey, currentBlockHeight = blockHeight)
-    val Left(InsufficientFunds(_, _, missing, _, _)) = hdc2.sendAdd(cmdAdd5, blockHeight = blockHeight)
+    val (_, cmdAdd5) = makeCmdAdd(20000.msat, randomKey.publicKey, currentBlockHeight = 100)
+    val Left(InsufficientFunds(_, _, missing, _, _)) = hdc2.sendAdd(cmdAdd5, blockHeight = BlockHeight(100))
     assert(missing == 10.sat)
-    val (_, cmdAdd6) = makeCmdAdd(90001.msat, randomKey.publicKey, currentBlockHeight = blockHeight)
-    val Left(_: HtlcValueTooHighInFlight) = hdc.sendAdd(cmdAdd6, blockHeight = blockHeight)
-    val (bob2AliceAddPreimage, cmdAdd7) = makeCmdAdd(10000.msat, randomKey.publicKey, currentBlockHeight = blockHeight)
-    val (_, cmdAdd8) = makeCmdAdd(10000.msat, randomKey.publicKey, currentBlockHeight = blockHeight)
-    val (_, cmdAdd9) = makeCmdAdd(10000.msat, randomKey.publicKey, currentBlockHeight = blockHeight)
-    val (_, cmdAdd10) = makeCmdAdd(10000.msat, randomKey.publicKey, currentBlockHeight = blockHeight)
+    val (_, cmdAdd6) = makeCmdAdd(90001.msat, randomKey.publicKey, currentBlockHeight = 100)
+    val Left(_: HtlcValueTooHighInFlight) = hdc.sendAdd(cmdAdd6, blockHeight = BlockHeight(100))
+    val (bob2AliceAddPreimage, cmdAdd7) = makeCmdAdd(10000.msat, randomKey.publicKey, currentBlockHeight = 100)
+    val (_, cmdAdd8) = makeCmdAdd(10000.msat, randomKey.publicKey, currentBlockHeight = 100)
+    val (_, cmdAdd9) = makeCmdAdd(10000.msat, randomKey.publicKey, currentBlockHeight = 100)
+    val (_, cmdAdd10) = makeCmdAdd(10000.msat, randomKey.publicKey, currentBlockHeight = 100)
 
-    val Right((hdc3, bob2AliceAdd)) = hdc.sendAdd(cmdAdd7, blockHeight = blockHeight)
-    val Right((hdc4, _)) = hdc3.sendAdd(cmdAdd8, blockHeight = blockHeight)
-    val Right((hdc5, _)) = hdc4.sendAdd(cmdAdd9, blockHeight = blockHeight)
-    val Left(_: TooManyAcceptedHtlcs) = hdc5.sendAdd(cmdAdd10, blockHeight = blockHeight)
+    val Right((hdc3, bob2AliceAdd)) = hdc.sendAdd(cmdAdd7, blockHeight = BlockHeight(100))
+    val Right((hdc4, _)) = hdc3.sendAdd(cmdAdd8, blockHeight = BlockHeight(100))
+    val Right((hdc5, _)) = hdc4.sendAdd(cmdAdd9, blockHeight = BlockHeight(100))
+    val Left(_: TooManyAcceptedHtlcs) = hdc5.sendAdd(cmdAdd10, blockHeight = BlockHeight(100))
     val Right(hdc6) = hdc5.receiveAdd(updateAddHtlc1)
     val Right(hdc7) = hdc6.receiveAdd(updateAddHtlc2)
     assert(hdc7.nextLocalSpec.toRemote == (hdc.localSpec.toRemote - updateAddHtlc1.amountMsat - updateAddHtlc2.amountMsat))

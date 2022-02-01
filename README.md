@@ -62,6 +62,7 @@ method                                                                          
 **hc-restorefromremotestate** `--state=<remote state snapshot binary data in hex>`                                | Restore a locally missing HC from remote HC state provided by peer given that it is correctly cross-signed by local and remote `nodeId`s.
 **hc-broadcastpreimages** `--preimages=[<32 bytes in hex>, ...] --feerateSatByte=<feerate per byte>`              | `OP_RETURN`-timestamp preimages for pending incoming payments for which we have revealed preimages and yet the other side of channel have not cross-signed a clearing state update within reasonable time.
 **hc-phcnodes**                                                                                                   | List `nodeIds` which are known to this node to support public HCs.
+**hc-phcdump**                                                                                                   | List detailed technical info about known public HCs.
 **hc-hot**                                                                                                        | List all HCs which contain pending payments.
 
 ## Handling of suspended HCs
