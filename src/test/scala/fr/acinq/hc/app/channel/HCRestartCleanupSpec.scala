@@ -1,7 +1,7 @@
 package fr.acinq.hc.app.channel
 
 import fr.acinq.eclair._
-import fr.acinq.eclair.blockchain.CurrentBlockCount
+import fr.acinq.eclair.blockchain.CurrentBlockHeight
 import fr.acinq.eclair.channel.{CLOSED, CMD_FAIL_HTLC, CMD_FULFILL_HTLC}
 import fr.acinq.eclair.wire.protocol.{TemporaryNodeFailure, UpdateAddHtlc, UpdateFailHtlc, UpdateFulfillHtlc}
 import fr.acinq.hc.app.db.HostedChannelsDb
@@ -101,7 +101,7 @@ class HCRestartCleanupSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike 
 
     awaitCond(aliceHC.params.asInstanceOf[CustomCommitmentsPlugin].getHtlcsRelayedOut(Nil, bobKit.nodeParams, null).values.flatten.map(_._2).toSet == Set(id4, aliceAdd5.id)) // Remote fail in CLOSED (disregarded)
 
-    alice ! CurrentBlockCount(currentBlockHeight + 145)
+    alice ! CurrentBlockHeight(BlockHeight(currentBlockHeight + 145))
     awaitCond(aliceHC.params.asInstanceOf[CustomCommitmentsPlugin].getHtlcsRelayedOut(Nil, bobKit.nodeParams, null).values.flatten.map(_._2).isEmpty) // Local fake fail of outgoing payment on timeout
   }
 }

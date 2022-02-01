@@ -12,7 +12,7 @@ import fr.acinq.eclair.api.directives.EclairDirectives
 import fr.acinq.eclair.api.serde.FormParamExtractors._
 import fr.acinq.eclair.blockchain.fee.{FeeratePerByte, FeeratePerKw}
 import fr.acinq.eclair.channel.Origin
-import fr.acinq.eclair.payment.IncomingPacket
+import fr.acinq.eclair.payment.IncomingPaymentPacket
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner.IncomingHtlc
 import fr.acinq.eclair.router.Router
@@ -125,8 +125,8 @@ class HC extends Plugin with RouteProvider {
 
     override def getIncomingHtlcs(nodeParams: NodeParams, log: LoggingAdapter): Seq[IncomingHtlc] = {
       val allHotHtlcs: Seq[DirectedHtlc] = channelsDb.listHotChannels.flatMap(_.commitments.localSpec.htlcs)
-      val decryptEither: UpdateAddHtlc => Either[FailureMessage, IncomingPacket] = IncomingPacket.decrypt(_: UpdateAddHtlc, nodeParams.privateKey)(log)
-      val resolvePacket: PartialFunction[Either[FailureMessage, IncomingPacket], IncomingHtlc] = PostRestartHtlcCleaner.decryptedIncomingHtlcs(nodeParams.db.payments)
+      val decryptEither: UpdateAddHtlc => Either[FailureMessage, IncomingPaymentPacket] = IncomingPaymentPacket.decrypt(_: UpdateAddHtlc, nodeParams.privateKey)(log)
+      val resolvePacket: PartialFunction[Either[FailureMessage, IncomingPaymentPacket], IncomingHtlc] = PostRestartHtlcCleaner.decryptedIncomingHtlcs(nodeParams.db.payments)
       allHotHtlcs.collect(DirectedHtlc.incoming).map(decryptEither).collect(resolvePacket)
     }
 
@@ -267,13 +267,13 @@ class HC extends Plugin with RouteProvider {
   }
 }
 
-case object HCFeature extends Feature {
+case object HCFeature extends Feature with InitFeature with NodeFeature {
   val plugin: UnknownFeature = UnknownFeature(optional)
   val rfcName = "hosted_channels"
   lazy val mandatory = 32972
 }
 
-case object ResizeableHCFeature extends Feature {
+case object ResizeableHCFeature extends Feature with InitFeature with NodeFeature {
   val plugin: UnknownFeature = UnknownFeature(optional)
   val rfcName = "resizeable_hosted_channels"
   lazy val mandatory = 32974
