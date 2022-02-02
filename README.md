@@ -6,7 +6,7 @@
 
 ```
 $ cd <eclair>
-$ git checkout v0.6.2
+$ git checkout v0.7.0
 $ mvn clean install -DskipTests=true
 ```
 
@@ -123,5 +123,3 @@ Failure to meet any of these requirements will make a public HC ignored by other
 Once Eclair node has in-flight payments in HCs it must always be launched with HC plugin after restarts, otherwise money loss may happen.
 If one wishes to stop using an HC plugin then one should first make sure there are no in-flight HTLCs left in HCs (`hc-hot` and `channels` API methods
 are helpful here to determine which HTLCs are still pending in both HCs and normal channels).
-
-HC plugin `0.6.2` can only work with Eclair `0.6.2`, HC plugin updates are expected to be released shortly after base Eclair releases.
