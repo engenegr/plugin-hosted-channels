@@ -3,7 +3,7 @@
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <groupId>fr.acinq.hc.app</groupId>
-    <version>0.7.0</version>
+    <version>${eclair.version}</version>
 
     <artifactId>eclair-hc_2.13</artifactId>
     <packaging>jar</packaging>
@@ -26,7 +26,9 @@
                 <artifactId>scala-maven-plugin</artifactId>
                 <version>3.4.2</version>
                 <configuration>
-                    <args combine.children="append"/>
+                    <args combine.children="append">
+                        <arg>-language:postfixOps</arg>
+                    </args>
                     <jvmArgs>
                         <jvmArg>-Xmx1024m</jvmArg>
                         <jvmArg>-Xms1024m</jvmArg>
@@ -71,7 +73,7 @@
                 <artifactId>scalatest-maven-plugin</artifactId>
                 <version>2.0.0</version>
                 <configuration>
-                    <parallel>true</parallel>
+                    <parallel>false</parallel>
                     <stdout>I</stdout>
                     <systemProperties>
                         <buildDirectory>${project.build.directory}</buildDirectory>
@@ -140,6 +142,18 @@
             <artifactId>scala-parallel-collections_2.13</artifactId>
             <version>1.0.4</version>
         </dependency>
+        <!-- SERIALIZATION -->
+        <dependency>
+            <groupId>org.scodec</groupId>
+            <artifactId>scodec-core_${scala.version.short}</artifactId>
+            <version>1.11.8</version>
+        </dependency>
+        <dependency>
+            <groupId>commons-codec</groupId>
+            <artifactId>commons-codec</artifactId>
+            <version>1.9</version>
+        </dependency>
+        <!-- TESTS -->
         <dependency>
             <groupId>com.typesafe.akka</groupId>
             <artifactId>akka-testkit_2.13</artifactId>
@@ -156,6 +170,14 @@
             <groupId>org.scalatest</groupId>
             <artifactId>scalatest_2.13</artifactId>
             <version>3.1.1</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>fr.acinq.eclair</groupId>
+            <artifactId>eclair-core_2.13</artifactId>
+            <version>${eclair.version}</version>
+            <classifier>tests</classifier>
+            <type>test-jar</type>
             <scope>test</scope>
         </dependency>
     </dependencies>

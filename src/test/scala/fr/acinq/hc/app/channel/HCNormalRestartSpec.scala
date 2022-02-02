@@ -1,6 +1,7 @@
 package fr.acinq.hc.app.channel
 
 import akka.actor.PoisonPill
+import akka.testkit.TestProbe
 import fr.acinq.eclair._
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.payment.relay.Relayer
@@ -154,6 +155,9 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     HCTestUtils.resetEntireDatabase(aliceDB)
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
+
+    val probe = TestProbe()
+
     val (preimage0, alice2bobUpdateAdd0) = addHtlcFromAliceToBob(200000L.msat, f, currentBlockHeight)
     fulfillAliceHtlcByBob(alice2bobUpdateAdd0.id, preimage0, f) // To give Bob some money
 
@@ -192,7 +196,7 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     awaitCond(alice.stateName == OFFLINE)
     awaitCond(bob.stateName == OFFLINE)
 
-    bob ! CMD_FULFILL_HTLC(aliceAdd1.id, preimage1) // Bob gets a fulfill for a first payment while offline
+    bob ! CMD_FULFILL_HTLC(aliceAdd1.id, preimage1, replyTo_opt = Some(probe.ref)) // Bob gets a fulfill for a first payment while offline
     bob2alice.expectMsgType[UpdateFulfillHtlc] // Goes nowhere
 
     bob ! Worker.HCPeerConnected
@@ -238,6 +242,9 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     HCTestUtils.resetEntireDatabase(aliceDB)
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
+
+    val probe = TestProbe()
+
     val (preimage1, cmd_add1, _) = makeCmdAdd(10000L.msat, bobKit.nodeParams.nodeId, currentBlockHeight)
     val (preimage2, cmd_add2, _) = makeCmdAdd(10000L.msat, bobKit.nodeParams.nodeId, currentBlockHeight)
     alice ! cmd_add1
@@ -286,9 +293,9 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     bob2alice.expectNoMessage()
     alice2bob.expectNoMessage()
 
-    bob ! CMD_FULFILL_HTLC(aliceAdd1.id, preimage1) // Bob gets a fulfill for a first payment while offline
+    bob ! CMD_FULFILL_HTLC(aliceAdd1.id, preimage1, replyTo_opt = Some(probe.ref)) // Bob gets a fulfill for a first payment while offline
     bob ! CMD_SIGN(None)
-    bob ! CMD_FULFILL_HTLC(aliceAdd2.id, preimage2) // Bob gets a fulfill for a first payment while offline
+    bob ! CMD_FULFILL_HTLC(aliceAdd2.id, preimage2, replyTo_opt = Some(probe.ref)) // Bob gets a fulfill for a first payment while offline
     bob ! CMD_SIGN(None)
     alice ! bob2alice.expectMsgType[UpdateFulfillHtlc]
     alice ! bob2alice.expectMsgType[StateUpdate]
@@ -335,6 +342,9 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     HCTestUtils.resetEntireDatabase(f.aliceDB)
     HCTestUtils.resetEntireDatabase(f.bobDB)
     reachNormal(f)
+
+    val probe = TestProbe()
+
     val channelId = f.bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.channelId
     val (preimage3, alice2bobUpdateAdd3) = addHtlcFromAliceToBob(100000L.msat, f, f.currentBlockHeight)
     val bobData = f.bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED]
@@ -345,7 +355,7 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     f.alice2bob.expectTerminated(f.alice)
 
     val f2 = init()
-    f2.bobKit.nodeParams.db.pendingCommands.addSettlementCommand(channelId, CMD_FULFILL_HTLC(alice2bobUpdateAdd3.id, preimage3))
+    f2.bobKit.nodeParams.db.pendingCommands.addSettlementCommand(channelId, CMD_FULFILL_HTLC(alice2bobUpdateAdd3.id, preimage3, replyTo_opt = Some(probe.ref)))
     f2.bob ! bobData
     f2.alice ! aliceData
     f2.bob ! Worker.HCPeerConnected
@@ -372,6 +382,9 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     HCTestUtils.resetEntireDatabase(aliceDB)
     HCTestUtils.resetEntireDatabase(bobDB)
     reachNormal(f)
+
+    val probe = TestProbe()
+
     val (preimage3, alice2bobUpdateAdd3) = addHtlcFromAliceToBob(15000L.msat, f, currentBlockHeight)
 
     alice ! Worker.HCPeerDisconnected
@@ -385,7 +398,7 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     bob ! HC_CMD_SUSPEND(randomKey.publicKey)
     awaitCond(bob.stateName == OFFLINE) // Not leaving an OFFLINE state
 
-    bob ! CMD_FULFILL_HTLC(alice2bobUpdateAdd3.id, preimage3) // Bob gets a fulfill for a first payment while offline
+    bob ! CMD_FULFILL_HTLC(alice2bobUpdateAdd3.id, preimage3, replyTo_opt = Some(probe.ref)) // Bob gets a fulfill for a first payment while offline
     bob2alice.expectMsgType[UpdateFulfillHtlc] // Goes nowhere
 
     bob ! Worker.HCPeerConnected
@@ -405,6 +418,8 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     reachNormal(f)
     val (preimage0, alice2bobUpdateAdd0) = addHtlcFromAliceToBob(200000L.msat, f, f.currentBlockHeight)
     fulfillAliceHtlcByBob(alice2bobUpdateAdd0.id, preimage0, f) // To give Bob some money
+
+    val probe = TestProbe()
 
     val (preimage1, alice2bobUpdateAdd1) = addHtlcFromAliceToBob(10000L.msat, f, f.currentBlockHeight)
     val (preimage2, alice2bobUpdateAdd2) = addHtlcFromBob2Alice(10000L.msat, f)
@@ -428,11 +443,11 @@ class HCNormalRestartSpec extends TestKitBaseClass with FixtureAnyFunSuiteLike w
     val bobData = HostedState(f.bobKit.nodeParams.nodeId, f2.aliceKit.nodeParams.nodeId,
       f.bob.stateData.asInstanceOf[HC_DATA_ESTABLISHED].commitments.lastCrossSignedState)
 
-    f.bob ! CMD_FULFILL_HTLC(alice2bobUpdateAdd1.id, preimage1)
+    f.bob ! CMD_FULFILL_HTLC(alice2bobUpdateAdd1.id, preimage1, replyTo_opt = Some(probe.ref))
     f2.bob2alice.expectMsgType[UpdateFulfillHtlc] // Alice does not receive this
 
     val f3 = init()
-    f3.aliceKit.nodeParams.db.pendingCommands.addSettlementCommand(channelId, CMD_FULFILL_HTLC(alice2bobUpdateAdd2.id, preimage2)) // Alice gets Bob's payment fulfilled, HC is not there
+    f3.aliceKit.nodeParams.db.pendingCommands.addSettlementCommand(channelId, CMD_FULFILL_HTLC(alice2bobUpdateAdd2.id, preimage2, replyTo_opt = Some(probe.ref))) // Alice gets Bob's payment fulfilled, HC is not there
     f3.alice ! HC_CMD_RESTORE(bobData.nodeId1, bobData)
 
     f3.alice ! Worker.HCPeerDisconnected
