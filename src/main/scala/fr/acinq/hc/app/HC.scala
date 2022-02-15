@@ -174,6 +174,11 @@ class HC extends Plugin with RouteProvider {
       }
     }
 
+    val allChannels: Route = postRequest("hc-all") { implicit t =>
+      val futureResponse = (workerRef ? HC_CMD_GET_ALL_CHANNELS()).mapTo[HCCommandResponse]
+      complete(futureResponse)
+    }
+
     val findByRemoteId: Route = postRequest("hc-findbyremoteid") { implicit t =>
       formFields(nodeIdFormParam) { remoteNodeId =>
         completeCommand(HC_CMD_GET_INFO(remoteNodeId))
@@ -263,7 +268,7 @@ class HC extends Plugin with RouteProvider {
 
     invoke ~ externalFulfill ~ findByRemoteId ~ overridePropose ~ overrideAccept ~
       makePublic ~ makePrivate ~ resize ~ suspend ~ verifyRemoteState ~ restoreFromRemoteState ~
-      broadcastPreimages ~ phcNodes ~ phcDump ~ hotChannels
+      broadcastPreimages ~ phcNodes ~ phcDump ~ hotChannels ~ allChannels
   }
 }
 
