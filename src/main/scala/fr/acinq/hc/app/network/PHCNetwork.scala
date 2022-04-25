@@ -1,7 +1,6 @@
 package fr.acinq.hc.app.network
 
-import fr.acinq.bitcoin.Crypto
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
 import fr.acinq.eclair.ShortChannelId
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.wire.internal.channel.version3.HCProtocolCodecs
@@ -56,7 +55,7 @@ case class MessagesReceived(announces: Set[ChannelAnnouncement], updates: Set[Ch
 }
 
 case class PHCNetwork(channels: Map[ShortChannelId, PHC],
-                      perNode: Map[Crypto.PublicKey, ShortChannelIdSet],
+                      perNode: Map[PublicKey, ShortChannelIdSet],
                       unsaved: MessagesReceived) {
 
   def isAnnounceAcceptable(announce: ChannelAnnouncement): Boolean =

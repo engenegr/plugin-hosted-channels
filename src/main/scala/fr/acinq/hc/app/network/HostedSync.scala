@@ -1,6 +1,6 @@
 package fr.acinq.hc.app.network
 
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
 import fr.acinq.eclair.channel.Nothing
 import fr.acinq.eclair.io.UnknownMessageReceived
 import fr.acinq.eclair.router.{Router, SyncProgress}

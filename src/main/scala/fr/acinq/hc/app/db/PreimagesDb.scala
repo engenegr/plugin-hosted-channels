@@ -1,6 +1,6 @@
 package fr.acinq.hc.app.db
 
-import fr.acinq.bitcoin.ByteVector32
+import fr.acinq.bitcoin.scalacompat.ByteVector32
 import scodec.bits.ByteVector
 import slick.jdbc.PostgresProfile
 import slick.jdbc.PostgresProfile.api._

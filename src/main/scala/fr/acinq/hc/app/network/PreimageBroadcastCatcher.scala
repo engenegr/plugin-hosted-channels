@@ -1,7 +1,8 @@
 package fr.acinq.hc.app.network
 
 import akka.actor.Actor
-import fr.acinq.bitcoin._
+import fr.acinq.bitcoin.{Block}
+import fr.acinq.bitcoin.scalacompat._
 import fr.acinq.eclair.Kit
 import fr.acinq.eclair.blockchain._
 import fr.acinq.eclair.blockchain.bitcoind.rpc.BitcoinCoreClient
@@ -23,6 +24,7 @@ import scala.collection.parallel.CollectionConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.util.{Success, Try}
+import scala.jdk.CollectionConverters.ListHasAsScala
 
 
 object PreimageBroadcastCatcher {
@@ -65,9 +67,9 @@ class PreimageBroadcastCatcher(preimagesDb: PreimagesDb, kit: Kit, vals: Vals) e
     case NewTransaction(tx) => extractPreimages(tx).foreach(dh.execute)
 
     case NewBlock(blockHash) =>
-      wallet.rpcClient.invoke("getblock", blockHash, 0).foreach {
+      wallet.rpcClient.invoke("getblock", blockHash).foreach {
         case JString(rawBlock) =>
-          Block.read(rawBlock).tx.par.flatMap(extractPreimages).foreach(dh.execute)
+          Block.read(rawBlock).tx.asScala.par.flatMap(extractPreimages(_)).foreach(dh.execute(_))
           logger.info(s"PLGN PHC, PreimageBroadcastCatcher 'getblock' has been processed")
         case otherwise =>
           logger.error(s"PLGN PHC, PreimageBroadcastCatcher 'getblock' has returned $otherwise")

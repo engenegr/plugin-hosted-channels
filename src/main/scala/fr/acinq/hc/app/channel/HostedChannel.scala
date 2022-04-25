@@ -1,10 +1,9 @@
 package fr.acinq.hc.app.channel
 
-import akka.actor.{ActorRef, FSM}
-import akka.pattern.ask
+import akka.actor.{Actor, ActorRef, ExtendedActorSystem, FSM, PoisonPill, Props, Terminated}
 import com.softwaremill.quicklens._
-import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, SatoshiLong}
+import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
+import fr.acinq.bitcoin.scalacompat.{ByteVector32, ByteVector64, Crypto, Satoshi, SatoshiLong}
 import fr.acinq.eclair._
 import fr.acinq.eclair.blockchain.CurrentBlockHeight
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
@@ -22,8 +21,8 @@ import fr.acinq.hc.app._
 import fr.acinq.hc.app.db.Blocking.{span, timeout}
 import fr.acinq.hc.app.db.HostedChannelsDb
 import fr.acinq.hc.app.network.{HostedSync, OperationalData, PHC, PreimageBroadcastCatcher}
-import scodec.bits.ByteVector
 
+import scodec.bits.ByteVector
 import java.util.UUID
 import scala.concurrent.Await
 import scala.util.{Failure, Success}
@@ -97,7 +96,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
 
     case Event(remoteInvoke: InvokeHostedChannel, HC_NOTHING) =>
       val isWrongChain = kit.nodeParams.chainHash != remoteInvoke.chainHash
-      val isValidFinalScriptPubkey = Helpers.Closing.isValidFinalScriptPubkey(remoteInvoke.refundScriptPubKey, allowAnySegwit = false)
+      val isValidFinalScriptPubkey = Helpers.Closing.MutualClose.isValidFinalScriptPubkey(remoteInvoke.refundScriptPubKey, allowAnySegwit = false)
       if (isWrongChain) stop(FSM.Normal) SendingHasChannelId Error(channelId, InvalidChainHash(channelId, kit.nodeParams.chainHash, remoteInvoke.chainHash).getMessage)
       else if (!isValidFinalScriptPubkey) stop(FSM.Normal) SendingHasChannelId Error(channelId, InvalidFinalScript(channelId).getMessage)
       else stay using HC_DATA_HOST_WAIT_CLIENT_STATE_UPDATE(remoteInvoke) SendingHosted cfg.vals.hcParams.initMsg

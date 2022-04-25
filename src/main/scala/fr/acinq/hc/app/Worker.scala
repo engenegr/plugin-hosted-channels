@@ -4,8 +4,8 @@ import akka.actor.{Actor, ActorRef, Props, Terminated}
 import akka.pattern.{ask, pipe}
 import com.google.common.collect.HashBiMap
 import com.google.common.net.HostAndPort
-import fr.acinq.bitcoin.ByteVector32
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.scalacompat.ByteVector32
+import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
 import fr.acinq.eclair
 import fr.acinq.eclair.io._
 import fr.acinq.eclair.router.Router
@@ -155,10 +155,9 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
           data <- routerData
           nodeId <- unconnectedHosts
           nodeAnnouncement <- data.nodes.get(nodeId)
-          sockAddress <- nodeAnnouncement.addresses.headOption.map(_.socketAddress)
-          hostAndPort = HostAndPort.fromParts(sockAddress.getHostString, sockAddress.getPort)
-          _ = logger.info(s"PLGN PHC, trying to reconnect to ${nodeAnnouncement.nodeId}/$hostAndPort")
-        } kit.switchboard ! Peer.Connect(NodeURI(nodeId, hostAndPort), self, isPersistent = false)
+          nodeAddress <- nodeAnnouncement.addresses.headOption
+          _ = logger.info(s"PLGN PHC, trying to reconnect to ${nodeAnnouncement.nodeId}/$nodeAddress")
+        } kit.switchboard ! Peer.Connect(NodeURI(nodeId, nodeAddress), self, isPersistent = false)
       }
   }
 

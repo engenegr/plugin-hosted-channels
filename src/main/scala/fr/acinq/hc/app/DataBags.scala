@@ -1,7 +1,7 @@
 package fr.acinq.hc.app
 
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
-import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, Protocol, Satoshi}
+import fr.acinq.bitcoin.scalacompat.Crypto.{PrivateKey, PublicKey}
+import fr.acinq.bitcoin.scalacompat.{ByteVector32, ByteVector64, Crypto, Satoshi, Protocol}
 import fr.acinq.eclair._
 import fr.acinq.eclair.wire.protocol.{Color, LightningMessageCodecs, UpdateAddHtlc}
 import scodec.bits.ByteVector

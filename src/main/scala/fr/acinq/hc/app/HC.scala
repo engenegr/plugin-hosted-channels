@@ -5,8 +5,8 @@ import akka.event.LoggingAdapter
 import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import akka.util.Timeout
-import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.bitcoin.{ByteVector32, Satoshi, Script}
+import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
+import fr.acinq.bitcoin.scalacompat.{ByteVector32, Satoshi, Script}
 import fr.acinq.eclair._
 import fr.acinq.eclair.api.directives.EclairDirectives
 import fr.acinq.eclair.api.serde.FormParamExtractors._
@@ -102,9 +102,11 @@ class HC extends Plugin with RouteProvider {
   var kit: Kit = _
 
   override def onSetup(setup: Setup): Unit = {
+    println("Setup")
     config = new Config(datadir = setup.datadir)
     Try(Blocking createTablesIfNotExist config.db)
     channelsDb = new HostedChannelsDb(config.db)
+    println("Finished")
   }
 
   override def onKit(eclairKit: Kit): Unit = {

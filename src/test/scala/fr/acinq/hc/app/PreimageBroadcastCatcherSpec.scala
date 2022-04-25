@@ -2,7 +2,7 @@ package fr.acinq.hc.app
 
 import akka.actor.{ActorSystem, Props}
 import akka.testkit.TestProbe
-import fr.acinq.bitcoin.{ByteVector32, Crypto, OP_PUSHDATA, OP_RETURN, Satoshi, Script, Transaction, TxOut}
+import fr.acinq.bitcoin.scalacompat.{ByteVector32, Crypto, OP_PUSHDATA, OP_RETURN, Satoshi, Script, Transaction, TxOut}
 import fr.acinq.eclair.blockchain.NewTransaction
 import fr.acinq.eclair.randomBytes32
 import fr.acinq.hc.app.db.PreimagesDb

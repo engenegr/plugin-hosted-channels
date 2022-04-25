@@ -1,10 +1,11 @@
 package fr.acinq.hc.app.db
 
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
 import fr.acinq.eclair.wire.internal.channel.version3.HostedChannelCodecs.HC_DATA_ESTABLISHED_Codec
 import fr.acinq.hc.app.channel.HC_DATA_ESTABLISHED
 import fr.acinq.hc.app.db.Blocking.ByteArray
 import scodec.bits.{BitVector, ByteVector}
+import fr.acinq.bitcoin.scalacompat.{ByteVector32, ByteVector64, Crypto, Satoshi}
 import slick.jdbc.PostgresProfile
 import slick.jdbc.PostgresProfile.api._
 

@@ -1,6 +1,6 @@
 package fr.acinq.hc.app.channel
 
-import fr.acinq.bitcoin.ByteVector32
+import fr.acinq.bitcoin.scalacompat.ByteVector32
 import fr.acinq.eclair.TestConstants.{Alice, Bob}
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.{TestKitBaseClass, wire}
