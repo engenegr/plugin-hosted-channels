@@ -1,12 +1,13 @@
 package fr.acinq.eclair.wire.internal.channel.version3
 
+import fr.acinq.bitcoin.scalacompat.{ByteVector32, OutPoint, Transaction, TxOut}
 import fr.acinq.eclair.wire.protocol.CommonCodecs._
 import fr.acinq.eclair.wire.protocol.LightningMessageCodecs._
 import fr.acinq.eclair.wire.protocol._
 import fr.acinq.hc.app.HC._
 import fr.acinq.hc.app._
+import scodec.{Attempt, Codec, Err}
 import scodec.codecs._
-import scodec.{Attempt, Err}
 
 
 object HCProtocolCodecs {
@@ -132,7 +133,7 @@ object HCProtocolCodecs {
       case HC_UPDATE_FAIL_HTLC_TAG => updateFailHtlcCodec.decode(bitVector)
       case HC_UPDATE_FULFILL_HTLC_TAG => updateFulfillHtlcCodec.decode(bitVector)
       case HC_UPDATE_FAIL_MALFORMED_HTLC_TAG => updateFailMalformedHtlcCodec.decode(bitVector)
-      case tag => Attempt failure Err(s"PLGN PHC, wrong tag=$tag")
+      case tag => Attempt.failure(Err(s"PLGN PHC, wrong tag=$tag"))
     }
 
     decodeAttempt.map(_.value)
@@ -157,7 +158,7 @@ object HCProtocolCodecs {
       case PHC_ANNOUNCE_SYNC_TAG => channelAnnouncementCodec.decode(bitVector)
       case PHC_UPDATE_GOSSIP_TAG => channelUpdateCodec.decode(bitVector)
       case PHC_UPDATE_SYNC_TAG => channelUpdateCodec.decode(bitVector)
-      case tag => Attempt failure Err(s"PLGN PHC, wrong tag=$tag")
+      case tag => Attempt.failure(Err(s"PLGN PHC, wrong tag=$tag"))
     }
 
     decodeAttempt.map(_.value)

@@ -5,13 +5,13 @@ import akka.event.LoggingAdapter
 import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import akka.util.Timeout
-import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.bitcoin.{ByteVector32, Satoshi, Script}
+import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
+import fr.acinq.bitcoin.scalacompat.{ByteVector32, Satoshi, Script}
 import fr.acinq.eclair._
 import fr.acinq.eclair.api.directives.EclairDirectives
 import fr.acinq.eclair.api.serde.FormParamExtractors._
 import fr.acinq.eclair.blockchain.fee.{FeeratePerByte, FeeratePerKw}
-import fr.acinq.eclair.channel.Origin
+import fr.acinq.eclair.channel.{OFFLINE, Origin}
 import fr.acinq.eclair.payment.IncomingPaymentPacket
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner.IncomingHtlc
@@ -102,9 +102,11 @@ class HC extends Plugin with RouteProvider {
   var kit: Kit = _
 
   override def onSetup(setup: Setup): Unit = {
+    println("Setup")
     config = new Config(datadir = setup.datadir)
     Try(Blocking createTablesIfNotExist config.db)
     channelsDb = new HostedChannelsDb(config.db)
+    println("Finished")
   }
 
   override def onKit(eclairKit: Kit): Unit = {
@@ -172,6 +174,21 @@ class HC extends Plugin with RouteProvider {
       formFields("htlcId".as[Long], "paymentPreimage".as[ByteVector32], nodeIdFormParam) { case (htlcId, paymentPreimage, remoteNodeId) =>
         completeCommand(HC_CMD_EXTERNAL_FULFILL(remoteNodeId, htlcId, paymentPreimage))
       }
+    }
+
+    val allChannels: Route = postRequest("hc-all") { implicit t =>
+      val allChannelsFuture = for {
+        onlineChannels <- (workerRef ? HC_CMD_GET_ALL_CHANNELS()).mapTo[HCCommandResponse]
+        dbChannels = channelsDb.listAllChannels
+        collectedChannels = onlineChannels match {
+          case CMDAllInfo(channels) =>
+            val offlineChannels = dbChannels.filter(data => !channels.contains(data.commitments.remoteNodeId.toString()))
+            val offlineMap = Map.from(offlineChannels.map(data => (data.commitments.remoteNodeId.toString(), CMDResInfo(OFFLINE, data, data.commitments.localSpec))))
+            CMDAllInfo(channels ++ offlineMap)
+          case x => x
+        }
+      } yield collectedChannels
+      complete(allChannelsFuture)
     }
 
     val findByRemoteId: Route = postRequest("hc-findbyremoteid") { implicit t =>
@@ -263,7 +280,7 @@ class HC extends Plugin with RouteProvider {
 
     invoke ~ externalFulfill ~ findByRemoteId ~ overridePropose ~ overrideAccept ~
       makePublic ~ makePrivate ~ resize ~ suspend ~ verifyRemoteState ~ restoreFromRemoteState ~
-      broadcastPreimages ~ phcNodes ~ phcDump ~ hotChannels
+      broadcastPreimages ~ phcNodes ~ phcDump ~ hotChannels ~ allChannels
   }
 }
 

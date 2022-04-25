@@ -1,11 +1,11 @@
 package fr.acinq.hc.app
 
 import akka.actor.{Actor, ActorRef, Props, Terminated}
-import akka.pattern.ask
+import akka.pattern.{ask, pipe}
 import com.google.common.collect.HashBiMap
 import com.google.common.net.HostAndPort
-import fr.acinq.bitcoin.ByteVector32
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.scalacompat.ByteVector32
+import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
 import fr.acinq.eclair
 import fr.acinq.eclair.io._
 import fr.acinq.eclair.router.Router
@@ -20,6 +20,7 @@ import scodec.Attempt
 
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
 import scala.concurrent.duration._
 
 
@@ -129,6 +130,13 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
         case Some(channelRef) => channelRef forward cmd
       }
 
+    case cmd: HC_CMD_GET_ALL_CHANNELS =>
+      val resMap = scala.collection.mutable.Map.empty[PublicKey, Future[CMDResInfo]]
+      inMemoryHostedChannels.forEach((key, ref) => resMap(key) = (ref ? cmd).mapTo[CMDResInfo])
+
+      val collected = Future.traverse(resMap.toList)((value) => value._2.map(x => (value._1.toString(), x))).map(xs => CMDAllInfo(Map.from(xs)))
+      collected.pipeTo(sender())
+
     case Terminated(channelRef) => inMemoryHostedChannels.inverse.remove(channelRef)
 
     case TickRemoveIdleChannels =>
@@ -147,10 +155,9 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
           data <- routerData
           nodeId <- unconnectedHosts
           nodeAnnouncement <- data.nodes.get(nodeId)
-          sockAddress <- nodeAnnouncement.addresses.headOption.map(_.socketAddress)
-          hostAndPort = HostAndPort.fromParts(sockAddress.getHostString, sockAddress.getPort)
-          _ = logger.info(s"PLGN PHC, trying to reconnect to ${nodeAnnouncement.nodeId}/$hostAndPort")
-        } kit.switchboard ! Peer.Connect(NodeURI(nodeId, hostAndPort), self, isPersistent = false)
+          nodeAddress <- nodeAnnouncement.addresses.headOption
+          _ = logger.info(s"PLGN PHC, trying to reconnect to ${nodeAnnouncement.nodeId}/$nodeAddress")
+        } kit.switchboard ! Peer.Connect(NodeURI(nodeId, nodeAddress), self, isPersistent = false)
       }
   }
 

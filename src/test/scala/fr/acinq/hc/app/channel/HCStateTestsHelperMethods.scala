@@ -2,8 +2,8 @@ package fr.acinq.hc.app.channel
 
 import akka.actor.ActorSystem
 import akka.testkit.{TestFSMRef, TestKitBase, TestProbe}
-import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.bitcoin.{ByteVector32, Crypto}
+import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
+import fr.acinq.bitcoin.scalacompat.{ByteVector32, Crypto}
 import fr.acinq.eclair.TestConstants.Bob
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.io.{ConnectionInfo, PeerConnected}
@@ -45,7 +45,7 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
     def sendHostedChannelMsg(message: HostedChannelMessage): Unit = info.peer ! message
     def sendRoutingMsg(message: AnnouncementMessage): Unit = info.peer ! message
     def sendUnknownMsg(message: UnknownMessage): Unit = info.peer ! message
-    lazy val remoteIp: Array[Byte] = info.connectionInfo.address.getAddress.getAddress
+    lazy val remoteIp: Array[Byte] = info.connectionInfo.address.host.getBytes
   }
 
   def init(): SetupFixture = {
