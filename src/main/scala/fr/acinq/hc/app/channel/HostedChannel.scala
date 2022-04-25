@@ -1,5 +1,6 @@
 package fr.acinq.hc.app.channel
 
+import akka.pattern._
 import akka.actor.{Actor, ActorRef, ExtendedActorSystem, FSM, PoisonPill, Props, Terminated}
 import com.softwaremill.quicklens._
 import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
@@ -400,7 +401,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     case Event(_: HC_CMD_GET_INFO, data: HC_DATA_ESTABLISHED) => stay replying CMDResInfo(stateName, data, data.commitments.nextLocalSpec)
     case Event(_: HC_CMD_GET_ALL_CHANNELS, data: HC_DATA_ESTABLISHED) => stay replying CMDResInfo(stateName, data, data.commitments.nextLocalSpec)
 
-    case Event(cmd: CMD_GETINFO, _) =>
+    case Event(cmd: CMD_GET_CHANNEL_INFO, _) =>
       val msg = new IllegalArgumentException("Non-standard channel")
       replyToCommand(RES_FAILURE(cmd, msg), cmd)
       stay

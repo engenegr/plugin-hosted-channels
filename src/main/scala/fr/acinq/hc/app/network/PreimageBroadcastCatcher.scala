@@ -1,7 +1,7 @@
 package fr.acinq.hc.app.network
 
 import akka.actor.Actor
-import fr.acinq.bitcoin.{Block}
+import fr.acinq.bitcoin.scalacompat.{Block}
 import fr.acinq.bitcoin.scalacompat._
 import fr.acinq.eclair.Kit
 import fr.acinq.eclair.blockchain._
