@@ -1,8 +1,8 @@
 package fr.acinq.hc.app.network
 
 import akka.actor.Actor
-import fr.acinq.bitcoin.scalacompat.{Block}
-import fr.acinq.bitcoin.scalacompat._
+import fr.acinq.bitcoin.scalacompat.{ByteVector32, Transaction, Script, OP_PUSHDATA, OP_RETURN, Crypto, TxOut, Satoshi}
+import fr.acinq.bitcoin.{Block}
 import fr.acinq.eclair.Kit
 import fr.acinq.eclair.blockchain._
 import fr.acinq.eclair.blockchain.bitcoind.rpc.BitcoinCoreClient
@@ -69,7 +69,7 @@ class PreimageBroadcastCatcher(preimagesDb: PreimagesDb, kit: Kit, vals: Vals) e
     case NewBlock(blockHash) =>
       wallet.rpcClient.invoke("getblock", blockHash).foreach {
         case JString(rawBlock) =>
-          Block.read(rawBlock).tx.asScala.par.flatMap(extractPreimages(_)).foreach(dh.execute(_))
+          Block.read(rawBlock).tx.asScala.par.flatMap(t => extractPreimages(Transaction.read(t.toString))).foreach(dh.execute(_))
           logger.info(s"PLGN PHC, PreimageBroadcastCatcher 'getblock' has been processed")
         case otherwise =>
           logger.error(s"PLGN PHC, PreimageBroadcastCatcher 'getblock' has returned $otherwise")

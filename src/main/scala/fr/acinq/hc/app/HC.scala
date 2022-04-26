@@ -102,11 +102,9 @@ class HC extends Plugin with RouteProvider {
   var kit: Kit = _
 
   override def onSetup(setup: Setup): Unit = {
-    println("Setup")
     config = new Config(datadir = setup.datadir)
     Try(Blocking createTablesIfNotExist config.db)
     channelsDb = new HostedChannelsDb(config.db)
-    println("Finished")
   }
 
   override def onKit(eclairKit: Kit): Unit = {

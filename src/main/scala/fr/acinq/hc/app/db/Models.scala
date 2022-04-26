@@ -18,7 +18,7 @@ object Blocking {
   type RepByteArray = Rep[ByteArray]
   type RepLong = Rep[Long]
 
-  val span: FiniteDuration = 25.seconds
+  val span: FiniteDuration = 60.seconds
   implicit val timeout: Timeout = Timeout(span)
 
   def txRead[T](act: DBIOAction[T, NoStream, Effect.Read], db: Database): T = Await.result(db.run(act.transactionally), span)
