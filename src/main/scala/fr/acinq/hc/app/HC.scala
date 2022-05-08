@@ -11,7 +11,7 @@ import fr.acinq.eclair._
 import fr.acinq.eclair.api.directives.EclairDirectives
 import fr.acinq.eclair.api.serde.FormParamExtractors._
 import fr.acinq.eclair.blockchain.fee.{FeeratePerByte, FeeratePerKw}
-import fr.acinq.eclair.channel.{OFFLINE, Origin}
+import fr.acinq.eclair.channel.Origin
 import fr.acinq.eclair.payment.IncomingPaymentPacket
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner
 import fr.acinq.eclair.payment.relay.PostRestartHtlcCleaner.IncomingHtlc
@@ -175,18 +175,8 @@ class HC extends Plugin with RouteProvider {
     }
 
     val allChannels: Route = postRequest("hc-all") { implicit t =>
-      val allChannelsFuture = for {
-        onlineChannels <- (workerRef ? HC_CMD_GET_ALL_CHANNELS()).mapTo[HCCommandResponse]
-        dbChannels = channelsDb.listAllChannels
-        collectedChannels = onlineChannels match {
-          case CMDAllInfo(channels) =>
-            val offlineChannels = dbChannels.filter(data => !channels.contains(data.commitments.remoteNodeId.toString()))
-            val offlineMap = Map.from(offlineChannels.map(data => (data.commitments.remoteNodeId.toString(), CMDResInfo(OFFLINE, data, data.commitments.localSpec))))
-            CMDAllInfo(channels ++ offlineMap)
-          case x => x
-        }
-      } yield collectedChannels
-      complete(allChannelsFuture)
+      val futureResponse = (workerRef ? HC_CMD_GET_ALL_CHANNELS()).mapTo[HCCommandResponse]
+      complete(futureResponse)
     }
 
     val findByRemoteId: Route = postRequest("hc-findbyremoteid") { implicit t =>

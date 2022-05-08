@@ -42,7 +42,5 @@ class HostedChannelsDb(db: PostgresProfile.backend.Database) {
 
   def listHotChannels: Seq[HC_DATA_ESTABLISHED] = Blocking.txRead(Channels.listHotChannelsCompiled.result, db).map(decode)
 
-  def listAllChannels: Seq[HC_DATA_ESTABLISHED] = Blocking.txRead(Channels.listAllChannelsCompiled.result, db).map(decode)
-
   def listClientChannels: Seq[HC_DATA_ESTABLISHED] = Blocking.txRead(Channels.listClientChannelsCompiled.result, db).map(decode)
 }

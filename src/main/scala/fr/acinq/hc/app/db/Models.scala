@@ -52,8 +52,6 @@ object Channels {
 
   val listHotChannelsCompiled = Compiled { for (x <- model if x.inFlightHtlcs > 0) yield x.data }
 
-  val listAllChannelsCompiled = Compiled { for (x <- model) yield x.data }
-
   val listClientChannelsCompiled = Compiled { for (x <- model if !x.isHost) yield x.data }
 }
 
