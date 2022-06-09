@@ -4,7 +4,7 @@ import fr.acinq.eclair._
 import fr.acinq.eclair.channel.{CMD_FULFILL_HTLC, CMD_SIGN, NORMAL, OFFLINE, RES_ADD_SETTLED}
 import fr.acinq.hc.app.{HCTestUtils, InvokeHostedChannel, LastCrossSignedState, ResizeChannel, StateUpdate, Worker}
 import org.scalatest.Outcome
-import fr.acinq.bitcoin.SatoshiLong
+import fr.acinq.bitcoin.scalacompat.SatoshiLong
 import fr.acinq.eclair.wire.protocol.{ChannelUpdate, UpdateAddHtlc, UpdateFulfillHtlc}
 import org.scalatest.funsuite.FixtureAnyFunSuiteLike
 

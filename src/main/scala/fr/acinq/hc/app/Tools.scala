@@ -1,7 +1,6 @@
 package fr.acinq.hc.app
 
 import com.typesafe.config.{ConfigFactory, Config => TypesafeConfig}
-import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
 import fr.acinq.bitcoin.scalacompat.{ByteVector32, Crypto, LexicographicalOrdering, Protocol}
 import fr.acinq.eclair._
 import fr.acinq.eclair.io.Peer.OutgoingMessage
@@ -43,7 +42,7 @@ object Tools {
     AnnouncementSignature(nodeParams.nodeKeyManager.signChannelAnnouncement(witness), wantsReply)
   }
 
-  def makePHCAnnouncement(nodeParams: NodeParams, ls: AnnouncementSignature, rs: AnnouncementSignature, shortChannelId: ShortChannelId, remoteNodeId: PublicKey): ChannelAnnouncement =
+  def makePHCAnnouncement(nodeParams: NodeParams, ls: AnnouncementSignature, rs: AnnouncementSignature, shortChannelId: ShortChannelId, remoteNodeId: Crypto.PublicKey): ChannelAnnouncement =
     Announcements.makeChannelAnnouncement(nodeParams.chainHash, shortChannelId, nodeParams.nodeId, remoteNodeId, nodeParams.nodeId, remoteNodeId, ls.nodeSignature, rs.nodeSignature, ls.nodeSignature, rs.nodeSignature)
 
   // HC ids derivation
