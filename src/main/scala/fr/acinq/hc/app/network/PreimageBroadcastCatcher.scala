@@ -70,7 +70,7 @@ class PreimageBroadcastCatcher(preimagesDb: PreimagesDb, kit: Kit, vals: Vals) e
           Block.read(rawBlock).tx.par.flatMap(extractPreimages).foreach(dh.execute)
           logger.info(s"PLGN PHC, PreimageBroadcastCatcher 'getblock' has been processed")
         case otherwise =>
-          logger.error(s"PLGN PHC, PreimageBroadcastCatcher 'getblock' has returned $otherwise")
+          logger.error(s"PLGN PHC, PreimageBroadcastCatcher 'getblock' failed")
       }
 
     case PreimageBroadcastCatcher.TickClearIpAntiSpam => ipAntiSpam.clear
