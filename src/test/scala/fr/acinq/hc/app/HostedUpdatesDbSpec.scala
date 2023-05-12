@@ -1,11 +1,11 @@
 package fr.acinq.hc.app
 
-import fr.acinq.bitcoin.Crypto.PrivateKey
-import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto}
+import fr.acinq.bitcoin.scalacompat.Crypto.PrivateKey
+import fr.acinq.bitcoin.scalacompat.{Block, ByteVector32, ByteVector64, Crypto}
 import fr.acinq.eclair._
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.wire.protocol.LightningMessageCodecs._
-import fr.acinq.hc.app.Tools.DuplicateHandler
+import fr.acinq.hc.app.Tools.{DuplicateHandler, hostedShortChanId}
 import fr.acinq.hc.app.db.{Blocking, HostedUpdatesDb, PreimagesDb, Updates}
 import fr.acinq.hc.app.network.{CollectedGossip, PHC}
 import org.scalatest.funsuite.AnyFunSuite
@@ -29,9 +29,9 @@ class HostedUpdatesDbSpec extends AnyFunSuite {
   test("Add announce and related updates") {
     HCTestUtils.resetEntireDatabase(HCTestUtils.config.db)
 
-    val channel = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, ShortChannelId(42), a.publicKey, b.publicKey, a.publicKey, b.publicKey, sig, sig, sig, sig)
-    val channel_update_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, a, b.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
-    val channel_update_2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, b, a.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
+    val channel = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, hostedShortChanId(42), a.publicKey, b.publicKey, a.publicKey, b.publicKey, sig, sig, sig, sig)
+    val channel_update_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, a, b.publicKey, hostedShortChanId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
+    val channel_update_2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, b, a.publicKey, hostedShortChanId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
 
     val insertQuery = Updates.insert(channel.shortChannelId.toLong, channelAnnouncementCodec.encode(channel).require.toHex)
     Blocking.txWrite(insertQuery, HCTestUtils.config.db) // Insert
@@ -69,13 +69,15 @@ class HostedUpdatesDbSpec extends AnyFunSuite {
     HCTestUtils.resetEntireDatabase(HCTestUtils.config.db)
     val udb = new HostedUpdatesDb(HCTestUtils.config.db)
 
-    val channel_1 = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, ShortChannelId(42), a.publicKey, b.publicKey, a.publicKey, b.publicKey, sig, sig, sig, sig)
-    val channel_2 = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, ShortChannelId(43), c.publicKey, d.publicKey, c.publicKey, d.publicKey, sig, sig, sig, sig)
 
-    val channel_update_1_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, a, b.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
-    val channel_update_1_2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, b, a.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
 
-    val channel_update_2_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, c, d.publicKey, ShortChannelId(43), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
+    val channel_1 = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, hostedShortChanId(42), a.publicKey, b.publicKey, a.publicKey, b.publicKey, sig, sig, sig, sig)
+    val channel_2 = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, hostedShortChanId(43), c.publicKey, d.publicKey, c.publicKey, d.publicKey, sig, sig, sig, sig)
+
+    val channel_update_1_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, a, b.publicKey, hostedShortChanId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
+    val channel_update_1_2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, b, a.publicKey, hostedShortChanId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
+
+    val channel_update_2_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, c, d.publicKey, hostedShortChanId(43), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
     assert(udb.getState.channels.isEmpty)
 
     Blocking.txWrite(udb.addAnnounce(channel_1), HCTestUtils.config.db)
@@ -106,10 +108,10 @@ class HostedUpdatesDbSpec extends AnyFunSuite {
   }
 
   test("Collecting gossip") {
-    val channel_1 = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, ShortChannelId(42), a.publicKey, b.publicKey, a.publicKey, b.publicKey, sig, sig, sig, sig)
-    val channel_update_1_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, a, b.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
-    val channel_update_1_2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, b, a.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
-    val channel_update_2_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, c, d.publicKey, ShortChannelId(43), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
+    val channel_1 = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, hostedShortChanId(42), a.publicKey, b.publicKey, a.publicKey, b.publicKey, sig, sig, sig, sig)
+    val channel_update_1_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, a, b.publicKey, hostedShortChanId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
+    val channel_update_1_2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, b, a.publicKey, hostedShortChanId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
+    val channel_update_2_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, c, d.publicKey, hostedShortChanId(43), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
 
     val collected0 = CollectedGossip(Map.empty)
 

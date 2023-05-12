@@ -6,7 +6,7 @@
 
 ```
 $ cd <eclair>
-$ git checkout v0.7.0
+$ git checkout v0.8.0
 $ mvn clean install -DskipTests=true
 ```
 

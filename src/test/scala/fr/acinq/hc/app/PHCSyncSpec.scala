@@ -2,27 +2,27 @@ package fr.acinq.hc.app
 
 import akka.actor.ActorSystem
 import akka.testkit.{TestFSMRef, TestProbe}
-import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.bitcoin.{Block, ByteVector64, Crypto}
+import fr.acinq.bitcoin.scalacompat.{Block, ByteVector64, Crypto}
+import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
 import fr.acinq.eclair._
 import fr.acinq.eclair.io.Peer.OutgoingMessage
 import fr.acinq.eclair.io.{ConnectionInfo, PeerConnected, UnknownMessageReceived}
 import fr.acinq.eclair.router.Router.Data
 import fr.acinq.eclair.router.{Announcements, BaseRouterSpec, Router, SyncProgress}
 import fr.acinq.eclair.wire.internal.channel.version3.HCProtocolCodecs
-import fr.acinq.eclair.wire.protocol.UnknownMessage
+import fr.acinq.eclair.wire.protocol.{IPAddress, UnknownMessage}
 import fr.acinq.hc.app.db.HostedUpdatesDb
 import fr.acinq.hc.app.network.HostedSync.{GotAllSyncFrom, SendSyncTo, TickSendGossip}
 import fr.acinq.hc.app.network._
 
-import java.net.InetSocketAddress
+import java.net.InetAddress
 
 
 class PHCSyncSpec extends BaseRouterSpec {
   private def createPeer(nodeId: PublicKey)(implicit system: ActorSystem) = {
     val connection = TestProbe()
     val peer = TestProbe()
-    val connectionInfo = ConnectionInfo(new InetSocketAddress("192.168.0.101", 9807), connection.ref, null, null)
+    val connectionInfo = ConnectionInfo(IPAddress(InetAddress.getByName("192.168.0.101"), 9807), connection.ref, null, null)
     val wrap = PeerConnectedWrapNormal(PeerConnected(peer.ref, nodeId, connectionInfo))
     (peer, connection, wrap)
   }

@@ -1,15 +1,15 @@
 package fr.acinq.hc.app
 
-import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto, SatoshiLong}
+import fr.acinq.bitcoin.scalacompat.Crypto.{PrivateKey, PublicKey}
+import fr.acinq.bitcoin.scalacompat.{Block, ByteVector32, ByteVector64, Crypto, SatoshiLong}
 import fr.acinq.eclair._
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.payment.OutgoingPaymentPacket
 import fr.acinq.eclair.router.Router.ChannelHop
 import fr.acinq.eclair.transactions.CommitmentSpec
-import fr.acinq.eclair.wire.protocol.PaymentOnion.createSinglePartPayload
-import fr.acinq.eclair.wire.protocol.{ChannelUpdate, UpdateAddHtlc, UpdateFulfillHtlc}
+import fr.acinq.eclair.wire.protocol.PaymentOnion.FinalPayload.Standard.createSinglePartPayload
+import fr.acinq.eclair.wire.protocol.{ChannelUpdate, TlvStream, UpdateAddHtlc, UpdateFulfillHtlc}
 import fr.acinq.hc.app.channel.{HC_DATA_ESTABLISHED, HostedCommitments}
 import org.scalatest.funsuite.AnyFunSuite
 
@@ -17,8 +17,8 @@ import java.util.UUID
 
 
 class HostedChannelTypesSpec extends AnyFunSuite {
-  val alicePrivKey: Crypto.PrivateKey = randomKey
-  val bobPrivKey: Crypto.PrivateKey = randomKey
+  val alicePrivKey: PrivateKey = randomKey
+  val bobPrivKey: PrivateKey = randomKey
 
   val channelId: ByteVector32 = randomBytes32
 
@@ -27,8 +27,8 @@ class HostedChannelTypesSpec extends AnyFunSuite {
 
   val preimage1: ByteVector32 = randomBytes32
   val preimage2: ByteVector32 = randomBytes32
-  val updateAddHtlc1: UpdateAddHtlc = UpdateAddHtlc(channelId, 102, 10000.msat, Crypto.sha256(preimage1), CltvExpiry(4), TestConstants.emptyOnionPacket)
-  val updateAddHtlc2: UpdateAddHtlc = UpdateAddHtlc(channelId, 103, 20000.msat, Crypto.sha256(preimage2), CltvExpiry(40), TestConstants.emptyOnionPacket)
+  val updateAddHtlc1: UpdateAddHtlc = UpdateAddHtlc(channelId, 102, 10000.msat, Crypto.sha256(preimage1), CltvExpiry(4), TestConstants.emptyOnionPacket, tlvStream = TlvStream.empty)
+  val updateAddHtlc2: UpdateAddHtlc = UpdateAddHtlc(channelId, 103, 20000.msat, Crypto.sha256(preimage2), CltvExpiry(40), TestConstants.emptyOnionPacket, tlvStream = TlvStream.empty)
 
   val lcss: LastCrossSignedState = LastCrossSignedState(isHost = true, refundScriptPubKey = randomBytes(119), initHostedChannel, blockDay = 100,
     localBalanceMsat = 100000.msat, remoteBalanceMsat = 900000.msat, localUpdates = 201, remoteUpdates = 101, incomingHtlcs = List(updateAddHtlc1, updateAddHtlc2).sortBy(_.id),
@@ -38,7 +38,7 @@ class HostedChannelTypesSpec extends AnyFunSuite {
 
   val localCommitmentSpec: CommitmentSpec = CommitmentSpec(htlcs = Set.empty, FeeratePerKw(0L.sat), lcss1.localBalanceMsat, lcss1.remoteBalanceMsat)
 
-  val channelUpdate: ChannelUpdate = ChannelUpdate(randomBytes64, Block.RegtestGenesisBlock.hash, ShortChannelId(1), TimestampSecond(2), ChannelUpdate.ChannelFlags.DUMMY, CltvExpiryDelta(3), 4.msat, 5.msat, 6, None)
+  val channelUpdate: ChannelUpdate = ChannelUpdate(randomBytes64, Block.RegtestGenesisBlock.hash, ShortChannelId(1), TimestampSecond(2), ChannelUpdate.MessageFlags(false), ChannelUpdate.ChannelFlags.DUMMY, CltvExpiryDelta(3), 4.msat, 5.msat, 6, 1000000.msat, tlvStream = TlvStream.empty)
 
   test("LCSS has the same sigHash for different order of in-flight HTLCs") {
     val lcssDifferentHtlcOrder = lcss.copy(incomingHtlcs = List(updateAddHtlc1, updateAddHtlc2).sortBy(_.id), outgoingHtlcs = List(updateAddHtlc1, updateAddHtlc2).sortBy(_.id))
@@ -76,7 +76,8 @@ class HostedChannelTypesSpec extends AnyFunSuite {
     val payment_hash: ByteVector32 = Crypto.sha256(payment_preimage)
     val expiry = CltvExpiryDelta(144).toCltvExpiry(BlockHeight(currentBlockHeight))
     val cmd = OutgoingPaymentPacket.buildCommand(null, OutgoingPaymentPacket.Upstream.Local(UUID.randomUUID), payment_hash,
-      ChannelHop(null, destination, null) :: Nil, createSinglePartPayload(amount, expiry, randomBytes32, None)).get._1.copy(commit = false)
+//      ChannelHop(null, destination, null, null) :: Nil, createSinglePartPayload(amount, expiry, randomBytes32, None)).get._1.copy(commit = false)
+      ChannelHop(null, null, destination, null) :: Nil, createSinglePartPayload(amount, expiry, randomBytes32, None)).get._1.copy(commit = false)
     (payment_preimage, cmd)
   }
 

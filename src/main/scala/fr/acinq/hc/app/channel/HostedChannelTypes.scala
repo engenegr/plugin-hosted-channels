@@ -2,11 +2,11 @@ package fr.acinq.hc.app.channel
 
 import akka.actor.ActorRef
 import com.softwaremill.quicklens._
-import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
-import fr.acinq.bitcoin.{ByteVector32, ByteVector64, Crypto, Satoshi, SatoshiLong}
+import fr.acinq.bitcoin.scalacompat.Crypto.{PrivateKey, PublicKey}
+import fr.acinq.bitcoin.scalacompat.{ByteVector32, ByteVector64, Crypto, Satoshi, SatoshiLong}
 import fr.acinq.eclair._
-import fr.acinq.eclair.blockchain.CurrentBlockHeight
 import fr.acinq.eclair.channel._
+import fr.acinq.eclair.channel.fsm.Channel
 import fr.acinq.eclair.payment.OutgoingPaymentPacket
 import fr.acinq.eclair.transactions.{CommitmentSpec, DirectedHtlc}
 import fr.acinq.eclair.wire.protocol._
@@ -167,7 +167,16 @@ case class HostedCommitments(localNodeId: PublicKey, remoteNodeId: PublicKey, ch
       return Left(HtlcValueTooSmall(channelId, minimum = lastCrossSignedState.initHostedChannel.htlcMinimumMsat, actual = cmd.amount))
     }
 
-    val add = UpdateAddHtlc(channelId, nextTotalLocal + 1, cmd.amount, cmd.paymentHash, cmd.cltvExpiry, cmd.onion)
+    val add = UpdateAddHtlc(
+      channelId = channelId,
+      id = nextTotalLocal + 1,
+      amountMsat = cmd.amount,
+      paymentHash = cmd.paymentHash,
+      cltvExpiry = cmd.cltvExpiry,
+      onionRoutingPacket = cmd.onion,
+      tlvStream = TlvStream.empty
+    )
+
     val commits1 = addLocalProposal(add).copy(originChannels = originChannels + (add.id -> cmd.origin))
     val outgoingHtlcs = commits1.nextLocalSpec.htlcs.collect(DirectedHtlc.outgoing)
 

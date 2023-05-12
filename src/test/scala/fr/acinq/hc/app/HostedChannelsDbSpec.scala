@@ -2,9 +2,10 @@ package fr.acinq.hc.app
 
 import fr.acinq.eclair._
 import com.softwaremill.quicklens._
+import fr.acinq.bitcoin.scalacompat.{ByteVector32, Satoshi}
+
 import scala.collection.parallel.CollectionConverters._
 import fr.acinq.hc.app.Tools.{DuplicateHandler, DuplicateShortId}
-import fr.acinq.bitcoin.{ByteVector32, Satoshi}
 
 import scala.util.{Failure, Random}
 import fr.acinq.hc.app.channel.HC_DATA_ESTABLISHED

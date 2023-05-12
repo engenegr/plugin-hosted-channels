@@ -1,8 +1,8 @@
 package fr.acinq.hc.app
 
 import com.typesafe.config.{ConfigFactory, Config => TypesafeConfig}
-import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.bitcoin.{ByteVector32, Crypto, LexicographicalOrdering, Protocol}
+import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
+import fr.acinq.bitcoin.scalacompat.{ByteVector32, Crypto, LexicographicalOrdering, Protocol}
 import fr.acinq.eclair._
 import fr.acinq.eclair.io.Peer.OutgoingMessage
 import fr.acinq.eclair.io.PeerConnected
@@ -18,7 +18,7 @@ import scodec.bits.ByteVector
 import slick.jdbc.PostgresProfile
 
 import java.io.{ByteArrayInputStream, File}
-import java.net.URL
+import java.net.{InetAddress, URL}
 import java.nio.ByteOrder
 import java.nio.file.{Files, Paths}
 import scala.util.Try
@@ -38,12 +38,12 @@ object Tools {
     def insert(data: T): Boolean
   }
 
-  def makePHCAnnouncementSignature(nodeParams: NodeParams, cs: HostedCommitments, shortChannelId: ShortChannelId, wantsReply: Boolean): AnnouncementSignature = {
+  def makePHCAnnouncementSignature(nodeParams: NodeParams, cs: HostedCommitments, shortChannelId: RealShortChannelId, wantsReply: Boolean): AnnouncementSignature = {
     val witness = Announcements.generateChannelAnnouncementWitness(nodeParams.chainHash, shortChannelId, nodeParams.nodeId, cs.remoteNodeId, nodeParams.nodeId, cs.remoteNodeId, Features.empty)
     AnnouncementSignature(nodeParams.nodeKeyManager.signChannelAnnouncement(witness), wantsReply)
   }
 
-  def makePHCAnnouncement(nodeParams: NodeParams, ls: AnnouncementSignature, rs: AnnouncementSignature, shortChannelId: ShortChannelId, remoteNodeId: PublicKey): ChannelAnnouncement =
+  def makePHCAnnouncement(nodeParams: NodeParams, ls: AnnouncementSignature, rs: AnnouncementSignature, shortChannelId: RealShortChannelId, remoteNodeId: PublicKey): ChannelAnnouncement =
     Announcements.makeChannelAnnouncement(nodeParams.chainHash, shortChannelId, nodeParams.nodeId, remoteNodeId, nodeParams.nodeId, remoteNodeId, ls.nodeSignature, rs.nodeSignature, ls.nodeSignature, rs.nodeSignature)
 
   // HC ids derivation
@@ -58,10 +58,15 @@ object Tools {
     Crypto.sha256(nodesCombined)
   }
 
-  def hostedShortChanId(pubkey1: ByteVector, pubkey2: ByteVector): ShortChannelId = {
+  def hostedShortChanId(pubkey1: ByteVector, pubkey2: ByteVector): RealShortChannelId = {
     val stream = new ByteArrayInputStream(hostedNodesCombined(pubkey1, pubkey2).toArray)
     def getChunk: Long = Protocol.uint64(stream, ByteOrder.BIG_ENDIAN)
-    ShortChannelId(List.fill(8)(getChunk).sum)
+    hostedShortChanId(List.fill(8)(getChunk).sum)
+  }
+
+  def hostedShortChanId(x: Long): RealShortChannelId = {
+    val coordinates = ShortChannelId.coordinates(ShortChannelId(x))
+    RealShortChannelId(coordinates.blockHeight, coordinates.txIndex, coordinates.outputIndex)
   }
 }
 
@@ -79,7 +84,7 @@ case class PeerConnectedWrapNormal(info: PeerConnected) extends PeerConnectedWra
   def sendHostedChannelMsg(message: HostedChannelMessage): Unit = me sendUnknownMsg HCProtocolCodecs.toUnknownHostedMessage(message)
   def sendRoutingMsg(message: AnnouncementMessage): Unit = me sendUnknownMsg HCProtocolCodecs.toUnknownAnnounceMessage(message, isGossip = true)
   def sendUnknownMsg(message: UnknownMessage): Unit = info.peer ! OutgoingMessage(message, info.connectionInfo.peerConnection)
-  lazy val remoteIp: Array[Byte] = info.connectionInfo.address.getAddress.getAddress
+  lazy val remoteIp: Array[Byte] = InetAddress.getByName(info.connectionInfo.address.host).getAddress
 }
 
 

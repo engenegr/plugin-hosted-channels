@@ -1,6 +1,6 @@
 package fr.acinq.hc.app.channel
 
-import fr.acinq.bitcoin.Crypto
+import fr.acinq.bitcoin.scalacompat.Crypto
 import fr.acinq.eclair._
 import fr.acinq.eclair.blockchain.CurrentBlockHeight
 import fr.acinq.eclair.channel._

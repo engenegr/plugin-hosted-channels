@@ -1,6 +1,6 @@
 package fr.acinq.hc.app.network
 
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
 import fr.acinq.eclair.channel.Nothing
 import fr.acinq.eclair.io.UnknownMessageReceived
 import fr.acinq.eclair.router.{Router, SyncProgress}
@@ -80,7 +80,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
       stay
 
     case Event(routerData: fr.acinq.eclair.router.Router.Data, data: WaitForNormalNetworkData) =>
-      val data1 = OperationalData(data.phcNetwork, CollectedGossip(Map.empty), None, routerData.channels, routerData.graph)
+      val data1 = OperationalData(data.phcNetwork, CollectedGossip(Map.empty), None, routerData.channels, routerData.graphWithBalances.graph)
       log.info("PLGN PHC, HostedSync, got normal network data")
       goto(WAIT_FOR_PHC_SYNC) using data1
   }
@@ -139,7 +139,7 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
       stay
 
     case Event(routerData: Router.Data, data: OperationalData) =>
-      val data1 = data.copy(normalChannels = routerData.channels, normalGraph = routerData.graph)
+      val data1 = data.copy(normalChannels = routerData.channels, normalGraph = routerData.graphWithBalances.graph)
       log.info("PLGN PHC, HostedSync, updated normal network data from Router")
       stay using data1
 
@@ -277,11 +277,11 @@ class HostedSync(kit: Kit, updatesDb: HostedUpdatesDb, phcConfig: PHCConfig) ext
         log.info(s"PLGN PHC, gossip update fail: too few normal channels, msg=$update, peer=$fromNodeId")
         false
 
-      case _ if update.htlcMaximumMsat.forall(_ > phcConfig.maxCapacity) =>
+      case _ if update.htlcMaximumMsat > phcConfig.maxCapacity =>
         log.info(s"PLGN PHC, gossip update fail: capacity is above max, msg=$update, peer=$fromNodeId")
         false
 
-      case _ if update.htlcMaximumMsat.forall(_ < phcConfig.minCapacity) =>
+      case _ if update.htlcMaximumMsat < phcConfig.minCapacity =>
         log.info(s"PLGN PHC, gossip update fail: capacity is below min, msg=$update, peer=$fromNodeId")
         false
 

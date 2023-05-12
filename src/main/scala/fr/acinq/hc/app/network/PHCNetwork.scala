@@ -1,8 +1,7 @@
 package fr.acinq.hc.app.network
 
-import fr.acinq.bitcoin.Crypto
-import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.eclair.ShortChannelId
+import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
+import fr.acinq.eclair.{RealShortChannelId, ShortChannelId}
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.wire.internal.channel.version3.HCProtocolCodecs
 import fr.acinq.eclair.wire.protocol.{AnnouncementMessage, ChannelAnnouncement, ChannelUpdate, UnknownMessage}
@@ -22,10 +21,10 @@ object PHC {
   val tickAnnounceThreshold: FiniteDuration = 5.days // Periodically refresh and resend ChannelUpdate gossip for local PHC with a given interval
 }
 
-case class PHC(shortChannelId: ShortChannelId, channelAnnounce: ChannelAnnouncement, channelUpdate1: Option[ChannelUpdate] = None, channelUpdate2: Option[ChannelUpdate] = None) {
+case class PHC(shortChannelId: RealShortChannelId, channelAnnounce: ChannelAnnouncement, channelUpdate1: Option[ChannelUpdate] = None, channelUpdate2: Option[ChannelUpdate] = None) {
   lazy val orderedMessages: List[UnknownMessage] = for (message <- channelAnnounce +: channelUpdate1 ++: channelUpdate2 ++: Nil) yield HCProtocolCodecs.toUnknownAnnounceMessage(message, isGossip = false)
   def nodeIdToShortId = List(channelAnnounce.nodeId1 -> channelAnnounce.shortChannelId, channelAnnounce.nodeId2 -> channelAnnounce.shortChannelId)
-  def tuple: (ShortChannelId, PHC) = (shortChannelId, this)
+  def tuple: (RealShortChannelId, PHC) = (shortChannelId, this)
 
   def verifySig(update: ChannelUpdate): Boolean = {
     if (update.channelFlags.isNode1) Announcements.checkSig(update, channelAnnounce.nodeId1)
@@ -45,7 +44,7 @@ case class PHC(shortChannelId: ShortChannelId, channelAnnounce: ChannelAnnouncem
 }
 
 object PHCNetwork {
-  type ShortChannelIdSet = Set[ShortChannelId]
+  type ShortChannelIdSet = Set[RealShortChannelId]
   val emptyUnsaved: MessagesReceived = MessagesReceived(Set.empty)
 }
 
@@ -56,7 +55,7 @@ case class MessagesReceived(announces: Set[ChannelAnnouncement], updates: Set[Ch
 }
 
 case class PHCNetwork(channels: Map[ShortChannelId, PHC],
-                      perNode: Map[Crypto.PublicKey, ShortChannelIdSet],
+                      perNode: Map[PublicKey, ShortChannelIdSet],
                       unsaved: MessagesReceived) {
 
   def isAnnounceAcceptable(announce: ChannelAnnouncement): Boolean =

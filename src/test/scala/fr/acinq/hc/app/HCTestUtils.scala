@@ -25,7 +25,7 @@ object HCTestUtils {
       fr.acinq.hc.app.db.Preimages.model.schema.dropIfExists,
       fr.acinq.hc.app.db.Preimages.model.schema.create
     )
-    Await.result(db.run(setup.transactionally), 10.seconds)
+    Await.result(db.run(setup.transactionally), 60.seconds)
   }
 
   def testKit(nodeParams: NodeParams)(implicit system: ActorSystem): (Kit, TestProbe) = {

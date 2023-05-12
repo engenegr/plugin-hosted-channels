@@ -3,13 +3,13 @@ package fr.acinq.hc.app
 import akka.actor.{Actor, ActorRef, Props, Terminated}
 import akka.pattern.ask
 import com.google.common.collect.HashBiMap
-import com.google.common.net.HostAndPort
-import fr.acinq.bitcoin.ByteVector32
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.scalacompat.ByteVector32
+import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
 import fr.acinq.eclair
 import fr.acinq.eclair.io._
 import fr.acinq.eclair.router.Router
 import fr.acinq.eclair.wire.internal.channel.version3.HCProtocolCodecs
+import fr.acinq.eclair.wire.protocol.TlvStream
 import fr.acinq.hc.app.Worker._
 import fr.acinq.hc.app.channel._
 import fr.acinq.hc.app.db.Blocking.timeout
@@ -147,10 +147,9 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
           data <- routerData
           nodeId <- unconnectedHosts
           nodeAnnouncement <- data.nodes.get(nodeId)
-          sockAddress <- nodeAnnouncement.addresses.headOption.map(_.socketAddress)
-          hostAndPort = HostAndPort.fromParts(sockAddress.getHostString, sockAddress.getPort)
-          _ = logger.info(s"PLGN PHC, trying to reconnect to ${nodeAnnouncement.nodeId}/$hostAndPort")
-        } kit.switchboard ! Peer.Connect(NodeURI(nodeId, hostAndPort), self, isPersistent = false)
+          nodeAddress <- nodeAnnouncement.addresses.headOption
+          _ = logger.info(s"PLGN PHC, trying to reconnect to ${nodeAnnouncement.nodeId}/$nodeAddress")
+        } kit.switchboard ! Peer.Connect(NodeURI(nodeId, nodeAddress), self, isPersistent = false)
       }
   }
 
@@ -163,7 +162,7 @@ class Worker(kit: eclair.Kit, hostedSync: ActorRef, preimageCatcher: ActorRef, c
 
   def guardSpawn(nodeId: PublicKey, wrap: PeerConnectedWrap, invoke: InvokeHostedChannel): Unit = {
     if (ipAntiSpam(wrap.remoteIp) < cfg.vals.maxNewChansPerIpPerHour) spawnChannel(nodeId) |> HCPeerConnected |> invoke
-    else wrap sendHasChannelIdMsg eclair.wire.protocol.Error(ByteVector32.Zeroes, ErrorCodes.ERR_HOSTED_CHANNEL_DENIED)
+    else wrap sendHasChannelIdMsg eclair.wire.protocol.Error(channelId = ByteVector32.Zeroes, ErrorCodes.ERR_HOSTED_CHANNEL_DENIED)
     // Record this request for anti-spam
     ipAntiSpam(wrap.remoteIp) += 1
   }

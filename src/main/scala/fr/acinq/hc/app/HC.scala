@@ -5,8 +5,8 @@ import akka.event.LoggingAdapter
 import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import akka.util.Timeout
-import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.bitcoin.{ByteVector32, Satoshi, Script}
+import fr.acinq.bitcoin.scalacompat.{ByteVector32, Satoshi, Script}
+import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
 import fr.acinq.eclair._
 import fr.acinq.eclair.api.directives.EclairDirectives
 import fr.acinq.eclair.api.serde.FormParamExtractors._
@@ -125,7 +125,7 @@ class HC extends Plugin with RouteProvider {
 
     override def getIncomingHtlcs(nodeParams: NodeParams, log: LoggingAdapter): Seq[IncomingHtlc] = {
       val allHotHtlcs: Seq[DirectedHtlc] = channelsDb.listHotChannels.flatMap(_.commitments.localSpec.htlcs)
-      val decryptEither: UpdateAddHtlc => Either[FailureMessage, IncomingPaymentPacket] = IncomingPaymentPacket.decrypt(_: UpdateAddHtlc, nodeParams.privateKey)(log)
+      val decryptEither: UpdateAddHtlc => Either[FailureMessage, IncomingPaymentPacket] = IncomingPaymentPacket.decrypt(_: UpdateAddHtlc, nodeParams.privateKey, Features.empty)(log)
       val resolvePacket: PartialFunction[Either[FailureMessage, IncomingPaymentPacket], IncomingHtlc] = PostRestartHtlcCleaner.decryptedIncomingHtlcs(nodeParams.db.payments)
       allHotHtlcs.collect(DirectedHtlc.incoming).map(decryptEither).collect(resolvePacket)
     }

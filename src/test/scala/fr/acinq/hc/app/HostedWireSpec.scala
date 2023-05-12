@@ -1,13 +1,15 @@
 package fr.acinq.hc.app
 
-import fr.acinq.bitcoin.{Block, ByteVector32, ByteVector64, Crypto, Satoshi}
+import fr.acinq.bitcoin.scalacompat.{Block, ByteVector32, ByteVector64, Crypto, Satoshi}
 import fr.acinq.eclair._
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
-import fr.acinq.eclair.channel.{Channel, Origin}
+import fr.acinq.eclair.channel.Origin
+import fr.acinq.eclair.channel.fsm.Channel
 import fr.acinq.eclair.router.Announcements
 import fr.acinq.eclair.transactions.{CommitmentSpec, IncomingHtlc, OutgoingHtlc}
 import fr.acinq.eclair.wire.internal.channel.version3.{HCProtocolCodecs, HostedChannelCodecs}
-import fr.acinq.eclair.wire.protocol.{ChannelUpdate, Error, UpdateAddHtlc, UpdateFailHtlc}
+import fr.acinq.eclair.wire.protocol.{ChannelUpdate, Error, TlvStream, UpdateAddHtlc, UpdateFailHtlc}
+import fr.acinq.hc.app.Tools.hostedShortChanId
 import fr.acinq.hc.app.channel._
 import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits.{BitVector, ByteVector}
@@ -27,7 +29,8 @@ object HostedWireSpec {
     amountMsat = MilliSatoshi(Random.nextInt(Int.MaxValue)),
     cltvExpiry = CltvExpiry(Random.nextInt(Int.MaxValue)),
     paymentHash = ByteVector32.Zeroes,
-    onionRoutingPacket = TestConstants.emptyOnionPacket)
+    onionRoutingPacket = TestConstants.emptyOnionPacket,
+    tlvStream = TlvStream.empty)
 
   val add2: UpdateAddHtlc = UpdateAddHtlc(
     channelId = ByteVector32.One,
@@ -35,7 +38,8 @@ object HostedWireSpec {
     amountMsat = MilliSatoshi(Random.nextInt(Int.MaxValue)),
     cltvExpiry = CltvExpiry(Random.nextInt(Int.MaxValue)),
     paymentHash = ByteVector32.Zeroes,
-    onionRoutingPacket = TestConstants.emptyOnionPacket)
+    onionRoutingPacket = TestConstants.emptyOnionPacket,
+    tlvStream = TlvStream.empty)
 
   val invoke_hosted_channel: InvokeHostedChannel = InvokeHostedChannel(Block.LivenetGenesisBlock.hash, ByteVector.fromValidHex("00" * 32), secret = ByteVector.fromValidHex("00" * 32))
 
@@ -84,7 +88,7 @@ class HostedWireSpec extends AnyFunSuite {
     assert(data == check)
     val a: Crypto.PrivateKey = randomKey
     val b: Crypto.PrivateKey = randomKey
-    val channel = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, ShortChannelId(42), a.publicKey, b.publicKey, randomKey.publicKey,
+    val channel = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, hostedShortChanId(42), a.publicKey, b.publicKey, randomKey.publicKey,
       randomKey.publicKey, sig, sig, ByteVector64.Zeroes, ByteVector64.Zeroes)
     val data1 = data.copy(channelAnnouncement = Some(channel))
     val binary1 = HostedChannelCodecs.HC_DATA_ESTABLISHED_Codec.encode(data1).require
@@ -120,9 +124,9 @@ class HostedWireSpec extends AnyFunSuite {
     val a: Crypto.PrivateKey = randomKey
     val b: Crypto.PrivateKey = randomKey
 
-    val channel = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, ShortChannelId(42), a.publicKey, b.publicKey, randomKey.publicKey, randomKey.publicKey, sig, sig, ByteVector64.Zeroes, ByteVector64.Zeroes)
-    val channel_update_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, a, b.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
-    val channel_update_2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, b, a.publicKey, ShortChannelId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
+    val channel = Announcements.makeChannelAnnouncement(Block.RegtestGenesisBlock.hash, hostedShortChanId(42), a.publicKey, b.publicKey, randomKey.publicKey, randomKey.publicKey, sig, sig, ByteVector64.Zeroes, ByteVector64.Zeroes)
+    val channel_update_1 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, a, b.publicKey, hostedShortChanId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
+    val channel_update_2 = Announcements.makeChannelUpdate(Block.RegtestGenesisBlock.hash, b, a.publicKey, hostedShortChanId(42), CltvExpiryDelta(5), 7000000.msat, 50000.msat, 100, 500000000L.msat, enable = true)
 
     assert(HCProtocolCodecs.toUnknownAnnounceMessage(channel, isGossip = true).tag == HC.PHC_ANNOUNCE_GOSSIP_TAG)
     assert(HCProtocolCodecs.toUnknownAnnounceMessage(channel_update_1, isGossip = false).tag == HC.PHC_UPDATE_SYNC_TAG)
@@ -134,7 +138,7 @@ class HostedWireSpec extends AnyFunSuite {
     def bin(len: Int, fill: Byte) = ByteVector.fill(len)(fill)
     def bin32(fill: Byte) = ByteVector32(bin(32, fill))
     val update_fail_htlc = UpdateFailHtlc(randomBytes32, 2, bin(154, 0))
-    val update_add_htlc = UpdateAddHtlc(randomBytes32, 2, 3.msat, bin32(0), CltvExpiry(4), TestConstants.emptyOnionPacket)
+    val update_add_htlc = UpdateAddHtlc(randomBytes32, 2, 3.msat, bin32(0), CltvExpiry(4), TestConstants.emptyOnionPacket, tlvStream = TlvStream.empty)
     val announcement_signature = AnnouncementSignature(randomBytes64, wantsReply = false)
 
     assert(HCProtocolCodecs.toUnknownHasChanIdMessage(update_fail_htlc).tag == HC.HC_UPDATE_FAIL_HTLC_TAG)

@@ -1,9 +1,9 @@
 package fr.acinq.hc.app.network
 
 import akka.actor.Actor
-import fr.acinq.bitcoin._
+import fr.acinq.bitcoin.scalacompat.{ByteVector32, Crypto, KotlinUtils, OP_PUSHDATA, OP_RETURN, Satoshi, Script, Transaction, TxOut}
 import fr.acinq.eclair.Kit
-import fr.acinq.eclair.blockchain._
+import fr.acinq.eclair.blockchain.{NewBlock, NewTransaction}
 import fr.acinq.eclair.blockchain.bitcoind.rpc.BitcoinCoreClient
 import fr.acinq.eclair.blockchain.bitcoind.rpc.BitcoinCoreClient.FundTransactionOptions
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
@@ -11,7 +11,6 @@ import fr.acinq.eclair.io.UnknownMessageReceived
 import fr.acinq.eclair.wire.internal.channel.version3.HCProtocolCodecs
 import fr.acinq.hc.app.Tools.DuplicateHandler
 import fr.acinq.hc.app.db.PreimagesDb
-import fr.acinq.hc.app.network.PreimageBroadcastCatcher._
 import fr.acinq.hc.app.{HC, QueryPreimages, ReplyPreimages, Vals}
 import grizzled.slf4j.Logging
 import org.json4s.JsonAST.JString
@@ -19,9 +18,10 @@ import scodec.Attempt
 import scodec.bits.ByteVector
 
 import scala.collection.mutable
-import scala.collection.parallel.CollectionConverters._
+import scala.collection.parallel.CollectionConverters.IterableIsParallelizable
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters.ListHasAsScala
 import scala.util.{Success, Try}
 
 
@@ -35,7 +35,7 @@ object PreimageBroadcastCatcher {
   }
 
   def extractPreimages(tx: Transaction): Seq[ByteVector32] =
-    tx.txOut.map(transactionOutput => Try(transactionOutput.publicKeyScript) map Script.parse).flatMap {
+    tx.txOut.map(transactionOutput => Try(transactionOutput.publicKeyScript).map(bytes => Script.parse(bytes))).flatMap {
       case Success(OP_RETURN :: OP_PUSHDATA(preimage1, 32) :: OP_PUSHDATA(preimage2, 32) :: Nil) => List(preimage1, preimage2)
       case Success(OP_RETURN :: OP_PUSHDATA(preimage1, 32) :: Nil) => List(preimage1)
       case _ => List.empty[ByteVector]
@@ -43,6 +43,7 @@ object PreimageBroadcastCatcher {
 }
 
 class PreimageBroadcastCatcher(preimagesDb: PreimagesDb, kit: Kit, vals: Vals) extends Actor with Logging {
+  import PreimageBroadcastCatcher._
   context.system.scheduler.scheduleWithFixedDelay(1.minute, 1.minute, self, PreimageBroadcastCatcher.TickClearIpAntiSpam)
 
   context.system.eventStream.subscribe(channel = classOf[NewTransaction], subscriber = self)
@@ -67,7 +68,7 @@ class PreimageBroadcastCatcher(preimagesDb: PreimagesDb, kit: Kit, vals: Vals) e
     case NewBlock(blockHash) =>
       wallet.rpcClient.invoke("getblock", blockHash, 0).foreach {
         case JString(rawBlock) =>
-          Block.read(rawBlock).tx.par.flatMap(extractPreimages).foreach(dh.execute)
+          fr.acinq.bitcoin.Block.read(rawBlock).tx.asScala.par.flatMap(tx => extractPreimages(KotlinUtils.kmp2scala(tx))).foreach(dh.execute)
           logger.info(s"PLGN PHC, PreimageBroadcastCatcher 'getblock' has been processed")
         case otherwise =>
           logger.error(s"PLGN PHC, PreimageBroadcastCatcher 'getblock' has returned $otherwise")

@@ -1,6 +1,6 @@
 package fr.acinq.hc.app.network
 
-import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
 import fr.acinq.eclair.ShortChannelId
 import fr.acinq.eclair.wire.protocol.{ChannelAnnouncement, ChannelUpdate}
 

@@ -1,6 +1,9 @@
 package fr.acinq.hc.app.db
 
-import fr.acinq.eclair.ShortChannelId
+import fr.acinq.bitcoin.scalacompat.Crypto
+import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
+import fr.acinq.eclair.ShortChannelId.coordinates
+import fr.acinq.eclair.{RealShortChannelId, ShortChannelId}
 import fr.acinq.eclair.wire.protocol.LightningMessageCodecs._
 import fr.acinq.eclair.wire.protocol.{ChannelAnnouncement, ChannelUpdate}
 import fr.acinq.hc.app.network.{PHC, PHCNetwork}
@@ -17,10 +20,14 @@ class HostedUpdatesDb(val db: PostgresProfile.backend.Database) {
   def getState: PHCNetwork = {
     val updates: Seq[PHC] = for {
       Tuple7(_, shortChannelId, channelAnnounce, channelUpdate1, channelUpdate2, _, _) <- Blocking.txRead(Updates.model.result, db)
-    } yield PHC(ShortChannelId(shortChannelId), toAnnounce(channelAnnounce), channelUpdate1 map toUpdate, channelUpdate2 map toUpdate)
+    } yield {
+      val c = coordinates(ShortChannelId(shortChannelId))
+      val realScid = RealShortChannelId(c.blockHeight, c.txIndex, c.outputIndex)
+      PHC(realScid, toAnnounce(channelAnnounce), channelUpdate1 map toUpdate, channelUpdate2 map toUpdate)
+    }
 
     val channelMap: Map[ShortChannelId, PHC] = updates.map(upd => upd.shortChannelId -> upd).toMap
-    val channelSetPerNodeMap = updates.flatMap(_.nodeIdToShortId).groupMap(_._1)(_._2).view.mapValues(_.toSet).toMap
+    val channelSetPerNodeMap: Map[PublicKey, Set[RealShortChannelId]] = updates.flatMap(_.nodeIdToShortId).groupMap(_._1)(_._2).view.mapValues(_.toSet).toMap
     PHCNetwork(channelMap, channelSetPerNodeMap, PHCNetwork.emptyUnsaved)
   }
 

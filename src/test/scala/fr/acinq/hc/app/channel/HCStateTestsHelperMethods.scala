@@ -2,16 +2,16 @@ package fr.acinq.hc.app.channel
 
 import akka.actor.ActorSystem
 import akka.testkit.{TestFSMRef, TestKitBase, TestProbe}
-import fr.acinq.bitcoin.Crypto.PublicKey
-import fr.acinq.bitcoin.{ByteVector32, Crypto}
+import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
+import fr.acinq.bitcoin.scalacompat.{ByteVector32, Crypto}
 import fr.acinq.eclair.TestConstants.Bob
 import fr.acinq.eclair.channel._
 import fr.acinq.eclair.io.{ConnectionInfo, PeerConnected}
 import fr.acinq.eclair.payment.OutgoingPaymentPacket
 import fr.acinq.eclair.payment.OutgoingPaymentPacket.Upstream
 import fr.acinq.eclair.payment.relay.Relayer
-import fr.acinq.eclair.router.Router.ChannelHop
-import fr.acinq.eclair.wire.protocol.PaymentOnion.createSinglePartPayload
+import fr.acinq.eclair.router.Router
+import fr.acinq.eclair.wire.protocol.PaymentOnion.FinalPayload.Standard.createSinglePartPayload
 import fr.acinq.eclair.wire.protocol._
 import fr.acinq.eclair.{BlockHeight, CltvExpiryDelta, Kit, MilliSatoshi, TestConstants, randomBytes32}
 import fr.acinq.hc.app._
@@ -19,7 +19,7 @@ import fr.acinq.hc.app.db.HostedChannelsDb
 import org.scalatest.{FixtureTestSuite, ParallelTestExecution}
 import slick.jdbc.PostgresProfile
 
-import java.net.InetSocketAddress
+import java.net.{InetAddress, InetSocketAddress}
 import java.util.UUID
 
 trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with ParallelTestExecution {
@@ -45,7 +45,7 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
     def sendHostedChannelMsg(message: HostedChannelMessage): Unit = info.peer ! message
     def sendRoutingMsg(message: AnnouncementMessage): Unit = info.peer ! message
     def sendUnknownMsg(message: UnknownMessage): Unit = info.peer ! message
-    lazy val remoteIp: Array[Byte] = info.connectionInfo.address.getAddress.getAddress
+    lazy val remoteIp: Array[Byte] = InetAddress.getByName(info.connectionInfo.address.host).getAddress
   }
 
   def init(): SetupFixture = {
@@ -62,12 +62,13 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
     val bobSync = TestProbe()
 
     val channelUpdateListener = TestProbe()
+
     system.eventStream.subscribe(channelUpdateListener.ref, classOf[AlmostTimedoutIncomingHtlc])
     system.eventStream.subscribe(channelUpdateListener.ref, classOf[LocalChannelUpdate])
     system.eventStream.subscribe(channelUpdateListener.ref, classOf[LocalChannelDown])
 
-    val alicePeerConnected = PeerConnected(bob2alice.ref, aliceKit.nodeParams.nodeId, ConnectionInfo(new InetSocketAddress("127.0.0.2", 9001), TestProbe().ref, localInit = null, remoteInit = null))
-    val bobPeerConnected = PeerConnected(alice2bob.ref, bobKit.nodeParams.nodeId, ConnectionInfo(new InetSocketAddress("127.0.0.3", 9001), TestProbe().ref, localInit = null, remoteInit = null))
+    val alicePeerConnected = PeerConnected(bob2alice.ref, aliceKit.nodeParams.nodeId, ConnectionInfo(IPAddress(InetAddress.getByName("127.0.0.2"), 9001), TestProbe().ref, localInit = null, remoteInit = null))
+    val bobPeerConnected = PeerConnected(alice2bob.ref, bobKit.nodeParams.nodeId, ConnectionInfo(IPAddress(InetAddress.getByName("127.0.0.3"), 9001), TestProbe().ref, localInit = null, remoteInit = null))
     HC.remoteNode2Connection addOne aliceKit.nodeParams.nodeId -> PeerConnectedWrapTest(alicePeerConnected)
     HC.remoteNode2Connection addOne bobKit.nodeParams.nodeId -> PeerConnectedWrapTest(bobPeerConnected)
     val alice: TestFSMRef[ChannelState, HostedData, HostedChannel] = TestFSMRef(new HostedChannel(aliceKit, bobKit.nodeParams.nodeId, new HostedChannelsDb(aliceDB), aliceSync.ref, HCTestUtils.config))
@@ -99,8 +100,8 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
     awaitCond(bob.stateName == NORMAL)
     alice2bob.expectMsgType[ChannelUpdate]
     bob2alice.expectMsgType[ChannelUpdate]
-    awaitCond(!channelUpdateListener.expectMsgType[LocalChannelUpdate].channelUpdate.channelFlags.isNode1)
     awaitCond(channelUpdateListener.expectMsgType[LocalChannelUpdate].channelUpdate.channelFlags.isNode1)
+    awaitCond(!channelUpdateListener.expectMsgType[LocalChannelUpdate].channelUpdate.channelFlags.isNode1)
     alice2bob.expectNoMessage()
     bob2alice.expectNoMessage()
   }
@@ -132,7 +133,7 @@ trait HCStateTestsHelperMethods extends TestKitBase with FixtureTestSuite with P
                  upstream: Upstream = Upstream.Local(UUID.randomUUID), replyTo: TestProbe = TestProbe()): (ByteVector32, CMD_ADD_HTLC, TestProbe) = {
     val paymentHash: ByteVector32 = Crypto.sha256(paymentPreimage)
     val expiry = CltvExpiryDelta(144).toCltvExpiry(BlockHeight(currentBlockHeight))
-    val cmd = OutgoingPaymentPacket.buildCommand(replyTo.ref, upstream, paymentHash, ChannelHop(null, destination, null) :: Nil,
+    val cmd = OutgoingPaymentPacket.buildCommand(replyTo.ref, upstream, paymentHash, Router.ChannelHop(null, null, destination, null) :: Nil,
       createSinglePartPayload(amount, expiry, randomBytes32, None)).get._1.copy(commit = false)
     (paymentPreimage, cmd, replyTo)
   }
