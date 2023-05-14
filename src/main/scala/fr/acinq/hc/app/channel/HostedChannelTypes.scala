@@ -43,6 +43,7 @@ case class HC_CMD_RESIZE(remoteNodeId: PublicKey, newCapacity: Satoshi) extends 
 
 case class HC_CMD_RESTORE(remoteNodeId: PublicKey, remoteData: HostedState) extends HasRemoteNodeIdHostedCommand
 
+case class HC_CMD_GET_ALL_CHANNELS()
 case class HC_CMD_GET_INFO(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
 
 case class HC_CMD_SUSPEND(remoteNodeId: PublicKey) extends HasRemoteNodeIdHostedCommand
@@ -54,6 +55,8 @@ case class CMDResFailure(reason: String) extends HCCommandResponse
 case class CMDResSuccess(cmd: HasRemoteNodeIdHostedCommand) extends HCCommandResponse
 
 case class CMDResInfo(state: ChannelState, data: HC_DATA_ESTABLISHED, nextLocalSpec: CommitmentSpec) extends HCCommandResponse
+
+case class CMDAllInfo(channels: Map[String, CMDResInfo]) extends HCCommandResponse
 
 // Data
 

@@ -1,7 +1,7 @@
 package fr.acinq.hc.app.network
 
 import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
-import fr.acinq.eclair.{RealShortChannelId, ShortChannelId}
+import fr.acinq.eclair.RealShortChannelId
 import fr.acinq.eclair.router.Graph.GraphStructure.DirectedGraph
 import fr.acinq.eclair.router.Router.PublicChannel
 import fr.acinq.hc.app.PHCConfig

@@ -5,8 +5,8 @@ import akka.event.LoggingAdapter
 import akka.http.scaladsl.server.Route
 import akka.pattern.ask
 import akka.util.Timeout
-import fr.acinq.bitcoin.scalacompat.{ByteVector32, Satoshi, Script}
 import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
+import fr.acinq.bitcoin.scalacompat.{ByteVector32, Satoshi, Script}
 import fr.acinq.eclair._
 import fr.acinq.eclair.api.directives.EclairDirectives
 import fr.acinq.eclair.api.serde.FormParamExtractors._
@@ -174,6 +174,11 @@ class HC extends Plugin with RouteProvider {
       }
     }
 
+    val allChannels: Route = postRequest("hc-all") { implicit t =>
+      val futureResponse = (workerRef ? HC_CMD_GET_ALL_CHANNELS()).mapTo[HCCommandResponse]
+      complete(futureResponse)
+    }
+
     val findByRemoteId: Route = postRequest("hc-findbyremoteid") { implicit t =>
       formFields(nodeIdFormParam) { remoteNodeId =>
         completeCommand(HC_CMD_GET_INFO(remoteNodeId))
@@ -263,7 +268,7 @@ class HC extends Plugin with RouteProvider {
 
     invoke ~ externalFulfill ~ findByRemoteId ~ overridePropose ~ overrideAccept ~
       makePublic ~ makePrivate ~ resize ~ suspend ~ verifyRemoteState ~ restoreFromRemoteState ~
-      broadcastPreimages ~ phcNodes ~ phcDump ~ hotChannels
+      broadcastPreimages ~ phcNodes ~ phcDump ~ hotChannels ~ allChannels
   }
 }
 

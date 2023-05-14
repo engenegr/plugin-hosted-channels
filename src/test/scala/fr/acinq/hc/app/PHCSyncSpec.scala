@@ -2,8 +2,8 @@ package fr.acinq.hc.app
 
 import akka.actor.ActorSystem
 import akka.testkit.{TestFSMRef, TestProbe}
-import fr.acinq.bitcoin.scalacompat.{Block, ByteVector64, Crypto}
 import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
+import fr.acinq.bitcoin.scalacompat.{Block, ByteVector64, Crypto}
 import fr.acinq.eclair._
 import fr.acinq.eclair.io.Peer.OutgoingMessage
 import fr.acinq.eclair.io.{ConnectionInfo, PeerConnected, UnknownMessageReceived}

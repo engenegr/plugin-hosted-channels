@@ -1,10 +1,10 @@
 package fr.acinq.hc.app.channel
 
-import akka.actor.{ActorRef, FSM}
-import akka.pattern.ask
+import akka.pattern._
+import akka.actor.{Actor, ActorRef, ExtendedActorSystem, FSM, PoisonPill, Props, Terminated}
 import com.softwaremill.quicklens._
-import fr.acinq.bitcoin.scalacompat.{ByteVector32, ByteVector64, Crypto, SatoshiLong}
 import fr.acinq.bitcoin.scalacompat.Crypto.PublicKey
+import fr.acinq.bitcoin.scalacompat.{ByteVector32, ByteVector64, Crypto, Satoshi, SatoshiLong}
 import fr.acinq.eclair._
 import fr.acinq.eclair.blockchain.CurrentBlockHeight
 import fr.acinq.eclair.blockchain.fee.FeeratePerKw
@@ -22,8 +22,8 @@ import fr.acinq.hc.app._
 import fr.acinq.hc.app.db.Blocking.{span, timeout}
 import fr.acinq.hc.app.db.HostedChannelsDb
 import fr.acinq.hc.app.network.{HostedSync, OperationalData, PHC, PreimageBroadcastCatcher}
-import scodec.bits.ByteVector
 
+import scodec.bits.ByteVector
 import java.util.UUID
 import scala.concurrent.Await
 import scala.util.{Failure, Success}
@@ -399,6 +399,7 @@ class HostedChannel(kit: Kit, remoteNodeId: PublicKey, channelsDb: HostedChannel
     case Event(cmd: HC_CMD_EXTERNAL_FULFILL, data: HC_DATA_ESTABLISHED) => processExternalFulfill(goto(CLOSED), cmd, data)
 
     case Event(_: HC_CMD_GET_INFO, data: HC_DATA_ESTABLISHED) => stay replying CMDResInfo(stateName, data, data.commitments.nextLocalSpec)
+    case Event(_: HC_CMD_GET_ALL_CHANNELS, data: HC_DATA_ESTABLISHED) => stay replying CMDResInfo(stateName, data, data.commitments.nextLocalSpec)
 
     case Event(cmd: CMD_GET_CHANNEL_INFO, _) =>
       val msg = new IllegalArgumentException("Non-standard channel")
